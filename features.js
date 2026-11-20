@@ -1,9 +1,11 @@
-// ==================== 1. تثبيت التطبيق على الهاتف (PWA) ====================
+// ==================== 1. نظام التثبيت وفاحص الجاهزية (PWA V5) ====================
 let deferredInstallPrompt = null;
 
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js").catch(() => {});
+        navigator.serviceWorker.register("./sw.js?v=5").then(reg => {
+            reg.update().catch(() => {});
+        }).catch(() => {});
     });
 }
 
@@ -12,6 +14,7 @@ window.addEventListener("beforeinstallprompt", e => {
     deferredInstallPrompt = e;
     const topBtn = document.getElementById("installTopBtn");
     if (topBtn) topBtn.style.display = "inline-flex";
+    runPwaDiagnostics();
 });
 
 window.addEventListener("appinstalled", () => {
@@ -19,20 +22,62 @@ window.addEventListener("appinstalled", () => {
     const topBtn = document.getElementById("installTopBtn");
     if (topBtn) topBtn.style.display = "none";
     showToast("تم تثبيت التطبيق على شاشة هاتفك بنجاح 📲");
+    runPwaDiagnostics();
 });
+
+async function runPwaDiagnostics() {
+    const box = document.getElementById("pwaDiagBox");
+    if (!box) return;
+
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    if (isStandalone) {
+        box.innerHTML = `<span style="color:var(--success); font-weight:800;">✅ التطبيق مثبّت ويعمل كبرنامج مستقل بالكامل.</span>`;
+        return;
+    }
+
+    const checks = [];
+    const swReady = ("serviceWorker" in navigator) && !!(await navigator.serviceWorker.getRegistration());
+    checks.push(swReady ? "✅ الخدمة الخلفية (sw.js) تعمل" : "⚠️ انتظر لحظة لتفعيل sw.js");
+
+    // التحقق الفعلي من وجود أيقونتي PNG الأصلية على السيرفر
+    let icon192Ok = false, icon512Ok = false;
+    try {
+        const r1 = await fetch("./icon-192.png", { cache: "no-store" });
+        icon192Ok = r1.ok && (r1.headers.get("content-type") || "").includes("png");
+    } catch {}
+    try {
+        const r2 = await fetch("./icon-512.png", { cache: "no-store" });
+        icon512Ok = r2.ok && (r2.headers.get("content-type") || "").includes("png");
+    } catch {}
+
+    if (icon192Ok && icon512Ok) {
+        checks.push("✅ أيقونات التثبيت الأصلية (PNG) مرفوعة وجاهزة");
+    } else {
+        checks.push("❌ ناقص رفع icon-192.png و icon-512.png (حمّلهن من لوحة المطور 9988 وارفعهن على GitHub)");
+    }
+
+    if (deferredInstallPrompt) {
+        checks.push("🚀 المتصفح جاهز للتثبيت المباشر بدون علامة كروم — اضغط الزر أدناه الآن!");
+    } else if (icon192Ok && icon512Ok) {
+        checks.push("ℹ️ إذا ما طلع التثبيت فوراً: امسح كاش الموقع من كروم وسوّ تحديث للصفحة.");
+    }
+
+    box.innerHTML = checks.join("<br>");
+}
 
 async function triggerPwaInstall() {
     if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
         const choice = await deferredInstallPrompt.userChoice;
-        if (choice.outcome === "accepted") showToast("جاري تثبيت التطبيق...");
+        if (choice.outcome === "accepted") showToast("جاري تثبيت التطبيق المستقل...");
         deferredInstallPrompt = null;
+        runPwaDiagnostics();
     } else {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isIOS) {
             alert("لتثبيت التطبيق على الآيفون:\n1. اضغط على زر المشاركة (Share) أسفل المتصفح.\n2. اختر (إضافة إلى الشاشة الرئيسية / Add to Home Screen).");
         } else {
-            alert("لتثبيت التطبيق على الأندرويد:\nاضغط على الثلاث نقاط (⋮) بأعلى متصفح كروم ثم اختر (تثبيت التطبيق / Install App أو إضافة للشاشة الرئيسية).");
+            alert("إذا ما ظهر التثبيت التلقائي بعد:\n1. تأكد من رفع icon-192.png و icon-512.png على GitHub (تكدر تحمّلهن من لوحة المطور 9988).\n2. امسح بيانات الموقع من كروم وسوّ تحديث.\n3. اضغط الثلاث نقاط (⋮) ← إضافة إلى الشاشة الرئيسية ← تثبيت.");
         }
     }
 }
@@ -41,7 +86,6 @@ async function triggerPwaInstall() {
 function openNotificationsModal() {
     document.getElementById("notificationsModal").style.display = "flex";
     renderNotifications();
-    // تعليم الكل كمقروء
     const updates = {};
     Object.entries(myNotifications).forEach(([id, n]) => {
         if (!n.read) updates[`${id}/read`] = true;
@@ -268,7 +312,7 @@ async function toggleChannelReaction(msgId, rKey, currentlyMine) {
     await db.ref(`space_msgs/${activeRoomId}/${msgId}/chReactions/${rKey}/${me.username}`).set(currentlyMine ? null : true);
 }
 
-// ==================== 5. الستوري المتكامل (مشاهدون بالأسماء + تفاعلات) ====================
+// ==================== 5. الستوري المتكامل (مشاهدون + تفاعلات + اتجاه سليم) ====================
 let createStoryType = "text";
 
 function getActiveStoriesFor(username) {
@@ -383,7 +427,6 @@ function renderCurrentStorySlide() {
     document.getElementById("svDelBtn").style.display = isMine ? "inline-flex" : "none";
     document.getElementById("svSaveHlBtn").style.display = isMine ? "inline-flex" : "none";
 
-    // تسجيل المشاهدة بالاسم والوقت
     if (!svIsHighlight && svOwner !== me.username) {
         db.ref(`stories/${svOwner}/${liveItem.id}/viewers/${me.username}`).set({
             name: me.name, tag: getDisplayTag(me), ts: Date.now()
@@ -407,7 +450,7 @@ function renderCurrentStorySlide() {
         const vCnt = Object.keys(liveItem.viewers || {}).length;
         const rCnt = Object.keys(liveItem.reactions || {}).length;
         foot.innerHTML = `
-            <button class="btn btn-outline" style="max-width:260px; margin:0 auto;" onclick="event.stopPropagation(); openStoryViewersModal()">
+            <button class="btn btn-outline" style="max-width:280px; margin:0 auto;" onclick="event.stopPropagation(); openStoryViewersModal()">
                 👁️ المشاهدات (${vCnt}) &nbsp;•&nbsp; ❤️ التفاعلات (${rCnt})
             </button>`;
     } else if (!svIsHighlight) {
@@ -484,11 +527,15 @@ function openStoryViewersModal() {
         box.innerHTML = Array.from(allKeys).map(u => {
             const v = typeof viewers[u] === "object" ? viewers[u] : { name: contactProfiles[u]?.name || u, tag: "@" + u, ts: viewers[u] };
             const r = reacts[u];
+            const cleanTag = v.tag || r?.tag || ("@" + u);
             return `
                 <div class="adm-row">
                     <div>
-                        <div style="font-weight:800; font-size:14px;">${escapeHTML(v.name || r?.name || u)} <span style="color:var(--accent); font-size:12px;">(${escapeHTML(v.tag || r?.tag || ("@" + u))})</span></div>
-                        <div style="font-size:11px; color:var(--text-dim);">${v.ts ? "شاهدها الساعة " + formatTime(v.ts) : ""}</div>
+                        <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span>${escapeHTML(v.name || r?.name || u)}</span>
+                            <span class="handle-ltr" dir="ltr" style="font-size:12px;">${escapeHTML(cleanTag)}</span>
+                        </div>
+                        <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${v.ts ? "شاهدها الساعة " + formatTime(v.ts) : ""}</div>
                     </div>
                     <div style="font-size:22px;">${r?.emoji || "👁️"}</div>
                 </div>`;
@@ -616,7 +663,7 @@ function renderFeed() {
             <div class="post-author" onclick="openOtherProfile('${p.author}')">
                 <div class="avatar sm" id="pa_${p.id}"></div>
                 <div>
-                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center;">${escapeHTML(author.name)} ${getVerifiedBadgeHTML(author.verified)} ${getDevBadgeHTML(author)}</div>
+                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px; flex-wrap:wrap;">${escapeHTML(author.name)} ${getVerifiedBadgeHTML(author.verified)} ${getDevBadgeHTML(author)}</div>
                     <div style="font-size:11px; color:var(--text-dim);">${formatTime(p.ts)}</div>
                 </div>
             </div>
@@ -636,8 +683,8 @@ function renderFeed() {
         const acts = document.createElement("div");
         acts.className = "post-actions";
         acts.innerHTML = `
-            <button class="post-act-btn ${likedByMe ? 'liked' : ''}" onclick="togglePostLike('${p.id}', ${likedByMe})">${likedByMe ? '❤️' : '🤍'} ${likeCount}</button>
-            <button class="post-act-btn" onclick="openCommentsModal('${p.id}')">💬 ${comms.length}</button>`;
+            <button class="post-act-btn ${likedByMe ? 'liked' : ''}" onclick="togglePostLike('${p.id}', ${likedByMe})">${likedByMe ? '❤️' : '🤍'} <span>${likeCount}</span></button>
+            <button class="post-act-btn" onclick="openCommentsModal('${p.id}')">💬 <span>${comms.length}</span></button>`;
         card.appendChild(acts);
 
         if (likeCount > 0) {
@@ -655,14 +702,13 @@ function renderFeed() {
             card.appendChild(cap);
         }
 
-        // معاينة آخر تعليقين مباشرة لصاحب المنشور والجميع
         if (comms.length > 0) {
             const previewBox = document.createElement("div");
-            previewBox.style.cssText = "padding:0 14px 12px; font-size:12.5px; color:var(--text-dim); cursor:pointer;";
+            previewBox.style.cssText = "padding:4px 16px 14px; font-size:12.5px; color:var(--text-dim); cursor:pointer; border-top:1px solid var(--border); margin-top:4px;";
             previewBox.onclick = () => openCommentsModal(p.id);
             const lastTwo = comms.slice(-2);
-            previewBox.innerHTML = lastTwo.map(c => `<div style="margin-top:3px;"><strong style="color:var(--text);">${escapeHTML(c.authorName || c.author)}:</strong> ${escapeHTML(c.text)}</div>`).join("") +
-                (comms.length > 2 ? `<div style="color:var(--accent); margin-top:4px; font-weight:700;">عرض كل التعليقات (${comms.length})</div>` : "");
+            previewBox.innerHTML = lastTwo.map(c => `<div style="margin-top:4px;"><strong style="color:var(--text);">${escapeHTML(c.authorName || c.author)}:</strong> ${escapeHTML(c.text)}</div>`).join("") +
+                (comms.length > 2 ? `<div style="color:var(--accent); margin-top:5px; font-weight:700;">عرض كل التعليقات (${comms.length})</div>` : "");
             card.appendChild(previewBox);
         }
 
@@ -694,7 +740,10 @@ function openPostLikesModal(postId) {
             const name = typeof d === "object" ? d.name : (contactProfiles[u]?.name || u);
             const tag = typeof d === "object" ? d.tag : ("@" + u);
             return `<div class="adm-row" onclick="document.getElementById('postLikesModal').style.display='none'; openOtherProfile('${u}')" style="cursor:pointer;">
-                <div><strong>${escapeHTML(name)}</strong> <span style="color:var(--accent); font-size:12px;">(${escapeHTML(tag)})</span></div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <strong>${escapeHTML(name)}</strong>
+                    <span class="handle-ltr" dir="ltr" style="font-size:12px;">${escapeHTML(tag)}</span>
+                </div>
                 <span>❤️</span>
             </div>`;
         }).join("");
@@ -724,9 +773,9 @@ function renderCommentsList() {
         return;
     }
     box.innerHTML = comms.map(c => `
-        <div style="background:var(--bg-main); padding:9px 12px; border-radius:12px; margin-bottom:7px; border:1px solid var(--border);">
+        <div style="background:var(--glass-inner); padding:10px 12px; border-radius:14px; margin-bottom:8px; border:1px solid var(--border);">
             <div style="font-size:12px; font-weight:800; color:var(--accent);">${escapeHTML(c.authorName || c.author)} <span style="color:var(--text-dim); font-weight:400;">• ${formatTime(c.ts)}</span></div>
-            <div style="font-size:13.5px; margin-top:2px;">${escapeHTML(c.text)}</div>
+            <div style="font-size:13.5px; margin-top:3px; line-height:1.5;">${escapeHTML(c.text)}</div>
         </div>`).join("");
 }
 
@@ -743,7 +792,7 @@ async function submitComment() {
     renderCommentsList();
 }
 
-// ==================== 8. القنوات والمجموعات (توثيق بأمر المطور فقط) ====================
+// ==================== 8. القنوات والمجموعات ====================
 let createSpaceType = "channel";
 
 function openCreateSpaceModal() {
@@ -771,7 +820,6 @@ async function createSpace() {
     if (taken) { showToast("هذا اليوزر محجوز لحساب شخصي أو مساحة أخرى!"); return; }
 
     const id = "sp_" + Date.now();
-    // التوثيق يبدأ فارغاً دائماً ولا يتوثق إلا بأمر المطور من لوحة التحكم
     const obj = {
         id, type: createSpaceType, name, handle, desc,
         avatarColor: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
@@ -816,7 +864,7 @@ function renderSpacesList() {
                 <span class="chat-row-name">${escapeHTML(s.name)} ${getVerifiedBadgeHTML(s.verified)} <span class="space-badge ${s.type === 'group' ? 'grp' : ''}">${s.type === 'channel' ? 'قناة' : 'مجموعة'}</span></span>
             </div>
             <div class="chat-row-bottom">
-                <span class="chat-row-preview">@${escapeHTML(s.handle)} • ${cnt} مشترك</span>
+                <span class="chat-row-preview"><span class="handle-ltr" dir="ltr" style="font-size:12px;">@${escapeHTML(s.handle)}</span> • ${cnt} مشترك</span>
             </div>`;
         row.appendChild(av); row.appendChild(info); box.appendChild(row);
     });
@@ -836,8 +884,8 @@ function openSpaceInfoModal() {
     const mems = Object.entries(activeSpaceObj.members || {});
     document.getElementById("siCount").innerText = mems.length;
     document.getElementById("siMembersList").innerHTML = mems.map(([u, role]) => `
-        <div style="display:flex; justify-content:space-between; padding:5px 4px; font-size:13px; border-bottom:1px solid var(--border);">
-            <span>@${escapeHTML(u)} ${role === 'owner' ? '👑' : ''}</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 4px; font-size:13px; border-bottom:1px solid var(--border);">
+            <span><span class="handle-ltr" dir="ltr" style="font-size:13px;">@${escapeHTML(u)}</span> ${role === 'owner' ? '👑' : ''}</span>
             ${isOwner && u !== me.username ? `<button class="btn btn-danger btn-sm" style="padding:2px 8px;" onclick="kickFromSpace('${u}')">طرد</button>` : ""}
         </div>`).join("");
     document.getElementById("spaceInfoModal").style.display = "flex";
@@ -886,7 +934,7 @@ async function leaveActiveSpace() {
     showToast("تمت المغادرة");
 }
 
-// ==================== 9. الملف الشخصي، تغيير اليوزر، الحظر، البلاغ، التوثيق ====================
+// ==================== 9. الملف الشخصي، الإعدادات، التوثيق ====================
 let tempAvatarBase64 = null;
 
 function renderMyProfilePage() {
@@ -992,7 +1040,10 @@ function openSettingsModal() {
     document.getElementById("profBio").value = me.bio || "";
     setAvatarStyle(document.getElementById("profAvatarPreview"), me, false);
     applyTheme(localStorage.getItem("app_theme") || "midnight", true);
+    applyFont(localStorage.getItem("app_font") || "tajawal", true);
+    applyWallpaper(localStorage.getItem("app_wp") || "aurora", true);
     document.getElementById("settingsModal").style.display = "flex";
+    runPwaDiagnostics();
 }
 
 async function handleAvatarUpload(e) {
@@ -1012,7 +1063,6 @@ async function saveProfile() {
     const upd = { name, bio };
     if (tempAvatarBase64) upd.avatarImg = tempAvatarBase64;
 
-    // إذا تم تعديل اليوزر
     if (newKey && newKey !== me.username) {
         if (newKey === "h" && !me.isDev) {
             const devCode = prompt("اليوزر (@H) محجوز للمطور فقط. أدخل رمز المطور:");
@@ -1029,7 +1079,6 @@ async function saveProfile() {
         const migratedUser = { ...me, ...upd, username: newKey, displayTag: newKey === "h" ? "H" : (rawNewTag.replace(/[^a-zA-Z0-9_]/g, "") || newKey) };
         await db.ref(`users/${newKey}`).set(migratedUser);
 
-        // نقل بيانات الحساب لليوزر الجديد
         const nodes = ["user_contacts", "highlights", "stories", "saved_msgs", "notifications", "user_blocks"];
         for (const n of nodes) {
             const s = await db.ref(`${n}/${oldKey}`).once("value");
@@ -1038,7 +1087,6 @@ async function saveProfile() {
                 await db.ref(`${n}/${oldKey}`).remove();
             }
         }
-        // تحديث ملكية المنشورات والمساحات
         for (const [pId, p] of Object.entries(allPosts)) {
             if (p.author === oldKey) await db.ref(`posts/${pId}/author`).set(newKey);
         }
