@@ -1,4 +1,4 @@
-// ==================== نظام المميزات المستقل (V7 Premium — صفر ثقل، 60fps) ====================
+// ==================== نظام المميزات المستقل + حزم الملصقات التفاعلية (V7 Premium) ====================
 (function () {
     if (window.__PREMIUM_V7_LOADED__) return;
     window.__PREMIUM_V7_LOADED__ = true;
@@ -57,7 +57,9 @@
 
     let selectedMsgEffect = "";
     let sharedWpRef = null;
-    let tgStickersMap = {};
+    let allStickerPacks = {};      // tg_packs/{packId}
+    let mySavedPacks = {};         // user_sticker_packs/{me.username}/{packId}
+    let uploadTargetPackId = null; // الحزمة المختارة لرفع ملصقات جديدة بداخلها
     const playedFxIds = new Set();
 
     // ==================== 1. حقن ستايلات المميزات الخفيفة (60fps GPU) ====================
@@ -90,9 +92,7 @@
             .av-vid-mask video { width: 100%; height: 100%; object-fit: cover; display: block; }
             .avatar .online-badge { z-index: 2; }
 
-            #fxStage {
-                position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 9500;
-            }
+            #fxStage { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 9500; }
             .fx-p {
                 position: fixed; font-size: 28px; will-change: transform, opacity;
                 animation: fxFly var(--dur, 2.2s) cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
@@ -132,11 +132,30 @@
             .prem-big-sticker .pbs-cap { font-size: 12px; font-weight: 800; color: #fff; }
             .prem-big-sticker .pbs-spark { position: absolute; top: 8px; left: 8px; font-size: 14px; }
 
+            .tg-st-wrap { position: relative; display: inline-block; cursor: pointer; }
             .tg-st-media {
-                width: 154px; height: 154px; object-fit: contain; border-radius: 14px;
-                display: block; cursor: pointer; background: transparent;
+                width: 152px; height: 152px; object-fit: contain; border-radius: 14px;
+                display: block; background: transparent;
+            }
+            .tg-st-hint {
+                position: absolute; bottom: 4px; right: 4px;
+                background: rgba(8, 13, 26, 0.78); border: 1px solid rgba(255,255,255,0.22);
+                color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
             }
             .tg-tile video { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; pointer-events: none; }
+
+            .pack-head-row {
+                display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                margin: 10px 0 6px; padding: 6px 10px; background: var(--glass-inner);
+                border: 1px solid var(--border); border-radius: 12px;
+            }
+            .pack-head-title { font-size: 12.5px; font-weight: 800; color: var(--text); }
+            .pack-head-acts { display: flex; gap: 5px; }
+            .pack-mini-btn {
+                border: 1px solid var(--border); background: var(--bg-card); color: var(--accent);
+                font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 8px; cursor: pointer;
+            }
+            .pack-mini-btn.danger { color: #fb7185; border-color: rgba(244,63,94,0.3); }
 
             .prem-color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 14px; }
             .prem-color-dot {
@@ -155,21 +174,18 @@
                 height: 62px; border-radius: 14px; border: 2px solid var(--border); cursor: pointer;
                 display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #fff;
             }
-            .swp-tile.active { border-color: var(--accent); }
         `;
         document.head.appendChild(s);
     }
 
-    // ==================== 2. حقن عناصر الواجهة (أزرار + نوافذ المميزات) ====================
+    // ==================== 2. حقن عناصر الواجهة ====================
     function injectPremiumDOM() {
-        // مسرح التأثيرات الحية
         if (!document.getElementById("fxStage")) {
             const stage = document.createElement("div");
             stage.id = "fxStage";
             document.body.appendChild(stage);
         }
 
-        // شريط اختيار تأثير الرسالة فوق مربع الكتابة
         const formatBar = document.getElementById("formatBar");
         if (formatBar && !document.getElementById("effectPickerBar")) {
             const bar = document.createElement("div");
@@ -181,7 +197,6 @@
             formatBar.parentNode.insertBefore(bar, formatBar.nextSibling);
         }
 
-        // زر التأثيرات (✨) بجانب زر الإرسال
         const sendBtn = document.getElementById("sendBtn");
         if (sendBtn && !document.getElementById("fxToggleBtn")) {
             const fxBtn = document.createElement("button");
@@ -193,7 +208,6 @@
             sendBtn.parentNode.insertBefore(fxBtn, sendBtn);
         }
 
-        // زر الخلفية المشتركة لكلا الطرفين (🎨) في شريط المحادثة العلوي
         const actionsPill = document.querySelector(".chat-actions-pill");
         if (actionsPill && !document.getElementById("btnSharedWp")) {
             const wpBtn = document.createElement("button");
@@ -206,7 +220,6 @@
             actionsPill.insertBefore(wpBtn, actionsPill.firstChild);
         }
 
-        // تبويب «✨ مميز» في لوحة الملصقات السفلية
         const dbt = document.querySelector(".drawer-bottom-tabs");
         if (dbt && !dbt.querySelector('[data-dtab="premium"]')) {
             const btn = document.createElement("button");
@@ -217,7 +230,6 @@
             dbt.insertBefore(btn, dbt.querySelector(".dbt-close"));
         }
 
-        // زر فتح نافذة «تخصيص المميز» في صفحة البروفايل وداخل الإعدادات
         const profBtnRow = document.querySelector("#view-profile .prof-av-row > div:last-child");
         if (profBtnRow && !document.getElementById("openPremProfileBtn")) {
             const b = document.createElement("button");
@@ -228,7 +240,6 @@
             profBtnRow.insertBefore(b, profBtnRow.firstChild);
         }
 
-        // نافذة تخصيص المميز (رمز الحالة + لون الاسم والردود + صورة البروفايل المتحركة)
         if (!document.getElementById("premiumModal")) {
             const m = document.createElement("div");
             m.id = "premiumModal";
@@ -238,17 +249,14 @@
                 <div class="glass-card" style="max-width:430px;">
                     <h3>✨ تخصيص الحساب المميز</h3>
                     <p class="sub">مجاني بالكامل — يظهر لك ولكل أصدقائك فوراً</p>
-
                     <div class="form-group">
                         <label>1. رمز الحالة المتحرك بجانب اسمك:</label>
                         <div class="status-em-grid" id="premStatusGrid"></div>
                     </div>
-
                     <div class="form-group">
                         <label>2. لون الاسم والملف الشخصي وإطار الردود:</label>
                         <div class="prem-color-grid" id="premColorGrid"></div>
                     </div>
-
                     <div class="form-group">
                         <label>3. صورة متحركة للملف الشخصي (فيديو قصير أو GIF):</label>
                         <input type="file" id="premAnimAvInput" accept="video/mp4,video/webm,image/gif" style="display:none" onchange="window.handleAnimAvatarUpload(event)">
@@ -256,15 +264,13 @@
                             <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('premAnimAvInput').click()">🎬 رفع فيديو/GIF</button>
                             <button class="btn btn-sm btn-outline" onclick="window.removeAnimAvatar()">إزالة الفيديو</button>
                         </div>
-                        <div style="font-size:11px; color:var(--text-dim); margin-top:5px;">يفضّل فيديو 2–4 ثواني (أقل من 1.8 ميجابايت) حتى يتحرك بسلاسة على النت الضعيف.</div>
+                        <div style="font-size:11px; color:var(--text-dim); margin-top:5px;">يفضّل فيديو 2–4 ثواني (أقل من 1.8 ميجابايت) حتى يتحرك بسلاسة.</div>
                     </div>
-
                     <button class="btn btn-outline btn-sm" style="margin-top:8px; width:100%;" onclick="document.getElementById('premiumModal').style.display='none'">إغلاق</button>
                 </div>`;
             document.body.appendChild(m);
         }
 
-        // نافذة خلفية المحادثة لكلا الطرفين
         if (!document.getElementById("sharedWpModal")) {
             const m = document.createElement("div");
             m.id = "sharedWpModal";
@@ -285,19 +291,38 @@
             document.body.appendChild(m);
         }
 
-        // مدخل رفع ملصق متحرك / حزمة خاصة للـ Firebase
+        // نافذة معاينة وإضافة حزمة الملصقات عند الضغط على أي ملصق بالمحادثة (نفس تليگرام)
+        if (!document.getElementById("stickerPackPreviewModal")) {
+            const m = document.createElement("div");
+            m.id = "stickerPackPreviewModal";
+            m.className = "modal-bg sheet-bg story-top-modal";
+            m.onclick = e => { if (e.target === m) m.style.display = "none"; };
+            m.innerHTML = `
+                <div class="bottom-sheet" style="max-height:80dvh; display:flex; flex-direction:column;">
+                    <div style="text-align:center; margin-bottom:10px;">
+                        <h4 id="sppTitle" style="font-size:16px;">🎭 حزمة ملصقات</h4>
+                        <div id="sppMeta" style="font-size:12px; color:var(--text-dim); margin-top:2px;">...</div>
+                    </div>
+                    <div id="sppGrid" class="sticker-grid" style="flex:1; overflow-y:auto; max-height:46dvh; padding:4px;"></div>
+                    <div id="sppActionRow" style="display:flex; gap:8px; margin-top:12px;"></div>
+                </div>`;
+            document.body.appendChild(m);
+        }
+
+        // مدخل رفع ملصق واحد أو عدة ملصقات دفعة واحدة للحزمة
         if (!document.getElementById("tgStickerUploadInput")) {
             const inp = document.createElement("input");
             inp.type = "file";
             inp.id = "tgStickerUploadInput";
+            inp.multiple = true;
             inp.accept = "image/gif,image/webp,image/png,image/jpeg,video/webm,video/mp4";
             inp.style.display = "none";
-            inp.onchange = e => window.handleUploadSharedTgSticker(e);
+            inp.onchange = e => window.handleUploadStickersToPack(e);
             document.body.appendChild(inp);
         }
     }
 
-    // ==================== 3. محرّك تأثيرات الرسائل الخفيف ====================
+    // ==================== 3. محرّك تأثيرات الرسائل ====================
     window.playScreenEffect = function (fxKey) {
         const fx = MSG_EFFECTS[fxKey];
         const stage = document.getElementById("fxStage");
@@ -356,22 +381,20 @@
         if (selectedMsgEffect) {
             window.playScreenEffect(selectedMsgEffect);
             window.toggleEffectPicker(false);
-            showToast(`تأثير ${MSG_EFFECTS[selectedMsgEffect].label} جاهز مع رسالتك القادمة ✨`);
+            showToast(`تأثير ${MSG_EFFECTS[selectedMsgEffect].label} جاهز مع رسالتك ✨`);
         }
     };
 
-    // ==================== 4. تخصيص الحساب المميز (الحالة + الألوان + الأفاتار المتحرك) ====================
+    // ==================== 4. تخصيص الحساب المميز ====================
     window.openPremiumModal = function () {
         if (!me) return;
         const curSt = me.statusEmoji || "";
-        const stGrid = document.getElementById("premStatusGrid");
-        stGrid.innerHTML = STATUS_EMOJIS.map(em =>
+        document.getElementById("premStatusGrid").innerHTML = STATUS_EMOJIS.map(em =>
             `<button type="button" class="status-em-btn ${curSt === em ? 'active' : ''}" onclick="window.setMyStatusEmoji('${em}')">${em || "✕"}</button>`
         ).join("");
 
         const curCol = me.accentColor || "default";
-        const cGrid = document.getElementById("premColorGrid");
-        cGrid.innerHTML = Object.entries(ACCENT_PALETTES).map(([k, p]) =>
+        document.getElementById("premColorGrid").innerHTML = Object.entries(ACCENT_PALETTES).map(([k, p]) =>
             `<div class="prem-color-dot ${curCol === k ? 'active' : ''}" style="background:${p.grad}" onclick="window.setMyAccentColor('${k}')">${p.label}</div>`
         ).join("");
 
@@ -399,18 +422,12 @@
         const f = e.target.files[0];
         e.target.value = "";
         if (!f || !me) return;
-        if (f.size > 1.85 * 1024 * 1024) {
-            showToast("الحد الأقصى للفيديو/GIF هو 1.8 ميجابايت حتى يشتغل بسلاسة");
-            return;
-        }
+        if (f.size > 1.85 * 1024 * 1024) { showToast("الحد الأقصى للفيديو/GIF هو 1.8 ميجابايت"); return; }
         showToast("جاري رفع الصورة المتحركة لحسابك...");
         const r = new FileReader();
         r.onload = async ev => {
-            if (f.type === "image/gif") {
-                await db.ref(`users/${me.username}`).update({ avatarImg: ev.target.result, avatarVideo: "" });
-            } else {
-                await db.ref(`users/${me.username}`).update({ avatarVideo: ev.target.result });
-            }
+            if (f.type === "image/gif") await db.ref(`users/${me.username}`).update({ avatarImg: ev.target.result, avatarVideo: "" });
+            else await db.ref(`users/${me.username}`).update({ avatarVideo: ev.target.result });
             showToast("تم تفعيل الصورة المتحركة لبروفايلك 🎬✨");
         };
         r.readAsDataURL(f);
@@ -426,10 +443,7 @@
     function applySharedWpToArea(wpVal) {
         const area = document.getElementById("messagesList");
         if (!area) return;
-        if (!wpVal) {
-            applyWallpaper(localStorage.getItem("app_wp") || "pattern", true);
-            return;
-        }
+        if (!wpVal) { applyWallpaper(localStorage.getItem("app_wp") || "pattern", true); return; }
         if (wpVal.startsWith("data:image")) {
             area.style.backgroundImage = `linear-gradient(rgba(4,8,18,0.52), rgba(4,8,18,0.56)), url(${wpVal})`;
             area.style.backgroundSize = "cover";
@@ -442,8 +456,7 @@
 
     window.openSharedWpModal = function () {
         if (activeChatType !== "dm" || !activeRoomId) return;
-        const grid = document.getElementById("sharedWpGrid");
-        grid.innerHTML = SHARED_WP_PRESETS.map(p =>
+        document.getElementById("sharedWpGrid").innerHTML = SHARED_WP_PRESETS.map(p =>
             `<div class="swp-tile" style="background:${p.css || 'var(--bg-card)'}" onclick="window.setSharedWallpaper('${p.css}')">${p.label}</div>`
         ).join("");
         document.getElementById("sharedWpModal").style.display = "flex";
@@ -471,32 +484,76 @@
         if (btn) btn.style.display = "none";
     }
 
-    // ==================== 6. مخزن ملصقات تليگرام والملصقات المتحركة الخاصة ====================
-    window.handleUploadSharedTgSticker = async function (e) {
-        const f = e.target.files[0];
-        e.target.value = "";
-        if (!f || !me) return;
-        if (f.size > 1.85 * 1024 * 1024) {
-            showToast("الحد الأقصى للملصق المتحرك 1.8 ميجابايت");
-            return;
-        }
-        showToast("جاري إضافة الملصق لمخزن المنصة الخاص...");
-        const isVideo = f.type.startsWith("video/");
-        const isAnimatedImg = f.type === "image/gif" || f.type === "image/webp";
-        let dataUrl = "";
-        if (isVideo || isAnimatedImg) {
-            dataUrl = await new Promise((res, rej) => {
-                const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(f);
-            });
-        } else {
-            dataUrl = await compressImageFile(f, 340, 0.78);
-        }
-        const id = "tgs_" + Date.now();
-        await db.ref(`tg_stickers/custom_pack/${id}`).set({
-            id, pack: "حزمنا الخاصة", mediaType: isVideo ? "video" : "image",
-            src: dataUrl, addedBy: me.username, ts: Date.now()
+    // ==================== 6. نظام حزم الملصقات الشخصية + إضافة الحزمة بالضغط على الملصق ====================
+    window.createNewStickerPack = async function () {
+        if (!me) return;
+        const name = prompt("اكتب اسم حزمة الملصقات الجديدة (مثال: ملصقاتي، ضحك، حب):", "ملصقات " + me.name);
+        if (!name || !name.trim()) return;
+        const packId = "pk_" + me.username + "_" + Date.now();
+        await db.ref(`tg_packs/${packId}`).set({
+            id: packId,
+            name: name.trim(),
+            owner: me.username,
+            ownerName: me.name,
+            ts: Date.now(),
+            stickers: {}
         });
-        showToast("تمت إضافة الملصق لجميع أعضاء المنصة ✨");
+        // تنضاف لحزمك أنت فقط، مو للجميع!
+        await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
+        uploadTargetPackId = packId;
+        showToast(`تم إنشاء حزمة «${name.trim()}» — اختر ملصقات لإضافتها ✨`);
+        document.getElementById("tgStickerUploadInput").click();
+    };
+
+    window.triggerAddStickerToPack = function (packId) {
+        uploadTargetPackId = packId;
+        document.getElementById("tgStickerUploadInput").click();
+    };
+
+    window.handleUploadStickersToPack = async function (e) {
+        const files = Array.from(e.target.files || []);
+        e.target.value = "";
+        if (!files.length || !me) return;
+
+        // إذا ما محددة حزمة، نستخدم أول حزمة يملكها المستخدم أو ننشئ وحدة إله تلقائياً
+        let packId = uploadTargetPackId;
+        if (!packId || !allStickerPacks[packId]) {
+            const owned = Object.values(allStickerPacks).find(p => p && p.owner === me.username);
+            if (owned) {
+                packId = owned.id;
+            } else {
+                packId = "pk_" + me.username + "_" + Date.now();
+                await db.ref(`tg_packs/${packId}`).set({
+                    id: packId, name: "حزمة " + me.name, owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {}
+                });
+                await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
+            }
+        }
+
+        let uploaded = 0;
+        showToast(`جاري رفع ${files.length} ملصق لحزمتك...`);
+        for (const f of files.slice(0, 12)) {
+            if (f.size > 1.85 * 1024 * 1024) {
+                showToast(`تم تخطي ملف أكبر من 1.8 ميجابايت`);
+                continue;
+            }
+            const isVideo = f.type.startsWith("video/");
+            const isAnimatedImg = f.type === "image/gif" || f.type === "image/webp";
+            let dataUrl = "";
+            if (isVideo || isAnimatedImg) {
+                dataUrl = await new Promise((res, rej) => {
+                    const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(f);
+                });
+            } else {
+                dataUrl = await compressImageFile(f, 340, 0.78);
+            }
+            const stId = "st_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+            await db.ref(`tg_packs/${packId}/stickers/${stId}`).set({
+                id: stId, mediaType: isVideo ? "video" : "image", src: dataUrl, ts: Date.now()
+            });
+            uploaded++;
+        }
+        if (uploaded > 0) showToast(`تمت إضافة ${uploaded} ملصق لحزمتك الخاصة ✅`);
     };
 
     window.sendPremBigSticker = function (psId) {
@@ -507,17 +564,88 @@
         toggleStickerDrawer(false);
     };
 
-    window.sendTgSticker = function (packKey, stId) {
-        const st = tgStickersMap?.[packKey]?.[stId];
+    window.sendPackSticker = function (packId, stId) {
+        const pack = allStickerPacks[packId];
+        const st = pack?.stickers?.[stId];
         if (!st) return;
-        pushMessageSafe("tg_sticker", st.src, "🎭 ملصق متحرك", { mediaType: st.mediaType || "image" });
+        pushMessageSafe("tg_sticker", st.src, `🎭 ملصق (${pack.name})`, {
+            mediaType: st.mediaType || "image",
+            packId: pack.id,
+            packName: pack.name
+        });
         toggleStickerDrawer(false);
     };
 
-    window.deleteTgSticker = async function (packKey, stId) {
-        if (!confirm("حذف هذا الملصق من مخزن المنصة؟")) return;
-        await db.ref(`tg_stickers/${packKey}/${stId}`).remove();
+    window.deleteStickerFromPack = async function (packId, stId) {
+        if (!confirm("حذف هذا الملصق من الحزمة؟")) return;
+        await db.ref(`tg_packs/${packId}/stickers/${stId}`).remove();
         showToast("تم حذف الملصق");
+    };
+
+    window.removePackFromMyList = async function (packId) {
+        const pack = allStickerPacks[packId];
+        if (pack && pack.owner === me.username) {
+            if (!confirm(`حذف حزمتك «${pack.name}» بالكامل؟`)) return;
+            await db.ref(`tg_packs/${packId}`).remove();
+        }
+        await db.ref(`user_sticker_packs/${me.username}/${packId}`).remove();
+        document.getElementById("stickerPackPreviewModal").style.display = "none";
+        showToast("تمت إزالة الحزمة من ملصقاتك");
+    };
+
+    window.addPackToMyList = async function (packId) {
+        if (!me || !packId) return;
+        await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
+        document.getElementById("stickerPackPreviewModal").style.display = "none";
+        const pName = allStickerPacks[packId]?.name || "الحزمة";
+        showToast(`تمت إضافة «${pName}» إلى ملصقاتك بنجاح ✅🎭`);
+    };
+
+    // الضغط على أي ملصق داخل المحادثة -> يفتح معاينة الحزمة مع زر «إضافة الحزمة لملصقاتي»
+    window.openStickerPackPreview = async function (packId, fallbackSrc, fallbackMedia) {
+        let pack = packId ? allStickerPacks[packId] : null;
+        if (packId && !pack) {
+            const snap = await db.ref(`tg_packs/${packId}`).once("value");
+            if (snap.exists()) { pack = snap.val(); allStickerPacks[packId] = pack; }
+        }
+        if (!pack) {
+            if (fallbackSrc && fallbackMedia !== "video") openLightbox(fallbackSrc);
+            else showToast("هذه الحزمة لم تعد متوفرة");
+            return;
+        }
+
+        const stickersList = Object.values(pack.stickers || {});
+        const hasIt = !!mySavedPacks[pack.id];
+        const isOwner = pack.owner === me.username;
+
+        document.getElementById("sppTitle").innerText = `🎭 ${pack.name}`;
+        document.getElementById("sppMeta").innerText = `${stickersList.length} ملصق • بواسطة ${pack.ownerName || pack.owner}`;
+
+        const grid = document.getElementById("sppGrid");
+        if (stickersList.length === 0) {
+            grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim); font-size:13px;">الحزمة فارغة حالياً</div>`;
+        } else {
+            grid.innerHTML = stickersList.map(st => {
+                const mediaHTML = st.mediaType === "video"
+                    ? `<video src="${st.src}" autoplay loop muted playsinline></video>`
+                    : `<img src="${st.src}" loading="lazy">`;
+                return `<div class="sticker-tile tg-tile" onclick="if('${hasIt}'==='true'){ window.sendPackSticker('${escapeHTML(pack.id)}','${escapeHTML(st.id)}'); document.getElementById('stickerPackPreviewModal').style.display='none'; }">${mediaHTML}</div>`;
+            }).join("");
+        }
+
+        const actRow = document.getElementById("sppActionRow");
+        if (hasIt) {
+            actRow.innerHTML = `
+                ${isOwner ? `<button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('stickerPackPreviewModal').style.display='none'; window.triggerAddStickerToPack('${escapeHTML(pack.id)}')">➕ إضافة ملصقات</button>` : `<button class="btn btn-sm btn-success" style="flex:1;" disabled>✓ مضافة لديك بالفعل</button>`}
+                <button class="btn btn-sm btn-danger" onclick="window.removePackFromMyList('${escapeHTML(pack.id)}')">${isOwner ? 'حذف الحزمة' : 'إزالة'}</button>
+                <button class="btn btn-sm btn-outline" onclick="document.getElementById('stickerPackPreviewModal').style.display='none'">إغلاق</button>`;
+        } else {
+            actRow.innerHTML = `
+                <button class="btn" style="flex:1;" onclick="window.addPackToMyList('${escapeHTML(pack.id)}')">➕ إضافة الحزمة لملصقاتي (${stickersList.length})</button>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('stickerPackPreviewModal').style.display='none'">إغلاق</button>`;
+        }
+
+        document.getElementById("stickerPackPreviewModal").style.display = "flex";
     };
 
     function renderPremiumDrawerTab(body) {
@@ -535,34 +663,52 @@
                     </div>`).join("")}
             </div>`;
 
-        html += `<div class="st-sec-title">🎭 ملصقاتنا المتحركة وحزم تليگرام الخاصة</div>
-            <div class="sticker-grid">
-                <div class="sticker-tile sticker-create-tile" onclick="document.getElementById('tgStickerUploadInput').click()">
-                    <span style="font-size:22px;">＋</span><span>رفع متحرك</span>
-                </div>`;
+        // قسم حزم المستخدم فقط (اللي أنشأها أو أضافها بالضغط على ملصقات أصدقائه)
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin:10px 0 6px;">
+                <span class="st-sec-title" style="margin:0;">🎭 حزم ملصقاتي الخاصة (المتحركة وتليگرام)</span>
+                <button type="button" class="pack-mini-btn" onclick="window.createNewStickerPack()">➕ حزمة جديدة</button>
+            </div>`;
 
-        const allPacks = Object.entries(tgStickersMap || {});
-        allPacks.forEach(([packKey, packObj]) => {
-            if (!packObj || typeof packObj !== "object") return;
-            Object.entries(packObj).forEach(([stId, st]) => {
-                if (!st || !st.src) return;
-                const canDel = st.addedBy === me?.username || me?.isDev;
-                const mediaHTML = st.mediaType === "video"
-                    ? `<video src="${st.src}" autoplay loop muted playsinline></video>`
-                    : `<img src="${st.src}" loading="lazy">`;
-                html += `<div class="sticker-tile tg-tile" style="position:relative;" onclick="window.sendTgSticker('${escapeHTML(packKey)}','${escapeHTML(stId)}')">
-                    ${mediaHTML}
-                    ${canDel ? `<button type="button" onclick="event.stopPropagation(); window.deleteTgSticker('${escapeHTML(packKey)}','${escapeHTML(stId)}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.72); color:#fff; font-size:10px; cursor:pointer;">✕</button>` : ""}
-                </div>`;
+        const myPackIds = Object.keys(mySavedPacks || {}).filter(pid => mySavedPacks[pid] && allStickerPacks[pid]);
+        if (myPackIds.length === 0) {
+            html += `<div style="background:var(--glass-inner); border:1px dashed var(--border-bright); border-radius:14px; padding:14px; text-align:center; font-size:12px; color:var(--text-dim);">
+                ما عندك حزم بعد — اضغط <b>«➕ حزمة جديدة»</b> لرفع ملصقاتك المتحركة، أو اضغط على أي ملصق يدزه صديقك بالمحادثة لإضافة حزمته!
+            </div>`;
+        } else {
+            myPackIds.forEach(pid => {
+                const pack = allStickerPacks[pid];
+                const isOwner = pack.owner === me.username;
+                const stEntries = Object.entries(pack.stickers || {});
+                html += `<div class="pack-head-row">
+                    <span class="pack-head-title">📦 ${escapeHTML(pack.name)} (${stEntries.length})</span>
+                    <div class="pack-head-acts">
+                        ${isOwner ? `<button type="button" class="pack-mini-btn" onclick="window.triggerAddStickerToPack('${escapeHTML(pid)}')">＋ إضافة</button>` : ""}
+                        <button type="button" class="pack-mini-btn danger" onclick="window.removePackFromMyList('${escapeHTML(pid)}')">${isOwner ? 'حذف' : 'إزالة'}</button>
+                    </div>
+                </div><div class="sticker-grid">`;
+
+                if (stEntries.length === 0) {
+                    html += `<div class="sticker-tile sticker-create-tile" onclick="window.triggerAddStickerToPack('${escapeHTML(pid)}')"><span>＋</span><span>رفع ملصق</span></div>`;
+                } else {
+                    stEntries.forEach(([stId, st]) => {
+                        if (!st || !st.src) return;
+                        const mediaHTML = st.mediaType === "video"
+                            ? `<video src="${st.src}" autoplay loop muted playsinline></video>`
+                            : `<img src="${st.src}" loading="lazy">`;
+                        html += `<div class="sticker-tile tg-tile" style="position:relative;" onclick="window.sendPackSticker('${escapeHTML(pid)}','${escapeHTML(stId)}')">
+                            ${mediaHTML}
+                            ${isOwner ? `<button type="button" onclick="event.stopPropagation(); window.deleteStickerFromPack('${escapeHTML(pid)}','${escapeHTML(stId)}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.72); color:#fff; font-size:10px; cursor:pointer;">✕</button>` : ""}
+                        </div>`;
+                    });
+                }
+                html += `</div>`;
             });
-        });
-        html += `</div>`;
+        }
         body.innerHTML = html;
     }
 
     // ==================== 7. ربط المميزات مع محرّك V6 بدون لمس ملفاته ====================
     function installHooks() {
-        // 1) رمز الحالة المتحرك بجانب الاسم في كل المنصة تلقائياً
         const _origDevBadge = window.getDevBadgeHTML;
         window.getDevBadgeHTML = function (userObj) {
             const base = _origDevBadge ? _origDevBadge(userObj) : "";
@@ -570,7 +716,6 @@
             return base + st;
         };
 
-        // 2) الصورة المتحركة (فيديو قصير) للملف الشخصي بدون وميض
         const _origSetAvatar = window.setAvatarStyle;
         window.setAvatarStyle = function (el, obj, showOnline = true) {
             if (el && obj && obj.avatarVideo) {
@@ -590,19 +735,16 @@
             if (_origSetAvatar) _origSetAvatar(el, obj, showOnline);
         };
 
-        // 3) الرموز التعبيرية المتحركة داخل نص الرسالة [[❤️]]
         const _origFormatRich = window.formatRichText;
         window.formatRichText = function (raw) {
             let html = _origFormatRich ? _origFormatRich(raw) : escapeHTML(raw);
             html = html.replace(/\[\[([^\[\]]{1,8})\]\]/g, (_, em) => {
                 const found = ANIM_EMOJIS.find(a => a.em === em);
-                const cls = found ? found.anim : "beat";
-                return `<span class="anim-em ${cls}">${em}</span>`;
+                return `<span class="anim-em ${found ? found.anim : 'beat'}">${em}</span>`;
             });
             return html;
         };
 
-        // 4) حفظ يوزر صاحب الرسالة عند الرد لتلوين إطار الرد بلونه الخاص
         const _origReply = window.replyToSelected;
         window.replyToSelected = function () {
             const senderKey = selectedMsg?.data?.sender || "";
@@ -610,7 +752,6 @@
             if (replyTarget && senderKey) replyTarget.sender = senderKey;
         };
 
-        // 5) إرفاق التأثير المختار تلقائياً عند إرسال أي رسالة
         const _origPush = window.pushMessageSafe;
         window.pushMessageSafe = async function (type, content, previewLabel, extra = {}) {
             const eff = extra.effect || selectedMsgEffect;
@@ -625,7 +766,6 @@
             return _origPush(type, content, previewLabel, extra);
         };
 
-        // 6) عرض الملصقات المميزة وملصقات تليگرام وتأثيرات الرسائل وألوان الردود
         const _origBuildMsg = window.buildMessageNode;
         window.buildMessageNode = function (id, m) {
             const wrap = _origBuildMsg(id, m);
@@ -640,14 +780,27 @@
                 </div>`;
             } else if (m.type === "tg_sticker" && slot) {
                 if (bubble) bubble.classList.add("sticker-bubble");
+                const stWrap = document.createElement("div");
+                stWrap.className = "tg-st-wrap";
                 if (m.mediaType === "video") {
-                    slot.innerHTML = `<video class="tg-st-media" src="${m.content}" autoplay loop muted playsinline></video>`;
+                    stWrap.innerHTML = `<video class="tg-st-media" src="${m.content}" autoplay loop muted playsinline></video>`;
                 } else {
-                    slot.innerHTML = `<img class="tg-st-media" src="${m.content}" onclick="openLightbox('${m.content}')">`;
+                    stWrap.innerHTML = `<img class="tg-st-media" src="${m.content}">`;
                 }
+                if (m.packId) {
+                    const hint = document.createElement("span");
+                    hint.className = "tg-st-hint";
+                    hint.innerText = "📦 الحزمة";
+                    stWrap.appendChild(hint);
+                }
+                stWrap.onclick = e => {
+                    e.stopPropagation();
+                    window.openStickerPackPreview(m.packId || "", m.content, m.mediaType || "image");
+                };
+                slot.innerHTML = "";
+                slot.appendChild(stWrap);
             }
 
-            // تلوين اسم المرسل وإطار الردود بلون المستخدم الخاص
             const senderObj = contactProfiles[m.sender] || (m.sender === me?.username ? me : null);
             if (senderObj?.accentColor && ACCENT_PALETTES[senderObj.accentColor]) {
                 const pal = ACCENT_PALETTES[senderObj.accentColor];
@@ -665,7 +818,6 @@
                 }
             }
 
-            // زر تشغيل/إعادة تشغيل تأثير الرسالة + تشغيل تلقائي عند وصول رسالة جديدة
             if (m.effect && MSG_EFFECTS[m.effect]) {
                 const fx = MSG_EFFECTS[m.effect];
                 const foot = wrap.querySelector(".msg-footer");
@@ -685,7 +837,6 @@
             return wrap;
         };
 
-        // 7) ألوان البروفايل الشخصي وبروفايل الأصدقاء
         const _origRenderMyProf = window.renderMyProfilePage;
         window.renderMyProfilePage = function () {
             if (_origRenderMyProf) _origRenderMyProf();
@@ -709,7 +860,6 @@
             if (nm) nm.style.color = u.accentColor && u.accentColor !== "default" ? pal.main : "";
         };
 
-        // 8) ربط الخلفية المشتركة لكلا الطرفين عند فتح وإغلاق المحادثة
         const _origOpenDM = window.openDM;
         window.openDM = function (partnerUsername) {
             detachSharedWp();
@@ -721,8 +871,7 @@
             sharedWpRef = db.ref(`chats/${roomCopy}/shared_wp`);
             sharedWpRef.on("value", s => {
                 if (tokCopy !== activeRoomToken) return;
-                const d = s.val();
-                applySharedWpToArea(d?.value || "");
+                applySharedWpToArea(s.val()?.value || "");
             });
         };
 
@@ -735,7 +884,6 @@
         const _origCloseChat = window.closeActiveChat;
         window.closeActiveChat = function () { detachSharedWp(); window.toggleEffectPicker(false); _origCloseChat(); };
 
-        // 9) ربط تبويب «✨ مميز» في لوحة الملصقات
         const _origRenderDrawer = window.renderDrawerContent;
         window.renderDrawerContent = function () {
             if (typeof activeDrawerTab !== "undefined" && activeDrawerTab === "premium") {
@@ -746,16 +894,16 @@
             if (_origRenderDrawer) _origRenderDrawer();
         };
 
-        // 10) الاستماع لمخزن ملصقات المنصة/تليگرام الخاصة بعد تسجيل الدخول
         const _origEnter = window.enterMainApp;
         window.enterMainApp = function (uData) {
             _origEnter(uData);
-            db.ref("tg_stickers").on("value", s => {
-                tgStickersMap = s.val() || {};
+            const refreshIfPrem = () => {
                 if (typeof activeDrawerTab !== "undefined" && activeDrawerTab === "premium" && document.getElementById("stickerDrawer").style.display === "flex") {
                     window.renderDrawerContent();
                 }
-            });
+            };
+            db.ref("tg_packs").on("value", s => { allStickerPacks = s.val() || {}; refreshIfPrem(); });
+            db.ref(`user_sticker_packs/${me.username}`).on("value", s => { mySavedPacks = s.val() || {}; refreshIfPrem(); });
         };
     }
 
