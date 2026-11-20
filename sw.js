@@ -1,10 +1,11 @@
-const CACHE_NAME = "study-notes-glass-v5";
+const CACHE_NAME = "study-notes-v6-fast";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
   "./core.js",
   "./features.js",
+  "./games.js",
   "./manifest.json"
 ];
 
@@ -30,14 +31,15 @@ self.addEventListener("fetch", e => {
   if (url.origin !== self.location.origin) return;
 
   e.respondWith(
-    fetch(e.request)
-      .then(res => {
+    caches.match(e.request).then(cached => {
+      const net = fetch(e.request).then(res => {
         if (res && res.status === 200) {
           const clone = res.clone();
           caches.open(CACHE_NAME).then(c => c.put(e.request, clone)).catch(() => {});
         }
         return res;
-      })
-      .catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))
+      }).catch(() => cached);
+      return cached || net;
+    })
   );
 });
