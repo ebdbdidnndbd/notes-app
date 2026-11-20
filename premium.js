@@ -1,4 +1,4 @@
-// ==================== نظام المميزات المستقل (V7.1 Turbo — صفر ثقل، 60fps) ====================
+// ==================== نظام المميزات المستقل + ملاحظات إنستگرام (V7.2 Turbo — 60fps) ====================
 (function () {
     if (window.__PREMIUM_V7_LOADED__) return;
     window.__PREMIUM_V7_LOADED__ = true;
@@ -57,13 +57,17 @@
 
     let selectedMsgEffect = "";
     let sharedWpRef = null;
-    let allStickerPacks = {};       // كاش محلي للحزم المحمّلة عند الطلب فقط
+    let allStickerPacks = {};
     let loadingPacksSet = new Set();
-    let mySavedPacks = {};          // user_sticker_packs/{me.username}
-    let activeSelectedPackId = "";  // الحزمة المفتوحة حالياً فقط باللوحة
+    let mySavedPacks = {};
+    let activeSelectedPackId = "";
     let activePackVisibleCount = 12;
     let uploadTargetPackId = null;
     const playedFxIds = new Set();
+
+    // بيانات ملاحظات إنستگرام
+    let allNotesMap = {};
+    let viewingNoteUser = "";
 
     // ==================== محرّك الذاكرة الخفيف (Blob Cache + Video Decoder Cap) ====================
     const blobUrlCache = new Map();
@@ -82,12 +86,9 @@
             const url = URL.createObjectURL(new Blob([arr], { type: mime }));
             blobUrlCache.set(key, url);
             return url;
-        } catch {
-            return src;
-        }
+        } catch { return src; }
     }
 
-    // تحديد أقصى عدد فيديوهات ملصقات تعمل بنفس اللحظة بـ 4 فقط لحماية معالج الموبايل
     const MAX_CONCURRENT_VIDEOS = 4;
     const activePlayingVids = [];
 
@@ -117,9 +118,8 @@
     const vidObserver = ("IntersectionObserver" in window)
         ? new IntersectionObserver(entries => {
             entries.forEach(ent => {
-                const v = ent.target;
-                if (ent.isIntersecting) requestManagedVideoPlay(v);
-                else pauseManagedVideo(v);
+                if (ent.isIntersecting) requestManagedVideoPlay(ent.target);
+                else pauseManagedVideo(ent.target);
             });
         }, { threshold: 0.15 })
         : null;
@@ -141,12 +141,153 @@
         });
     }
 
-    // ==================== 1. حقن ستايلات المميزات الخفيفة ====================
+    // ==================== 1. حقن ستايلات المميزات + ملاحظات إنستگرام ====================
     function injectPremiumStyles() {
         if (document.getElementById("premStylesV7")) return;
         const s = document.createElement("style");
         s.id = "premStylesV7";
         s.textContent = `
+            /* ===== شريط ملاحظات إنستگرام الاحترافي ===== */
+            .notes-strip {
+                display: flex;
+                gap: 14px;
+                overflow-x: auto;
+                padding: 10px 14px 9px;
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+                align-items: flex-end;
+                background: rgba(255,255,255,0.015);
+            }
+            .note-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                min-width: 72px;
+                max-width: 82px;
+                cursor: pointer;
+                flex-shrink: 0;
+                transition: transform 0.14s;
+            }
+            .note-item:active { transform: scale(0.94); }
+            .note-bubble-slot {
+                min-height: 38px;
+                display: flex;
+                align-items: flex-end;
+                justify-content: center;
+                margin-bottom: -10px;
+                z-index: 3;
+                width: 100%;
+            }
+            .note-bubble {
+                position: relative;
+                background: var(--bg-card);
+                border: 1px solid var(--border-bright);
+                color: var(--text);
+                padding: 5px 9px;
+                border-radius: 15px;
+                font-size: 10.5px;
+                font-weight: 700;
+                line-height: 1.3;
+                text-align: center;
+                max-width: 84px;
+                min-width: 56px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.42);
+                word-break: break-word;
+            }
+            .note-bubble.empty-note {
+                color: var(--text-dim);
+                border-style: dashed;
+                background: var(--glass-inner);
+            }
+            .note-bubble-txt {
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .note-music-mini {
+                font-size: 9.5px;
+                color: var(--accent);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 68px;
+                margin-top: 2px;
+            }
+            /* نقطتا فقاعة التفكير نفس إنستگرام */
+            .note-bubble::before {
+                content: "";
+                position: absolute;
+                bottom: -5px;
+                right: 14px;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--bg-card);
+                border: 1px solid var(--border-bright);
+            }
+            .note-bubble::after {
+                content: "";
+                position: absolute;
+                bottom: -9px;
+                right: 19px;
+                width: 4.5px;
+                height: 4.5px;
+                border-radius: 50%;
+                background: var(--bg-card);
+                border: 1px solid var(--border-bright);
+            }
+            .note-av-wrap { position: relative; z-index: 1; }
+            .note-av-wrap .avatar { width: 52px; height: 52px; font-size: 18px; }
+            .note-react-pill {
+                position: absolute;
+                bottom: -2px;
+                left: -4px;
+                background: var(--bg-panel);
+                border: 1px solid var(--border-bright);
+                border-radius: 99px;
+                font-size: 11px;
+                padding: 1px 5px;
+                z-index: 4;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+            }
+            .note-name {
+                font-size: 11px;
+                color: var(--text-dim);
+                font-weight: 700;
+                margin-top: 5px;
+                max-width: 72px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .note-preview-card {
+                background: var(--glass-inner);
+                border: 1px solid var(--border-bright);
+                border-radius: 20px;
+                padding: 18px 16px;
+                margin: 12px 0;
+                text-align: center;
+            }
+            .note-preview-text { font-size: 17px; font-weight: 800; line-height: 1.6; color: var(--text); }
+            .note-preview-music {
+                display: inline-flex; align-items: center; gap: 5px;
+                margin-top: 8px; padding: 4px 12px; border-radius: 99px;
+                background: rgba(56,189,248,0.14); border: 1px solid var(--border-bright);
+                color: var(--accent); font-size: 12px; font-weight: 700;
+            }
+            .note-quick-reacts {
+                display: flex; justify-content: center; gap: 10px; margin: 10px 0 12px;
+            }
+            .note-qr-btn {
+                width: 42px; height: 42px; border-radius: 50%;
+                border: 1px solid var(--border); background: var(--bg-card);
+                font-size: 20px; cursor: pointer; transition: transform 0.14s;
+            }
+            .note-qr-btn:active { transform: scale(1.22); }
+            .note-qr-btn.mine { border-color: var(--accent); background: rgba(56,189,248,0.22); }
+
+            /* ===== باقي ستايلات المميزات V7.1 ===== */
             .status-em {
                 display: inline-block; margin-right: 4px; font-size: 14px;
                 animation: premFloat 2.4s ease-in-out infinite; vertical-align: middle;
@@ -164,10 +305,7 @@
             .anim-em.float  { animation: premFloat 2s ease-in-out infinite; }
             .anim-em.spin   { animation: premSpin 2.2s ease-in-out infinite; }
 
-            .av-vid-mask {
-                position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
-                pointer-events: none; z-index: 0;
-            }
+            .av-vid-mask { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 0; }
             .av-vid-mask video { width: 100%; height: 100%; object-fit: cover; display: block; }
             .avatar .online-badge { z-index: 2; }
 
@@ -212,10 +350,7 @@
             .prem-big-sticker .pbs-spark { position: absolute; top: 8px; left: 8px; font-size: 14px; }
 
             .tg-st-wrap { position: relative; display: inline-block; cursor: pointer; }
-            .tg-st-media {
-                width: 148px; height: 148px; object-fit: contain; border-radius: 14px;
-                display: block; background: transparent;
-            }
+            .tg-st-media { width: 148px; height: 148px; object-fit: contain; border-radius: 14px; display: block; background: transparent; }
             .tg-st-hint {
                 position: absolute; bottom: 4px; right: 4px;
                 background: rgba(8, 13, 26, 0.78); border: 1px solid rgba(255,255,255,0.22);
@@ -229,9 +364,7 @@
                 padding: 1px 5px; border-radius: 6px; pointer-events: none;
             }
 
-            .pack-tabs-bar {
-                display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 4px;
-            }
+            .pack-tabs-bar { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 4px; }
             .pack-tab-pill {
                 background: var(--bg-card); border: 1px solid var(--border); color: var(--text-dim);
                 padding: 5px 11px; border-radius: 99px; font-size: 12px; font-weight: 700;
@@ -279,6 +412,73 @@
             const stage = document.createElement("div");
             stage.id = "fxStage";
             document.body.appendChild(stage);
+        }
+
+        // شريط ملاحظات إنستگرام تحت شريط الستوري مباشرة
+        const storiesStrip = document.getElementById("storiesStrip");
+        if (storiesStrip && !document.getElementById("notesStrip")) {
+            const ns = document.createElement("div");
+            ns.id = "notesStrip";
+            ns.className = "notes-strip";
+            storiesStrip.parentNode.insertBefore(ns, storiesStrip.nextSibling);
+        }
+
+        // نافذة كتابة / تعديل ملاحظتي
+        if (!document.getElementById("noteComposeModal")) {
+            const m = document.createElement("div");
+            m.id = "noteComposeModal";
+            m.className = "modal-bg sheet-bg";
+            m.onclick = e => { if (e.target === m) m.style.display = "none"; };
+            m.innerHTML = `
+                <div class="bottom-sheet">
+                    <h4 style="text-align:center; margin-bottom:4px;">💭 ملاحظة جديدة (24 ساعة)</h4>
+                    <div style="text-align:center; font-size:11.5px; color:var(--text-dim); margin-bottom:12px;">تظهر فوق صورتك لأصدقائك مثل ملاحظات إنستگرام</div>
+                    <div class="form-group">
+                        <label>ملاحظتك (<span id="noteCharCnt">0</span>/60)</label>
+                        <input type="text" id="noteTextInput" class="input" maxlength="60" placeholder="شنو ابالك هسة؟..." oninput="document.getElementById('noteCharCnt').innerText=this.value.length" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.publishMyNote();}">
+                    </div>
+                    <div class="form-group">
+                        <label>🎵 أغنية أو مود (اختياري)</label>
+                        <input type="text" id="noteMusicInput" class="input" maxlength="35" placeholder="مثال: كاظم الساهر - أراضي خدودها">
+                    </div>
+                    <div id="myNoteLikesBox" style="margin-bottom:10px;"></div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn" style="flex:1;" onclick="window.publishMyNote()">مشاركة الملاحظة ✨</button>
+                        <button class="btn btn-danger btn-sm" id="delMyNoteBtn" style="display:none;" onclick="window.deleteMyNote()">حذف</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
+        }
+
+        // نافذة عرض ملاحظة صديق + تفاعل + رد مباشر للخاص
+        if (!document.getElementById("noteViewModal")) {
+            const m = document.createElement("div");
+            m.id = "noteViewModal";
+            m.className = "modal-bg sheet-bg";
+            m.onclick = e => { if (e.target === m) m.style.display = "none"; };
+            m.innerHTML = `
+                <div class="bottom-sheet">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:9px;">
+                            <div class="avatar sm" id="nvAvatar">؟</div>
+                            <div>
+                                <div id="nvName" style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px;">الاسم</div>
+                                <div id="nvTime" style="font-size:11px; color:var(--text-dim);">الآن</div>
+                            </div>
+                        </div>
+                        <button class="icon-btn" style="width:32px; height:32px;" onclick="document.getElementById('noteViewModal').style.display='none'">✕</button>
+                    </div>
+                    <div class="note-preview-card">
+                        <div class="note-preview-text" id="nvText"></div>
+                        <div id="nvMusicWrap"></div>
+                    </div>
+                    <div class="note-quick-reacts" id="nvReactsRow"></div>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="nvReplyInput" class="input" placeholder="رد على الملاحظة..." onkeydown="if(event.key==='Enter'){event.preventDefault(); window.replyToViewedNote();}">
+                        <button class="btn" style="width:88px;" onclick="window.replyToViewedNote()">إرسال</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(m);
         }
 
         const formatBar = document.getElementById("formatBar");
@@ -415,7 +615,202 @@
         }
     }
 
-    // ==================== 3. محرّك تأثيرات الرسائل ====================
+    // ==================== 3. نظام ملاحظات إنستگرام (24 ساعة + موسيقى + رد وتفاعل) ====================
+    function getActiveNote(username) {
+        const n = allNotesMap[username];
+        if (!n || !n.text || (n.expiresAt && n.expiresAt <= Date.now())) return null;
+        return n;
+    }
+
+    function renderNotesStrip() {
+        const strip = document.getElementById("notesStrip");
+        if (!strip || !me) return;
+        strip.innerHTML = "";
+
+        // 1) ملاحظتي أنا أولاً
+        const myNote = getActiveNote(me.username);
+        const myLikesCount = myNote && myNote.likes ? Object.keys(myNote.likes).length : 0;
+        const myItem = document.createElement("div");
+        myItem.className = "note-item";
+        myItem.onclick = () => window.openMyNoteCompose();
+
+        const mySlot = document.createElement("div");
+        mySlot.className = "note-bubble-slot";
+        mySlot.innerHTML = myNote
+            ? `<div class="note-bubble"><div class="note-bubble-txt">${escapeHTML(myNote.text)}</div>${myNote.music ? `<div class="note-music-mini">🎵 ${escapeHTML(myNote.music)}</div>` : ""}</div>`
+            : `<div class="note-bubble empty-note">ملاحظة...</div>`;
+
+        const myAvWrap = document.createElement("div");
+        myAvWrap.className = "note-av-wrap";
+        const myAv = document.createElement("div");
+        myAv.className = "avatar";
+        setAvatarStyle(myAv, me, false);
+        myAvWrap.appendChild(myAv);
+        if (myLikesCount > 0) {
+            const rp = document.createElement("span");
+            rp.className = "note-react-pill";
+            rp.innerText = `❤️ ${myLikesCount}`;
+            myAvWrap.appendChild(rp);
+        }
+
+        const myLbl = document.createElement("span");
+        myLbl.className = "note-name";
+        myLbl.innerText = "ملاحظتك";
+
+        myItem.appendChild(mySlot);
+        myItem.appendChild(myAvWrap);
+        myItem.appendChild(myLbl);
+        strip.appendChild(myItem);
+
+        // 2) ملاحظات الأصدقاء النشطة (أقل من 24 ساعة)
+        const friendsWithNotes = Object.values(contactProfiles)
+            .filter(u => u && u.username !== me.username && !u.banned && !myBlocked[u.username] && getActiveNote(u.username))
+            .sort((a, b) => (getActiveNote(b.username).ts || 0) - (getActiveNote(a.username).ts || 0));
+
+        friendsWithNotes.forEach(u => {
+            const note = getActiveNote(u.username);
+            const myReact = note.likes?.[me.username]?.em || "";
+            const item = document.createElement("div");
+            item.className = "note-item";
+            item.onclick = () => window.openFriendNoteView(u.username);
+
+            const slot = document.createElement("div");
+            slot.className = "note-bubble-slot";
+            slot.innerHTML = `<div class="note-bubble"><div class="note-bubble-txt">${escapeHTML(note.text)}</div>${note.music ? `<div class="note-music-mini">🎵 ${escapeHTML(note.music)}</div>` : ""}</div>`;
+
+            const avWrap = document.createElement("div");
+            avWrap.className = "note-av-wrap";
+            const av = document.createElement("div");
+            av.className = "avatar";
+            setAvatarStyle(av, u, true);
+            avWrap.appendChild(av);
+            if (myReact) {
+                const rp = document.createElement("span");
+                rp.className = "note-react-pill";
+                rp.innerText = myReact;
+                avWrap.appendChild(rp);
+            }
+
+            const lbl = document.createElement("span");
+            lbl.className = "note-name";
+            lbl.innerText = u.name;
+
+            item.appendChild(slot);
+            item.appendChild(avWrap);
+            item.appendChild(lbl);
+            strip.appendChild(item);
+        });
+    }
+
+    window.openMyNoteCompose = function () {
+        if (!me) return;
+        const cur = getActiveNote(me.username);
+        const txtInp = document.getElementById("noteTextInput");
+        const musInp = document.getElementById("noteMusicInput");
+        txtInp.value = cur ? cur.text : "";
+        musInp.value = cur ? (cur.music || "") : "";
+        document.getElementById("noteCharCnt").innerText = txtInp.value.length;
+        document.getElementById("delMyNoteBtn").style.display = cur ? "inline-flex" : "none";
+
+        const likesBox = document.getElementById("myNoteLikesBox");
+        const likesEntries = cur && cur.likes ? Object.values(cur.likes) : [];
+        if (likesEntries.length > 0) {
+            likesBox.innerHTML = `<div style="font-size:12px; color:var(--accent); font-weight:800; margin-bottom:6px;">تفاعلات أصدقائك على ملاحظتك (${likesEntries.length}):</div>` +
+                likesEntries.map(l => `<div class="adm-row" style="padding:7px 10px; margin-bottom:5px;"><span style="font-size:13px; font-weight:700;">${escapeHTML(l.name)}</span><span style="font-size:18px;">${l.em || "❤️"}</span></div>`).join("");
+        } else {
+            likesBox.innerHTML = "";
+        }
+
+        document.getElementById("noteComposeModal").style.display = "flex";
+        setTimeout(() => txtInp.focus(), 80);
+    };
+
+    window.publishMyNote = async function () {
+        if (!me) return;
+        const text = document.getElementById("noteTextInput").value.trim().slice(0, 60);
+        const music = document.getElementById("noteMusicInput").value.trim().slice(0, 35);
+        if (!text) { showToast("اكتب ملاحظتك أولاً 💭"); return; }
+        await db.ref(`notes/${me.username}`).set({
+            text, music, ts: Date.now(), expiresAt: Date.now() + 86400000
+        });
+        document.getElementById("noteComposeModal").style.display = "none";
+        playSendSound();
+        showToast("تم نشر ملاحظتك لمدة 24 ساعة ✨");
+    };
+
+    window.deleteMyNote = async function () {
+        if (!me) return;
+        await db.ref(`notes/${me.username}`).remove();
+        document.getElementById("noteComposeModal").style.display = "none";
+        showToast("تم حذف ملاحظتك");
+    };
+
+    window.openFriendNoteView = function (username) {
+        const u = contactProfiles[username];
+        const note = getActiveNote(username);
+        if (!u || !note) return;
+        viewingNoteUser = username;
+
+        setAvatarStyle(document.getElementById("nvAvatar"), u, true);
+        document.getElementById("nvName").innerHTML = `${escapeHTML(u.name)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}`;
+        document.getElementById("nvTime").innerText = "نُشرت الساعة " + formatTime(note.ts);
+        document.getElementById("nvText").innerText = note.text;
+        document.getElementById("nvMusicWrap").innerHTML = note.music
+            ? `<div class="note-preview-music">🎵 ${escapeHTML(note.music)}</div>`
+            : "";
+
+        const myEm = note.likes?.[me.username]?.em || "";
+        const reacts = ["❤️", "🔥", "😂", "😍", "🥺"];
+        document.getElementById("nvReactsRow").innerHTML = reacts.map(em =>
+            `<button type="button" class="note-qr-btn ${myEm === em ? 'mine' : ''}" onclick="window.reactToViewedNote('${em}')">${em}</button>`
+        ).join("");
+
+        document.getElementById("nvReplyInput").value = "";
+        document.getElementById("noteViewModal").style.display = "flex";
+    };
+
+    window.reactToViewedNote = async function (em) {
+        if (!viewingNoteUser || !me) return;
+        const note = getActiveNote(viewingNoteUser);
+        if (!note) return;
+        const cur = note.likes?.[me.username]?.em || "";
+        if (cur === em) {
+            await db.ref(`notes/${viewingNoteUser}/likes/${me.username}`).remove();
+        } else {
+            await db.ref(`notes/${viewingNoteUser}/likes/${me.username}`).set({ em, name: me.name, ts: Date.now() });
+            sendNotification(viewingNoteUser, `تفاعل ${me.name} بـ ${em} على ملاحظتك`, em);
+            playSendSound();
+        }
+        window.openFriendNoteView(viewingNoteUser);
+    };
+
+    window.replyToViewedNote = async function () {
+        const inp = document.getElementById("nvReplyInput");
+        const txt = (inp?.value || "").trim();
+        if (!txt || !viewingNoteUser || !me) return;
+        const note = getActiveNote(viewingNoteUser);
+        const u = contactProfiles[viewingNoteUser] || { name: viewingNoteUser };
+        const rId = getRoomId(me.username, viewingNoteUser);
+        const now = Date.now();
+        const mId = "m_" + now + "_" + Math.random().toString(36).slice(2, 7);
+
+        await db.ref(`chats/${rId}/messages/${mId}`).set({
+            id: mId, sender: me.username, senderName: me.name, type: "text",
+            content: txt, seen: false, ts: now,
+            replyTo: { sender: viewingNoteUser, senderName: u.name, preview: "💭 ملاحظة: " + (note?.text || "") }
+        });
+        await db.ref(`user_contacts/${viewingNoteUser}/${me.username}`).update({ addedAt: now });
+        await db.ref(`chat_meta/${rId}`).set({
+            lastMsg: "رد على ملاحظتك: " + txt, lastSender: me.username, lastTs: now, unreadFor: viewingNoteUser
+        });
+        sendNotification(viewingNoteUser, `ردّ ${me.name} على ملاحظتك: "${txt.slice(0, 30)}"`, "💭");
+        inp.value = "";
+        document.getElementById("noteViewModal").style.display = "none";
+        playSendSound();
+        showToast("تم إرسال ردك للمحادثة الخاصة ✅");
+    };
+
+    // ==================== 4. محرّك تأثيرات الرسائل ====================
     window.playScreenEffect = function (fxKey) {
         const fx = MSG_EFFECTS[fxKey];
         const stage = document.getElementById("fxStage");
@@ -478,7 +873,7 @@
         }
     };
 
-    // ==================== 4. تخصيص الحساب المميز ====================
+    // ==================== 5. تخصيص الحساب المميز ====================
     window.openPremiumModal = function () {
         if (!me) return;
         const curSt = me.statusEmoji || "";
@@ -532,7 +927,7 @@
         showToast("تمت إزالة فيديو البروفايل");
     };
 
-    // ==================== 5. خلفية المحادثة لكلا الطرفين ====================
+    // ==================== 6. خلفية المحادثة لكلا الطرفين ====================
     function applySharedWpToArea(wpVal) {
         const area = document.getElementById("messagesList");
         if (!area) return;
@@ -578,7 +973,7 @@
         if (btn) btn.style.display = "none";
     }
 
-    // ==================== 6. نظام حزم الملصقات الخفيف (تحميل عند الطلب فقط) ====================
+    // ==================== 7. نظام حزم الملصقات الخفيف (تحميل عند الطلب فقط) ====================
     async function fetchPackOnce(packId, force = false) {
         if (!packId) return null;
         if (!force && allStickerPacks[packId]) return allStickerPacks[packId];
@@ -586,25 +981,17 @@
         loadingPacksSet.add(packId);
         try {
             const snap = await db.ref(`tg_packs/${packId}`).once("value");
-            if (snap.exists()) {
-                allStickerPacks[packId] = snap.val();
-            } else {
-                delete allStickerPacks[packId];
-            }
+            if (snap.exists()) allStickerPacks[packId] = snap.val();
+            else delete allStickerPacks[packId];
             return allStickerPacks[packId] || null;
-        } catch {
-            return null;
-        } finally {
-            loadingPacksSet.delete(packId);
-        }
+        } catch { return null; }
+        finally { loadingPacksSet.delete(packId); }
     }
 
     async function ensureMyPacksLoaded() {
         const ids = Object.keys(mySavedPacks || {}).filter(pid => mySavedPacks[pid]);
         const missing = ids.filter(pid => !allStickerPacks[pid]);
-        if (missing.length > 0) {
-            await Promise.all(missing.map(pid => fetchPackOnce(pid)));
-        }
+        if (missing.length > 0) await Promise.all(missing.map(pid => fetchPackOnce(pid)));
         const validIds = ids.filter(pid => allStickerPacks[pid]);
         if (!activeSelectedPackId || !validIds.includes(activeSelectedPackId)) {
             activeSelectedPackId = validIds[0] || "";
@@ -631,9 +1018,7 @@
         const name = prompt("اكتب اسم حزمة الملصقات الجديدة (مثال: ملصقاتي، ضحك، حب):", "ملصقات " + me.name);
         if (!name || !name.trim()) return;
         const packId = "pk_" + me.username + "_" + Date.now();
-        const packObj = {
-            id: packId, name: name.trim(), owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {}
-        };
+        const packObj = { id: packId, name: name.trim(), owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {} };
         await db.ref(`tg_packs/${packId}`).set(packObj);
         await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
         allStickerPacks[packId] = packObj;
@@ -657,9 +1042,8 @@
         let packId = uploadTargetPackId;
         if (!packId || !allStickerPacks[packId]) {
             const owned = Object.values(allStickerPacks).find(p => p && p.owner === me.username);
-            if (owned) {
-                packId = owned.id;
-            } else {
+            if (owned) packId = owned.id;
+            else {
                 packId = "pk_" + me.username + "_" + Date.now();
                 const obj = { id: packId, name: "حزمة " + me.name, owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {} };
                 await db.ref(`tg_packs/${packId}`).set(obj);
@@ -679,9 +1063,8 @@
                 dataUrl = await new Promise((res, rej) => {
                     const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(f);
                 });
-            } else {
-                dataUrl = await compressImageFile(f, 340, 0.78);
-            }
+            } else dataUrl = await compressImageFile(f, 340, 0.78);
+
             const stId = "st_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
             const stObj = { id: stId, mediaType: isVideo ? "video" : "image", src: dataUrl, ts: Date.now() };
             await db.ref(`tg_packs/${packId}/stickers/${stId}`).set(stObj);
@@ -712,9 +1095,7 @@
         const st = pack?.stickers?.[stId];
         if (!st) return;
         pushMessageSafe("tg_sticker", st.src, `🎭 ملصق (${pack.name})`, {
-            mediaType: st.mediaType || "image",
-            packId: pack.id,
-            packName: pack.name
+            mediaType: st.mediaType || "image", packId: pack.id, packName: pack.name
         });
         toggleStickerDrawer(false);
     };
@@ -746,8 +1127,7 @@
         await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
         activeSelectedPackId = packId;
         window.closeStickerPackPreview();
-        const pName = allStickerPacks[packId]?.name || "الحزمة";
-        showToast(`تمت إضافة «${pName}» إلى ملصقاتك بنجاح ✅🎭`);
+        showToast(`تمت إضافة «${allStickerPacks[packId]?.name || "الحزمة"}» إلى ملصقاتك ✅🎭`);
     };
 
     window.closeStickerPackPreview = function () {
@@ -810,13 +1190,11 @@
                 <button class="btn" style="flex:1;" onclick="window.addPackToMyList('${escapeHTML(pack.id)}')">➕ إضافة الحزمة لملصقاتي (${stickersList.length})</button>
                 <button class="btn btn-outline btn-sm" onclick="window.closeStickerPackPreview()">إغلاق</button>`;
         }
-
         m.style.display = "flex";
     };
 
     async function renderPremiumDrawerTab(body) {
         stopAndReleaseVideos(body);
-
         const savedIds = Object.keys(mySavedPacks || {}).filter(pid => mySavedPacks[pid]);
         const needFetch = savedIds.some(pid => !allStickerPacks[pid]);
         if (needFetch) {
@@ -828,7 +1206,6 @@
         }
 
         const myPackIds = savedIds.filter(pid => allStickerPacks[pid]);
-
         let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span class="st-sec-title" style="margin:0;">🎭 حزم ملصقاتي (${myPackIds.length})</span>
                 <button type="button" class="pack-mini-btn" onclick="window.createNewStickerPack()">➕ حزمة جديدة</button>
@@ -839,7 +1216,6 @@
                 ما عندك حزم بعد — اضغط <b>«➕ حزمة جديدة»</b> أو اضغط على أي ملصق يدزه صديقك بالمحادثة!
             </div>`;
         } else {
-            // شريط تبويبات الحزم — يعرض حزمة وحدة فقط بالمرة لمنع التعليق نهائياً
             html += `<div class="pack-tabs-bar">`;
             myPackIds.forEach(pid => {
                 const pk = allStickerPacks[pid];
@@ -878,7 +1254,6 @@
                     });
                 }
                 html += `</div>`;
-
                 if (stEntries.length > activePackVisibleCount) {
                     html += `<button type="button" class="btn btn-sm btn-outline" style="width:100%; margin-bottom:12px;" onclick="window.showMorePackStickers()">عرض المزيد (+${stEntries.length - activePackVisibleCount})</button>`;
                 }
@@ -903,8 +1278,14 @@
         attachLazyVideos(body);
     }
 
-    // ==================== 7. ربط المميزات مع محرّك V6 بدون لمس ملفاته ====================
+    // ==================== 8. ربط المميزات مع محرّك V6 بدون لمس ملفاته ====================
     function installHooks() {
+        const _origRenderStories = window.renderStoriesStrip;
+        window.renderStoriesStrip = function () {
+            if (_origRenderStories) _origRenderStories();
+            renderNotesStrip();
+        };
+
         const _origDevBadge = window.getDevBadgeHTML;
         window.getDevBadgeHTML = function (userObj) {
             const base = _origDevBadge ? _origDevBadge(userObj) : "";
@@ -1089,7 +1470,6 @@
         const _origCloseChat = window.closeActiveChat;
         window.closeActiveChat = function () { detachSharedWp(); window.toggleEffectPicker(false); _origCloseChat(); };
 
-        // تفريغ الفيديوهات فوراً عند إغلاق لوحة الملصقات أو التبديل لتبويب آخر
         const _origToggleDrawer = window.toggleStickerDrawer;
         window.toggleStickerDrawer = function (force) {
             const d = document.getElementById("stickerDrawer");
@@ -1119,10 +1499,13 @@
             if (_origRenderDrawer) _origRenderDrawer();
         };
 
-        // استماع خفيف جداً لقائمة أسماء حزم المستخدم فقط (بدون تحميل بيانات الملصقات عند فتح التطبيق!)
         const _origEnter = window.enterMainApp;
         window.enterMainApp = function (uData) {
             _origEnter(uData);
+            db.ref("notes").on("value", s => {
+                allNotesMap = s.val() || {};
+                renderNotesStrip();
+            });
             db.ref(`user_sticker_packs/${me.username}`).on("value", s => {
                 mySavedPacks = s.val() || {};
                 if (typeof activeDrawerTab !== "undefined" && activeDrawerTab === "premium" && document.getElementById("stickerDrawer").style.display === "flex") {
