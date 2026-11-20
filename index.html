@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="midnight" data-font="tajawal" data-wp="aurora">
+<html lang="ar" dir="rtl" data-theme="midnight" data-font="tajawal" data-wp="pattern">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
@@ -7,24 +7,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>مفكرة دراسية - السادس العلمي</title>
-    <link rel="manifest" href="./manifest.json?v=5">
+    <link rel="manifest" href="./manifest.json?v=6">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./style.css?v=5">
+    <link rel="stylesheet" href="./style.css?v=6">
 </head>
 <body>
 
-    <!-- خلفية ضوئية متحركة لإبراز التأثير الزجاجي -->
-    <div class="ambient-bg" aria-hidden="true">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-        <div class="orb orb-3"></div>
-    </div>
-
     <div id="toastBox"></div>
+    <div id="netBanner">📡 الاتصال ضعيف — رسائلك تُحفظ وتُرسل تلقائياً</div>
     <audio id="remoteAudio" autoplay playsinline style="display:none;"></audio>
 
     <!-- ==================== 1. بوابة الدخول المموهة ==================== -->
@@ -91,7 +85,7 @@
         </div>
     </div>
 
-    <!-- ==================== 3. التطبيق الرئيسي الزجاجي ==================== -->
+    <!-- ==================== 3. التطبيق الرئيسي السلس ==================== -->
     <div id="appShell">
         <nav class="nav-bar">
             <button class="nav-item active" data-nav="chats" onclick="switchMainTab('chats')">
@@ -105,6 +99,11 @@
             <button class="nav-item" data-nav="spaces" onclick="switchMainTab('spaces')">
                 <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
                 <span>المساحات</span>
+            </button>
+            <button class="nav-item" data-nav="games" onclick="switchMainTab('games')" style="position:relative;">
+                <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                <span>الألعاب</span>
+                <span class="notif-dot" id="gameInviteDot"></span>
             </button>
             <button class="nav-item" data-nav="profile" onclick="switchMainTab('profile')">
                 <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
@@ -149,7 +148,7 @@
                             <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
                         </div>
                         <h3 style="color:var(--text); margin-bottom:6px;">مساحتك الخاصة جاهزة</h3>
-                        <p style="font-size:13px; margin-bottom:16px;">ابحث باليوزر عن أي حساب أو قناة أو افتح رسائلك المحفوظة</p>
+                        <p style="font-size:13px; margin-bottom:16px;">سلاسة تامة، تفاعلات فورية، ومراسلة حتى على أضعف نت</p>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
                             <button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>
                             <button class="btn btn-sm btn-outline" onclick="openSavedMessages()">🔖 الرسائل المحفوظة</button>
@@ -157,26 +156,27 @@
                     </div>
 
                     <div id="activeChatView">
+                        <!-- شريط علوي زجاجي عائم بتصميم تليگرام العصري -->
                         <div class="chat-header">
-                            <div class="chat-header-right" onclick="openActiveRoomInfo()">
-                                <button class="icon-btn back-mobile" onclick="event.stopPropagation(); closeActiveChat()">
-                                    <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
-                                </button>
+                            <button class="pill-btn back-mobile" onclick="closeActiveChat()" title="رجوع">
+                                <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+                            </button>
+                            <div class="chat-partner-pill" onclick="openActiveRoomInfo()">
                                 <div class="avatar sm" id="chatPartnerAvatar">؟</div>
                                 <div class="partner-meta">
                                     <h4 id="chatPartnerName">الاسم</h4>
                                     <span id="chatPartnerStatus">...</span>
                                 </div>
                             </div>
-                            <div style="display:flex; gap:6px;">
-                                <button class="icon-btn" id="btnVoiceCall" title="مكالمة صوتية" onclick="startCall(false)">
+                            <div class="chat-actions-pill">
+                                <button class="pill-act" id="btnVoiceCall" title="مكالمة صوتية" onclick="startCall(false)">
                                     <svg viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.58a1 1 0 0 1-.25 1.01l-2.2 2.2z"/></svg>
                                 </button>
-                                <button class="icon-btn" id="btnVideoCall" title="مكالمة فيديو" onclick="startCall(true)">
+                                <button class="pill-act" id="btnVideoCall" title="مكالمة فيديو" onclick="startCall(true)">
                                     <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
                                 </button>
-                                <button class="icon-btn" id="btnPollCreate" style="display:none;" title="إنشاء استطلاع رأي" onclick="openCreatePollModal()">📊</button>
-                                <button class="icon-btn danger" id="btnClearLocal" title="تنظيف المحادثة من عندي فقط" onclick="clearChatForMe()">🗑️</button>
+                                <button class="pill-act" id="btnPollCreate" style="display:none;" title="إنشاء استطلاع رأي" onclick="openCreatePollModal()">📊</button>
+                                <button class="pill-act danger" id="btnClearLocal" title="تنظيف المحادثة من عندي فقط" onclick="clearChatForMe()">🗑️</button>
                             </div>
                         </div>
 
@@ -198,9 +198,16 @@
                             <button class="icon-btn" style="width:30px; height:30px;" onclick="cancelReplyOrEdit()">✕</button>
                         </div>
 
-                        <div id="stickerDrawer">
-                            <div class="sticker-tabs" id="stickerTabs"></div>
-                            <div class="sticker-grid" id="stickerGrid"></div>
+                        <!-- شريط تنسيق النص الاحترافي (نفس تليگرام) -->
+                        <div id="formatBar">
+                            <button type="button" onclick="applyTextFormat('bold')" title="عريض"><b>عريض</b></button>
+                            <button type="button" onclick="applyTextFormat('italic')" title="مائل"><i>مائل</i></button>
+                            <button type="button" onclick="applyTextFormat('underline')" title="تسطير"><u>تسطير</u></button>
+                            <button type="button" onclick="applyTextFormat('strike')" title="مشطوب"><s>مشطوب</s></button>
+                            <button type="button" onclick="applyTextFormat('spoiler')" title="تشويش (مخفي)">🌫️ تشويش</button>
+                            <button type="button" onclick="applyTextFormat('code')" title="رمز">&lt;رمز&gt;</button>
+                            <button type="button" onclick="applyTextFormat('quote')" title="اقتباس">❝ اقتباس</button>
+                            <button type="button" onclick="applyTextFormat('link')" title="إنشاء رابط">🔗 رابط</button>
                         </div>
 
                         <div class="input-area">
@@ -213,15 +220,17 @@
                             <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="handleSendImage(event, false)">
                             <input type="file" id="voImgInput" accept="image/*" style="display:none" onchange="handleSendImage(event, true)">
                             <input type="file" id="vidInput" accept="video/*" style="display:none" onchange="handleSendVideo(event)">
+                            <input type="file" id="customStickerInput" accept="image/*" style="display:none" onchange="handleCreateCustomSticker(event)">
 
                             <div id="chatNoticeBar"></div>
 
                             <div id="inputNormalBar">
-                                <button class="icon-btn" onclick="toggleStickerDrawer()" title="الملصقات" id="stickerBtn">🎭</button>
+                                <button class="icon-btn" onclick="toggleStickerDrawer()" title="رموز وملصقات" id="stickerBtn">😊</button>
+                                <button class="icon-btn" onclick="toggleFormatBar()" title="تنسيق النص (عريض/تشويش/اقتباس)" id="formatBtn" style="font-size:13px; font-weight:800;">Aa</button>
+                                <textarea id="msgInput" rows="1" placeholder="الرسالة..." oninput="handleMsgInputResize(this); handleTyping();" onkeydown="handleMsgKeydown(event)"></textarea>
                                 <button class="icon-btn" onclick="toggleMediaMenu()" title="إرفاق وسائط">
                                     <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
                                 </button>
-                                <textarea id="msgInput" rows="1" placeholder="اكتب رسالة..." oninput="handleMsgInputResize(this); handleTyping();" onkeydown="handleMsgKeydown(event)"></textarea>
                                 <button class="icon-btn" id="micBtn" onclick="startRecording()" title="بصمة صوتية">
                                     <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 0 0-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
                                 </button>
@@ -232,24 +241,37 @@
 
                             <div id="inputRecordBar">
                                 <button class="btn btn-danger btn-sm" onclick="stopRecording(true)">إلغاء ✕</button>
-                                <div style="display:flex; align-items:center; gap:8px; color:#f87171; font-weight:700; font-size:14px;">
-                                    <span class="rec-dot"></span><span id="recTimerEl">00:00</span>
+                                <div class="rec-live-wave">
+                                    <span class="rec-dot"></span>
+                                    <span id="recTimerEl">00:00</span>
+                                    <div class="live-bars"><i></i><i></i><i></i><i></i><i></i><i></i></div>
                                 </div>
                                 <button class="btn btn-success btn-sm" onclick="stopRecording(false)">إرسال ➤</button>
+                            </div>
+                        </div>
+
+                        <!-- لوحة تليگرام السفلية: رموز تعبيرية + صور متحركة + ملصقات وإنشاء ملصق -->
+                        <div id="stickerDrawer">
+                            <div id="drawerBody" class="drawer-body"></div>
+                            <div class="drawer-bottom-tabs">
+                                <button class="dbt-btn active" data-dtab="emojis" onclick="switchDrawerTab('emojis')">الرموز التعبيرية</button>
+                                <button class="dbt-btn" data-dtab="gifs" onclick="switchDrawerTab('gifs')">صور متحركة</button>
+                                <button class="dbt-btn" data-dtab="stickers" onclick="switchDrawerTab('stickers')">الملصقات</button>
+                                <button class="dbt-close" onclick="toggleStickerDrawer(false)">✕</button>
                             </div>
                         </div>
                     </div>
                 </main>
             </section>
 
-            <!-- ===== القسم 2: المنشورات ===== -->
+            <!-- ===== القسم 2: المنشورات (بتصميم إنستگرام الاحترافي) ===== -->
             <section class="tab-view" id="view-feed">
                 <div class="feed-wrap">
                     <div class="top-bar">
-                        <h3>🌐 المنشورات</h3>
+                        <h3>📸 المنشورات</h3>
                         <div style="display:flex; gap:6px;">
                             <button class="icon-btn" title="تفاعلات منشوراتك" onclick="openNotificationsModal()">🔔</button>
-                            <button class="btn btn-sm" onclick="openCreatePostModal()">➕ منشور جديد</button>
+                            <button class="btn btn-sm" onclick="openCreatePostModal()">➕ منشور</button>
                         </div>
                     </div>
                     <div class="feed-scroll" id="feedContainer"></div>
@@ -270,7 +292,18 @@
                 </div>
             </section>
 
-            <!-- ===== القسم 4: الملف الشخصي ===== -->
+            <!-- ===== القسم 4: ساحة الألعاب والتحديات (XO + مبارزة الأسئلة) ===== -->
+            <section class="tab-view" id="view-games">
+                <div class="games-wrap">
+                    <div class="top-bar">
+                        <h3>🎮 الألعاب والتحديات</h3>
+                        <button class="btn btn-sm btn-outline" onclick="refreshGamesHub()">🔄 تحديث</button>
+                    </div>
+                    <div class="games-scroll" id="gamesHubContainer"></div>
+                </div>
+            </section>
+
+            <!-- ===== القسم 5: الملف الشخصي ===== -->
             <section class="tab-view" id="view-profile">
                 <div class="profile-wrap">
                     <div class="profile-container">
@@ -338,14 +371,15 @@
         </div>
     </div>
 
-    <!-- إضافة ستوري -->
+    <!-- إضافة ستوري (نص + صورة + فيديو) -->
     <div class="modal-bg" id="createStoryModal" onclick="if(event.target===this) this.style.display='none'">
-        <div class="glass-card" style="max-width:400px;">
+        <div class="glass-card" style="max-width:410px;">
             <h3>✨ إضافة قصة جديدة (24 ساعة)</h3>
-            <p class="sub">تظهر لأصدقائك مع عدّاد مشاهدين وتفاعل مباشر</p>
+            <p class="sub">نص أو صورة أو فيديو قصير مع مشاهدين وتفاعل حي</p>
             <div class="tabs">
-                <button class="tab-btn active" id="stTabText" onclick="switchStoryType('text')">قصة نصية</button>
-                <button class="tab-btn" id="stTabImg" onclick="switchStoryType('image')">قصة صورة</button>
+                <button class="tab-btn active" id="stTabText" onclick="switchStoryType('text')">📝 نص</button>
+                <button class="tab-btn" id="stTabImg" onclick="switchStoryType('image')">🖼️ صورة</button>
+                <button class="tab-btn" id="stTabVid" onclick="switchStoryType('video')">🎬 فيديو</button>
             </div>
             <div id="stTextForm">
                 <textarea id="storyTextContent" class="input" rows="4" placeholder="اكتب حالتك هنا..."></textarea>
@@ -354,13 +388,18 @@
                 <input type="file" id="storyImgFile" accept="image/*" class="input" style="margin-bottom:10px;">
                 <input type="text" id="storyImgCaption" class="input" placeholder="وصف مختصر (اختياري)">
             </div>
+            <div id="stVidForm" style="display:none;">
+                <input type="file" id="storyVidFile" accept="video/*" class="input" style="margin-bottom:8px;">
+                <div style="font-size:11.5px; color:var(--text-dim); margin-bottom:8px;">الحد الأقصى للفيديو السريع: 4.5 ميجابايت حتى يفتح بسرعة على النت الضعيف</div>
+                <input type="text" id="storyVidCaption" class="input" placeholder="وصف مختصر (اختياري)">
+            </div>
             <button class="btn" style="margin-top:14px;" onclick="publishStory()">نشر القصة 🚀</button>
         </div>
     </div>
 
-    <!-- قائمة مشاهدي ومتفاعلي الستوري -->
-    <div class="modal-bg sheet-bg" id="storyViewersModal" onclick="if(event.target===this) closeStoryViewersModal()">
-        <div class="bottom-sheet" style="max-height:72dvh; display:flex; flex-direction:column;">
+    <!-- قائمة مشاهدي ومتفاعلي الستوري (مرفوعة فوق عارض الستوري بـ z-index 850) -->
+    <div class="modal-bg sheet-bg story-top-modal" id="storyViewersModal" onclick="if(event.target===this) closeStoryViewersModal()">
+        <div class="bottom-sheet" style="max-height:74dvh; display:flex; flex-direction:column;">
             <h4 style="margin-bottom:10px; text-align:center;">👁️ المشاهدون والتفاعلات</h4>
             <div id="storyViewersList" style="flex:1; overflow-y:auto; max-height:48dvh;"></div>
             <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="closeStoryViewersModal()">إغلاق</button>
@@ -394,14 +433,14 @@
     <!-- إنشاء منشور -->
     <div class="modal-bg" id="createPostModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:420px;">
-            <h3>🖼️ نشر منشور جديد</h3>
+            <h3>📸 نشر منشور جديد</h3>
             <div class="form-group" style="margin-top:12px;">
                 <label>صورة المنشور (اختياري)</label>
                 <input type="file" id="postImgFile" accept="image/*" class="input">
             </div>
             <div class="form-group">
                 <label>نص المنشور / التعليق</label>
-                <textarea id="postCaptionInput" class="input" rows="4" placeholder="شارك فكرتك أو صورتك..."></textarea>
+                <textarea id="postCaptionInput" class="input" rows="4" placeholder="شارك لحظتك أو فكرتك..."></textarea>
             </div>
             <button class="btn" onclick="publishPost()">نشر الآن 🚀</button>
         </div>
@@ -413,7 +452,7 @@
             <h4 style="margin-bottom:10px; text-align:center;">💬 التعليقات</h4>
             <div id="commentsList" style="flex:1; overflow-y:auto; margin-bottom:12px; max-height:46dvh;"></div>
             <div style="display:flex; gap:8px;">
-                <input type="text" id="commentInput" class="input" placeholder="اكتب تعليقاً..." onkeydown="if(event.key==='Enter'){event.preventDefault(); submitComment();}">
+                <input type="text" id="commentInput" class="input" placeholder="أضف تعليقاً..." onkeydown="if(event.key==='Enter'){event.preventDefault(); submitComment();}">
                 <button class="btn" style="width:90px;" onclick="submitComment()">إرسال</button>
             </div>
         </div>
@@ -422,7 +461,7 @@
     <!-- قائمة المعجبين بالمنشور -->
     <div class="modal-bg sheet-bg" id="postLikesModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:65dvh; display:flex; flex-direction:column;">
-            <h4 style="margin-bottom:10px; text-align:center;">❤️ المتفاعلون مع المنشور</h4>
+            <h4 style="margin-bottom:10px; text-align:center;">❤️ الإعجابات</h4>
             <div id="postLikesList" style="flex:1; overflow-y:auto; max-height:45dvh;"></div>
         </div>
     </div>
@@ -451,7 +490,7 @@
         </div>
     </div>
 
-    <!-- إنشاء استطلاع رأي (Polls) -->
+    <!-- إنشاء استطلاع رأي -->
     <div class="modal-bg" id="createPollModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:400px;">
             <h3>📊 إنشاء استطلاع رأي</h3>
@@ -490,16 +529,22 @@
         </div>
     </div>
 
+    <!-- نافذة الألعاب الحية (XO + مبارزة الأسئلة) -->
+    <div class="modal-bg" id="gameArenaModal" onclick="if(event.target===this) closeGameArena()">
+        <div class="glass-card" id="gameArenaBody" style="max-width:430px;"></div>
+    </div>
+
     <!-- خيارات الرسالة -->
     <div class="modal-bg sheet-bg" id="msgActionModal" onclick="if(event.target===this) closeMsgActions()">
         <div class="bottom-sheet">
             <div class="react-picker">
                 <button onclick="reactToSelected('❤️')">❤️</button>
-                <button onclick="reactToSelected('😂')">😂</button>
-                <button onclick="reactToSelected('😮')">😮</button>
-                <button onclick="reactToSelected('😢')">😢</button>
                 <button onclick="reactToSelected('🔥')">🔥</button>
+                <button onclick="reactToSelected('😂')">😂</button>
+                <button onclick="reactToSelected('😍')">😍</button>
+                <button onclick="reactToSelected('😢')">😢</button>
                 <button onclick="reactToSelected('👍')">👍</button>
+                <button onclick="reactToSelected('👏')">👏</button>
             </div>
             <button class="sheet-action" id="replyActionBtn" onclick="replyToSelected()">↩️ &nbsp; رد على الرسالة</button>
             <button class="sheet-action" id="editActionBtn" onclick="startEditSelected()">✏️ &nbsp; تعديل الرسالة</button>
@@ -511,10 +556,10 @@
         </div>
     </div>
 
-    <!-- إعدادات الحساب، الثيمات، الخطوط، خلفية المحادثة، وتثبيت التطبيق -->
+    <!-- إعدادات الحساب والتخصيص -->
     <div class="modal-bg" id="settingsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:440px;">
-            <h3 style="margin-bottom:10px;">⚙️ الإعدادات والتخصيص الزجاجي</h3>
+            <h3 style="margin-bottom:10px;">⚙️ الإعدادات والمظهر</h3>
             <div style="display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:12px;">
                 <div class="avatar lg" id="profAvatarPreview">ح</div>
                 <input type="file" id="profAvatarInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
@@ -522,7 +567,7 @@
             </div>
 
             <div class="form-group">
-                <label>ثيم الواجهة الزجاجي:</label>
+                <label>ثيم الواجهة:</label>
                 <div class="theme-grid">
                     <div class="theme-swatch" data-t="midnight" style="background:linear-gradient(135deg,#0d1726,#0ea5e9);" onclick="applyTheme('midnight')">كحلي</div>
                     <div class="theme-swatch" data-t="obsidian" style="background:linear-gradient(135deg,#050508,#7c3aed);" onclick="applyTheme('obsidian')">فحمي</div>
@@ -545,8 +590,8 @@
             <div class="form-group">
                 <label>خلفية المحادثة:</label>
                 <div class="chip-grid" id="wpGrid">
-                    <button type="button" class="chip-btn" data-w="aurora" onclick="applyWallpaper('aurora')">شفق زجاجي</button>
-                    <button type="button" class="chip-btn" data-w="dots" onclick="applyWallpaper('dots')">نقاط هادئة</button>
+                    <button type="button" class="chip-btn" data-w="pattern" onclick="applyWallpaper('pattern')">نقش خفيف</button>
+                    <button type="button" class="chip-btn" data-w="aurora" onclick="applyWallpaper('aurora')">شفق هادئ</button>
                     <button type="button" class="chip-btn" data-w="clean" onclick="applyWallpaper('clean')">سادة صافي</button>
                     <button type="button" class="chip-btn" data-w="custom" onclick="document.getElementById('chatBgFileInput').click()">🖼️ صورة</button>
                 </div>
@@ -631,7 +676,7 @@
         </div>
     </div>
 
-    <!-- عارض الستوري بملء الشاشة -->
+    <!-- عارض الستوري بملء الشاشة (يدعم النص والصورة والفيديو) -->
     <div id="storyViewer">
         <div class="sv-bars" id="svBars"></div>
         <div class="sv-header">
@@ -660,12 +705,25 @@
         </div>
     </div>
 
+    <!-- مشغّل الفيديو بملء الشاشة المخصص للمنصة -->
+    <div class="modal-bg story-top-modal" id="videoFullModal" onclick="if(event.target===this) closeFullVideoModal()">
+        <div class="custom-full-vid">
+            <button class="icon-btn" style="position:absolute; top:12px; left:12px; z-index:5;" onclick="closeFullVideoModal()">✕</button>
+            <video id="fullVidEl" playsinline></video>
+            <div class="cvp-controls">
+                <button class="cvp-btn" id="fullVidPlayBtn" onclick="toggleFullVidPlay()">⏸</button>
+                <input type="range" class="cvp-seek" id="fullVidSeek" min="0" max="100" value="0" oninput="seekFullVid(this.value)">
+                <span class="cvp-time" id="fullVidTime">00:00</span>
+            </div>
+        </div>
+    </div>
+
     <!-- عارض الصور -->
-    <div class="modal-bg" id="lightboxModal" onclick="this.style.display='none'">
+    <div class="modal-bg story-top-modal" id="lightboxModal" onclick="this.style.display='none'">
         <img id="lightboxImg" src="">
     </div>
 
-    <!-- شاشة المكالمات الاحترافية -->
+    <!-- شاشة المكالمات -->
     <div id="callOverlay">
         <div class="call-header">
             <h3 id="callName">مكالمة</h3>
@@ -707,12 +765,8 @@
                 <div class="stat-card"><h3 id="admStatSpaces">0</h3><span>القنوات/المجموعات</span></div>
             </div>
 
-            <!-- أداة توليد أيقونات التثبيت PNG الأصلية لحل مشكلة كروم نهائياً -->
             <div class="adm-section">
-                <h4>📲 حل مشكلة تثبيت التطبيق (أيقونات PNG أصلية لكروم)</h4>
-                <p style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px; line-height:1.6;">
-                    حمّل الأيقونتين أدناه (بصيغة PNG أصلية مطابقة لشروط كروم 100%) ثم ارفعهن مباشرة لمستودع GitHub حتى ينزل التطبيق بدون علامة كروم نهائياً:
-                </p>
+                <h4>📲 أيقونات التثبيت الأصلية (PNG لكروم)</h4>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button class="btn btn-sm" onclick="downloadOfficialPngIcon(192)">⬇️ تحميل icon-192.png</button>
                     <button class="btn btn-sm btn-success" onclick="downloadOfficialPngIcon(512)">⬇️ تحميل icon-512.png</button>
@@ -768,7 +822,8 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="./core.js?v=5"></script>
-    <script src="./features.js?v=5"></script>
+    <script src="./core.js?v=6"></script>
+    <script src="./features.js?v=6"></script>
+    <script src="./games.js?v=6"></script>
 </body>
 </html>
