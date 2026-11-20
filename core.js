@@ -1,4 +1,4 @@
-// ==================== الإعدادات والتهيئة الأساسية ====================
+// ==================== الإعدادات والتهيئة الأساسية (V5 Glass) ====================
 const DB_URL = "https://notes-app-c738e-default-rtdb.firebaseio.com";
 const DEFAULT_PIN = "2007H";
 const ADMIN_PIN = "9988";
@@ -37,11 +37,12 @@ let allSpaces = {};
 let myHighlights = {};
 let myNotifications = {};
 
-// المحادثة النشطة: "dm" | "saved" | "group" | "channel"
-let activeChatType = null;
+// المحادثة النشطة مع قفل لمنع تداخل الغرف
+let activeChatType = null; // "dm" | "saved" | "group" | "channel"
 let activePartner = null;
 let activeRoomId = null;
 let activeSpaceObj = null;
+let activeRoomToken = 0;
 
 let msgRef = null, typingRef = null, pinnedRef = null, blockCheckRef = null;
 let contactListeners = {};
@@ -57,8 +58,10 @@ let replyTarget = null;
 let editingMsgId = null;
 let selectedMsg = null;
 
-// تطبيق الثيم المحفوظ فوراً
+// تطبيق التخصيصات المحفوظة فوراً (الثيم + الخط + خلفية المحادثة)
 applyTheme(localStorage.getItem("app_theme") || "midnight", true);
+applyFont(localStorage.getItem("app_font") || "tajawal", true);
+applyWallpaper(localStorage.getItem("app_wp") || "aurora", true);
 if (failedAttempts >= 3) renderSelfDestructScreen();
 
 db.ref("sys_config").on("value", snap => {
@@ -104,6 +107,74 @@ function startRingtone(incoming) {
 }
 function stopRingtone() { if (ringtoneInterval) { clearInterval(ringtoneInterval); ringtoneInterval = null; } }
 
+// ==================== التخصيصات (ثيمات + خطوط + خلفيات) ====================
+function applyTheme(t, silent = false) {
+    const valid = ["midnight", "obsidian", "emerald", "amethyst", "amber"];
+    const theme = valid.includes(t) ? t : "midnight";
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("app_theme", theme);
+    document.querySelectorAll(".theme-swatch").forEach(el => el.classList.toggle("active", el.getAttribute("data-t") === theme));
+    if (!silent) showToast("تم تحديث الثيم الزجاجي ✨");
+}
+
+function applyFont(f, silent = false) {
+    const valid = ["tajawal", "ibm", "readex", "cairo"];
+    const font = valid.includes(f) ? f : "tajawal";
+    document.documentElement.setAttribute("data-font", font);
+    localStorage.setItem("app_font", font);
+    document.querySelectorAll("#fontGrid .chip-btn").forEach(el => el.classList.toggle("active", el.getAttribute("data-f") === font));
+    if (!silent) showToast("تم تغيير الخط ✍️");
+}
+
+function applyWallpaper(w, silent = false) {
+    const valid = ["aurora", "dots", "clean", "custom"];
+    const wp = valid.includes(w) ? w : "aurora";
+    document.documentElement.setAttribute("data-wp", wp);
+    localStorage.setItem("app_wp", wp);
+    document.querySelectorAll("#wpGrid .chip-btn").forEach(el => el.classList.toggle("active", el.getAttribute("data-w") === wp));
+
+    const area = document.getElementById("messagesList");
+    if (area) {
+        if (wp === "custom") {
+            const img = localStorage.getItem("app_wp_img");
+            if (img) {
+                area.style.backgroundImage = `linear-gradient(rgba(4,8,18,0.58), rgba(4,8,18,0.62)), url(${img})`;
+                area.style.backgroundSize = "cover";
+                area.style.backgroundPosition = "center";
+            } else {
+                document.documentElement.setAttribute("data-wp", "aurora");
+                area.style.backgroundImage = "";
+            }
+        } else {
+            area.style.backgroundImage = "";
+            area.style.backgroundSize = "";
+            area.style.backgroundPosition = "";
+        }
+    }
+    if (!silent) showToast("تم تحديث خلفية المحادثة 🎨");
+}
+
+async function handleChatWallpaperUpload(e) {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    showToast("جاري تجهيز الخلفية...");
+    const dataUrl = await compressImageFile(f, 960, 0.72);
+    try {
+        localStorage.setItem("app_wp_img", dataUrl);
+        applyWallpaper("custom");
+    } catch {
+        showToast("حجم الصورة كبير، اختر صورة أصغر");
+    }
+}
+
+function toggleSoundPref() {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem("app_sound", soundEnabled ? "on" : "off");
+    document.getElementById("soundToggleBtn").innerText = soundEnabled ? "مفعلة" : "صامت";
+    if (soundEnabled) playSendSound();
+}
+
 // ==================== الشارات والدوال المساعدة ====================
 function getVerifiedBadgeHTML(level) {
     if (!level) return "";
@@ -128,22 +199,6 @@ function showToast(txt) {
     t.classList.add("show");
     clearTimeout(t._tm);
     t._tm = setTimeout(() => t.classList.remove("show"), 2600);
-}
-
-function applyTheme(t, silent = false) {
-    const valid = ["midnight", "obsidian", "emerald", "amethyst", "amber"];
-    const theme = valid.includes(t) ? t : "midnight";
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("app_theme", theme);
-    document.querySelectorAll(".theme-swatch").forEach(el => el.classList.toggle("active", el.getAttribute("data-t") === theme));
-    if (!silent) showToast("تم تحديث الثيم ✨");
-}
-
-function toggleSoundPref() {
-    soundEnabled = !soundEnabled;
-    localStorage.setItem("app_sound", soundEnabled ? "on" : "off");
-    document.getElementById("soundToggleBtn").innerText = soundEnabled ? "مفعلة" : "صامت";
-    if (soundEnabled) playSendSound();
 }
 
 function simpleHash(str) {
@@ -202,7 +257,7 @@ function sendNotification(targetUsername, text, icon = "🔔") {
 }
 
 function renderSelfDestructScreen() {
-    document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8;"><h1 style="color:#ef4444; font-size:52px; font-weight:800;">503</h1><h3 style="color:#fff;">Service Temporarily Unavailable</h3><p style="font-size:13px; margin-top:8px;">تم حظر الجلسة ومسح البيانات تلقائياً لأسباب أمنية.</p></div>`;
+    document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8; position:relative; z-index:10;"><h1 style="color:#f43f5e; font-size:52px; font-weight:800;">503</h1><h3 style="color:#fff;">Service Temporarily Unavailable</h3><p style="font-size:13px; margin-top:8px;">تم حظر الجلسة ومسح البيانات تلقائياً لأسباب أمنية.</p></div>`;
 }
 
 // ==================== 1. البوابة المموهة والحسابات ====================
@@ -224,7 +279,6 @@ async function verifyGate() {
         failedAttempts = 0; localStorage.setItem("sec_fails", "0");
         document.getElementById("gateScreen").style.display = "none";
 
-        // الدخول التلقائي الدائم بدون تكرار كتابة اليوزر وكلمة السر
         const savedU = localStorage.getItem("saved_account_u");
         const savedP = localStorage.getItem("saved_account_p");
         if (savedU && savedP) {
@@ -282,7 +336,6 @@ async function doRegister() {
     if (username.length < 1) { err.innerText = "اكتب يوزراً صحيحاً بأحرف إنجليزية أو أرقام."; return; }
     if (pass.length < 4) { err.innerText = "كلمة السر يجب أن تكون 4 رموز فأكثر."; return; }
 
-    // حماية اليوزر الحصري @H للمطور فقط
     let isDev = false;
     if (username === "h") {
         const devCode = prompt("⚡ اليوزر المميز (@H) محجوز حصرياً لمطور المنصة.\nأدخل رمز المطور لتأكيد الملكية:");
@@ -292,7 +345,7 @@ async function doRegister() {
         }
         isDev = true;
     } else if (username.length < 3) {
-        err.innerText = "اليوزرات العادية يجب أن تكون 3 أحرف على الأقل (اليوزر بحرف واحد محجوز للمطور).";
+        err.innerText = "اليوزرات العادية يجب أن تكون 3 أحرف على الأقل.";
         return;
     }
 
@@ -361,6 +414,7 @@ function enterMainApp(userData) {
     document.getElementById("authScreen").style.display = "none";
     document.getElementById("appShell").style.display = "flex";
     document.getElementById("soundToggleBtn").innerText = soundEnabled ? "مفعلة" : "صامت";
+    applyWallpaper(localStorage.getItem("app_wp") || "aurora", true);
 
     initStickerDrawer();
     setupPresence();
@@ -458,7 +512,7 @@ function setupPresence() {
     });
 }
 
-// ==================== 3. البحث الموحد (حسابات + قنوات + مجموعات بخانة واحدة) ====================
+// ==================== 3. البحث الموحد ====================
 function openUnifiedSearchModal() {
     document.getElementById("unifiedSearchInput").value = "";
     document.getElementById("unifiedSearchResult").innerHTML = "";
@@ -469,44 +523,42 @@ function openUnifiedSearchModal() {
 async function runUnifiedSearch() {
     const target = sanitizeKey(document.getElementById("unifiedSearchInput").value.replace(/^@/, ""));
     const box = document.getElementById("unifiedSearchResult");
-    if (!target) { box.innerHTML = `<span style="color:#f87171; font-size:13px;">اكتب اليوزر المطلوب بالضبط</span>`; return; }
+    if (!target) { box.innerHTML = `<span style="color:#fb7185; font-size:13px;">اكتب اليوزر المطلوب بالضبط</span>`; return; }
 
     box.innerHTML = `<span style="color:var(--text-dim); font-size:13px;">جاري البحث...</span>`;
     let html = "";
 
-    // 1. البحث في الحسابات الشخصية باليوزر بالضبط
     const uSnap = await db.ref("users/" + target).once("value");
     if (uSnap.exists() && !uSnap.val().banned && target !== me.username) {
         const u = uSnap.val();
         html += `<div class="search-cat-title">👤 حساب شخصي</div>
-            <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-main); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; background:var(--glass-inner); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px; margin-bottom:10px;">
                 <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="document.getElementById('unifiedSearchModal').style.display='none'; openOtherProfile('${u.username}')">
                     <div class="avatar sm" id="uniFoundUserAv"></div>
                     <div>
-                        <div style="font-weight:800; font-size:14px; display:flex; align-items:center;">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}</div>
-                        <div style="font-size:12px; color:var(--accent);">${escapeHTML(getDisplayTag(u))}</div>
+                        <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px;">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}</div>
+                        <div class="handle-ltr" dir="ltr" style="font-size:12px;">${escapeHTML(getDisplayTag(u))}</div>
                     </div>
                 </div>
                 <button class="btn btn-sm" onclick="addAndOpenContact('${u.username}')">مراسلة</button>
             </div>`;
     }
 
-    // 2. البحث في القنوات والمجموعات باليوزر بالضبط
     const spFound = Object.values(allSpaces).find(s => s.handle === target);
     if (spFound) {
         const isMem = !!(spFound.members && spFound.members[me.username]);
         html += `<div class="search-cat-title">${spFound.type === "channel" ? "📢 قناة" : "👥 مجموعة"}</div>
-            <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-main); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; background:var(--glass-inner); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px;">
                 <div>
-                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center;">${escapeHTML(spFound.name)} ${getVerifiedBadgeHTML(spFound.verified)}</div>
-                    <div style="font-size:12px; color:var(--accent);">@${escapeHTML(spFound.handle)} • ${Object.keys(spFound.members || {}).length} مشترك</div>
+                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px;">${escapeHTML(spFound.name)} ${getVerifiedBadgeHTML(spFound.verified)}</div>
+                    <div style="font-size:12px; color:var(--text-dim);"><span class="handle-ltr" dir="ltr" style="font-size:12px;">@${escapeHTML(spFound.handle)}</span> • ${Object.keys(spFound.members || {}).length} مشترك</div>
                 </div>
                 <button class="btn btn-sm" onclick="document.getElementById('unifiedSearchModal').style.display='none'; joinAndOpenSpace('${spFound.id}')">${isMem ? 'فتح' : 'انضمام'}</button>
             </div>`;
     }
 
     if (!html) {
-        box.innerHTML = `<span style="color:#f87171; font-size:13px;">❌ لا يوجد حساب أو قناة بهذا اليوزر (@${escapeHTML(target)})</span>`;
+        box.innerHTML = `<span style="color:#fb7185; font-size:13px;">❌ لا يوجد حساب أو قناة بهذا اليوزر (<span class="handle-ltr" dir="ltr">@${escapeHTML(target)}</span>)</span>`;
     } else {
         box.innerHTML = html;
         if (uSnap.exists() && document.getElementById("uniFoundUserAv")) {
@@ -535,7 +587,6 @@ function renderChatsSidebar() {
 
     list.innerHTML = "";
 
-    // تثبيت مجلد الرسائل المحفوظة بأعلى القائمة دائماً
     if (!q || "الرسائل المحفوظة".includes(q)) {
         const savedRow = document.createElement("div");
         savedRow.className = "chat-row" + (activeChatType === "saved" ? " active" : "");
@@ -586,20 +637,31 @@ function renderChatsSidebar() {
     });
 }
 
-// ==================== 4. غرفة المحادثة والرسائل ====================
+// ==================== 4. غرفة المحادثة والرسائل (منع التداخل والتكرار 100%) ====================
 function detachRoomListeners() {
+    activeRoomToken++;
     if (msgRef) { msgRef.off(); msgRef = null; }
     if (typingRef) { typingRef.off(); typingRef = null; }
     if (pinnedRef) { pinnedRef.off(); pinnedRef = null; }
     if (blockCheckRef) { blockCheckRef.off(); blockCheckRef = null; }
 }
 
+function resetMessagesStage() {
+    const area = document.getElementById("messagesList");
+    if (area) area.innerHTML = `<div style="margin:auto; text-align:center; color:var(--text-dim); font-size:12.5px;">جاري تحميل المحادثة...</div>`;
+    document.getElementById("pinnedBar").style.display = "none";
+}
+
 function openSavedMessages() {
     detachRoomListeners();
+    const myToken = activeRoomToken;
+    resetMessagesStage();
+
     activeChatType = "saved";
     activePartner = null;
     activeRoomId = me.username;
     activeSpaceObj = null;
+    seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
 
@@ -613,16 +675,18 @@ function openSavedMessages() {
     document.getElementById("btnClearLocal").style.display = "none";
     document.getElementById("voAttachBtn").style.display = "none";
     document.getElementById("pollAttachBtn").style.display = "none";
-    document.getElementById("pinnedBar").style.display = "none";
 
     updateActiveHeader();
     updateChatInputLockState();
     renderChatsSidebar();
-    attachMessagesListener(`saved_msgs/${me.username}`);
+    attachMessagesListener(`saved_msgs/${me.username}`, myToken);
 }
 
 function openDM(partnerUsername) {
     detachRoomListeners();
+    const myToken = activeRoomToken;
+    resetMessagesStage();
+
     activeChatType = "dm";
     activePartner = partnerUsername;
     activeRoomId = getRoomId(me.username, partnerUsername);
@@ -645,27 +709,35 @@ function openDM(partnerUsername) {
     updateActiveHeader();
     renderChatsSidebar();
 
-    db.ref(`chat_meta/${activeRoomId}/unreadFor`).once("value", s => {
-        if (s.val() === me.username) db.ref(`chat_meta/${activeRoomId}/unreadFor`).set("");
+    const roomIdCopy = activeRoomId;
+    db.ref(`chat_meta/${roomIdCopy}/unreadFor`).once("value", s => {
+        if (s.val() === me.username) db.ref(`chat_meta/${roomIdCopy}/unreadFor`).set("");
     });
 
     blockCheckRef = db.ref(`user_blocks/${partnerUsername}/${me.username}`);
-    blockCheckRef.on("value", s => { blockedByPartner = !!s.val(); updateChatInputLockState(); });
+    blockCheckRef.on("value", s => {
+        if (myToken !== activeRoomToken) return;
+        blockedByPartner = !!s.val();
+        updateChatInputLockState();
+    });
     updateChatInputLockState();
 
-    typingRef = db.ref(`chats/${activeRoomId}/typing/${partnerUsername}`);
-    typingRef.on("value", () => updateActiveHeader());
+    typingRef = db.ref(`chats/${roomIdCopy}/typing/${partnerUsername}`);
+    typingRef.on("value", () => { if (myToken === activeRoomToken) updateActiveHeader(); });
 
-    pinnedRef = db.ref(`chats/${activeRoomId}/pinned`);
-    pinnedRef.on("value", s => renderPinnedBar(s.val()));
+    pinnedRef = db.ref(`chats/${roomIdCopy}/pinned`);
+    pinnedRef.on("value", s => { if (myToken === activeRoomToken) renderPinnedBar(s.val()); });
 
-    attachMessagesListener(`chats/${activeRoomId}/messages`);
+    attachMessagesListener(`chats/${roomIdCopy}/messages`, myToken);
 }
 
 function openSpaceRoom(spaceId) {
     const sp = allSpaces[spaceId];
     if (!sp) return;
     detachRoomListeners();
+    const myToken = activeRoomToken;
+    resetMessagesStage();
+
     activeChatType = sp.type;
     activePartner = null;
     activeRoomId = spaceId;
@@ -691,23 +763,24 @@ function openSpaceRoom(spaceId) {
     updateChatInputLockState();
 
     pinnedRef = db.ref(`spaces/${spaceId}/pinned`);
-    pinnedRef.on("value", s => renderPinnedBar(s.val()));
+    pinnedRef.on("value", s => { if (myToken === activeRoomToken) renderPinnedBar(s.val()); });
 
-    attachMessagesListener(`space_msgs/${spaceId}`);
+    attachMessagesListener(`space_msgs/${spaceId}`, myToken);
 }
 
-function attachMessagesListener(dbPath) {
-    let init = true, prevLen = 0;
+function attachMessagesListener(dbPath, token) {
+    let init = true, prevCount = 0;
     msgRef = db.ref(dbPath);
     msgRef.on("value", snap => {
+        if (token !== activeRoomToken) return; // حماية مطلقة ضد تداخل المحادثات
         const val = snap.val() || {};
         const keys = Object.keys(val);
-        if (!init && keys.length > prevLen) {
+        if (!init && keys.length > prevCount) {
             const lastM = val[keys[keys.length - 1]];
             if (lastM && lastM.sender !== me.username) playRecvSound();
         }
-        init = false; prevLen = keys.length;
-        renderMessages(val);
+        init = false; prevCount = keys.length;
+        renderMessages(val, token);
     });
 }
 
@@ -716,6 +789,7 @@ function closeActiveChat() {
     if (activeChatType === "dm" && activeRoomId) db.ref(`chats/${activeRoomId}/typing/${me.username}`).set(false);
     detachRoomListeners();
     activeChatType = null; activePartner = null; activeRoomId = null; activeSpaceObj = null;
+    document.getElementById("messagesList").innerHTML = "";
     renderChatsSidebar();
 }
 
@@ -760,7 +834,10 @@ function updateActiveHeader() {
         if (!p) return;
         setAvatarStyle(av, p);
         nm.innerHTML = `${escapeHTML(p.name)} ${getVerifiedBadgeHTML(p.verified)} ${getDevBadgeHTML(p)}`;
-        db.ref(`chats/${activeRoomId}/typing/${activePartner}`).once("value", s => {
+        const roomCopy = activeRoomId;
+        const partnerCopy = activePartner;
+        db.ref(`chats/${roomCopy}/typing/${partnerCopy}`).once("value", s => {
+            if (activeRoomId !== roomCopy) return;
             if (s.val() === true) { st.innerText = "يكتب الآن..."; st.className = "status-typing"; }
             else if (p.online) { st.innerText = "متصل الآن"; st.className = "status-online"; }
             else { st.innerText = p.lastSeen ? `آخر ظهور ${formatTime(p.lastSeen)}` : "غير متصل"; st.className = ""; }
@@ -769,7 +846,7 @@ function updateActiveHeader() {
         setAvatarStyle(av, { name: activeSpaceObj.name, avatarColor: activeSpaceObj.avatarColor }, false);
         nm.innerHTML = `${escapeHTML(activeSpaceObj.name)} ${getVerifiedBadgeHTML(activeSpaceObj.verified)}`;
         const cnt = Object.keys(activeSpaceObj.members || {}).length;
-        st.innerText = (activeSpaceObj.type === "channel" ? "قناة" : "مجموعة") + ` • ${cnt} مشترك • @${activeSpaceObj.handle}`;
+        st.innerText = (activeSpaceObj.type === "channel" ? "قناة" : "مجموعة") + ` • ${cnt} مشترك`;
         st.className = "";
     }
 }
@@ -791,32 +868,38 @@ function getActiveRoomBasePath() {
     return `space_msgs/${activeRoomId}`;
 }
 
-function renderMessages(msgsObj) {
+function renderMessages(msgsObj, token) {
+    if (token !== activeRoomToken) return;
     const area = document.getElementById("messagesList");
-    area.innerHTML = "";
+    const frag = document.createDocumentFragment();
     const entries = Object.entries(msgsObj)
-        .filter(([id, m]) => !(m.deletedFor && m.deletedFor[me.username]))
+        .filter(([id, m]) => m && !(m.deletedFor && m.deletedFor[me.username]))
         .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
 
     if (entries.length === 0) {
-        area.innerHTML = `<div style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-panel); padding:14px 20px; border-radius:16px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
+        area.innerHTML = `<div style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); backdrop-filter:blur(14px); padding:14px 20px; border-radius:18px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
         return;
     }
 
-    const rendered = new Set();
+    // تجميع تحديثات "تمت القراءة" خارج حلقة الرسم لمنع تكرار الرسائل نهائياً
+    const pendingSeenUpdates = {};
+    const roomIdSnap = activeRoomId;
+    const chatTypeSnap = activeChatType;
+
+    const renderedIds = new Set();
     entries.forEach(([id, m]) => {
-        if (rendered.has(id)) return;
-        rendered.add(id);
+        if (renderedIds.has(id)) return;
+        renderedIds.add(id);
 
         const isMe = m.sender === me.username;
-        const isChannel = activeChatType === "channel";
+        const isChannel = chatTypeSnap === "channel";
 
-        if (activeChatType === "dm" && !isMe && !m.seen && !seenMarkedSet.has(id)) {
+        if (chatTypeSnap === "dm" && !isMe && !m.seen && !seenMarkedSet.has(id)) {
             seenMarkedSet.add(id);
-            db.ref(`chats/${activeRoomId}/messages/${id}/seen`).set(true);
+            pendingSeenUpdates[`${id}/seen`] = true;
         } else if (isChannel && (!m.views || !m.views[me.username]) && !seenMarkedSet.has(id)) {
             seenMarkedSet.add(id);
-            db.ref(`space_msgs/${activeRoomId}/${id}/views/${me.username}`).set(true);
+            pendingSeenUpdates[`${id}/views/${me.username}`] = true;
         }
 
         const wrap = document.createElement("div");
@@ -839,7 +922,7 @@ function renderMessages(msgsObj) {
         topBar.className = "msg-top-bar";
         const lbl = document.createElement("span");
         lbl.className = "msg-sender-lbl";
-        if (activeChatType === "group" && !isMe) lbl.innerText = m.senderName || m.sender;
+        if (chatTypeSnap === "group" && !isMe) lbl.innerText = m.senderName || m.sender;
         else if (isChannel) lbl.innerHTML = `${escapeHTML(activeSpaceObj?.name || "")} ${getVerifiedBadgeHTML(activeSpaceObj?.verified)}`;
         else if (m.type === "audio") lbl.innerText = "🎤 بصمة صوتية";
 
@@ -857,7 +940,6 @@ function renderMessages(msgsObj) {
             bubble.appendChild(rq);
         }
 
-        // عرض المحتوى حسب النوع
         if (m.type === "text") {
             const txt = document.createElement("div"); txt.className = "msg-text"; txt.innerText = m.content;
             bubble.appendChild(txt);
@@ -910,7 +992,6 @@ function renderMessages(msgsObj) {
             bubble.appendChild(pb);
         }
 
-        // تفاعلات القناة
         if (isChannel) {
             const chBar = document.createElement("div");
             chBar.className = "ch-reactions";
@@ -934,7 +1015,7 @@ function renderMessages(msgsObj) {
             footer.innerHTML = `<span>👁️ ${vCount}</span><span>${formatTime(m.ts)}</span>`;
         } else {
             footer.innerHTML = `${m.edited ? '<span>(معدّلة)</span>' : ''}<span>${formatTime(m.ts)}</span>` +
-                (isMe && activeChatType === "dm" ? `<span class="ticks ${m.seen ? 'seen' : ''}">${m.seen ? '✓✓' : '✓'}</span>` : "");
+                (isMe && chatTypeSnap === "dm" ? `<span class="ticks ${m.seen ? 'seen' : ''}">${m.seen ? '✓✓' : '✓'}</span>` : "");
         }
         bubble.appendChild(footer);
         wrap.appendChild(bubble);
@@ -952,9 +1033,36 @@ function renderMessages(msgsObj) {
             wrap.appendChild(rBar);
         }
 
-        area.appendChild(wrap);
+        frag.appendChild(wrap);
     });
+
+    area.innerHTML = "";
+    area.appendChild(frag);
     area.scrollTop = area.scrollHeight;
+
+    // تنفيذ تحديثات القراءة بشكل منفصل بعد انتهاء الرسم
+    if (Object.keys(pendingSeenUpdates).length > 0) {
+        setTimeout(() => {
+            if (token !== activeRoomToken) return;
+            const base = chatTypeSnap === "dm" ? `chats/${roomIdSnap}/messages` : `space_msgs/${roomIdSnap}`;
+            db.ref(base).update(pendingSeenUpdates).catch(() => {});
+        }, 160);
+    }
+}
+
+// ==================== مربع الكتابة المتمدد ====================
+function handleMsgInputResize(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 125) + "px";
+}
+
+function handleMsgKeydown(e) {
+    // على الكمبيوتر: Enter يرسل و Shift+Enter ينزل سطر، وعلى الموبايل: Enter ينزل سطر مريح للكتابة الطويلة
+    if (e.key === "Enter" && !e.shiftKey && !e.repeat && window.innerWidth >= 860) {
+        e.preventDefault();
+        sendTextMessage();
+    }
 }
 
 function handleTyping() {
@@ -1003,6 +1111,7 @@ async function sendTextMessage() {
     const txt = inp.value.trim();
     if (!txt) return;
     inp.value = "";
+    inp.style.height = "41px";
 
     if (editingMsgId && activeRoomId) {
         const targetId = editingMsgId;
@@ -1058,9 +1167,11 @@ function startEditSelected() {
     document.getElementById("replyPreviewSender").innerText = "✏️ تعديل الرسالة";
     document.getElementById("replyPreviewText").innerText = selectedMsg.data.content;
     document.getElementById("replyPreviewBar").style.display = "flex";
-    document.getElementById("msgInput").value = selectedMsg.data.content;
+    const inp = document.getElementById("msgInput");
+    inp.value = selectedMsg.data.content;
+    handleMsgInputResize(inp);
     closeMsgActions();
-    document.getElementById("msgInput").focus();
+    inp.focus();
 }
 
 function cancelReplyOrEdit() {
@@ -1116,29 +1227,66 @@ async function clearChatForMe() {
     showToast("تم التنظيف من عندك فقط");
 }
 
-// ==================== 6. المكالمات السريعة (WebRTC فائق السرعة) ====================
+// ==================== 6. محرّك المكالمات الاحترافي (TURN + STUN + إعادة ربط تلقائي) ====================
 const RTC_CONFIG = {
-    iceCandidatePoolSize: 10,
+    iceCandidatePoolSize: 8,
     bundlePolicy: "max-bundle",
     rtcpMuxPolicy: "require",
+    iceTransportPolicy: "all",
     iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
         { urls: "stun:stun.cloudflare.com:3478" },
-        { urls: "stun:global.stun.twilio.com:3478" }
+        { urls: "stun:stun.relay.metered.ca:80" },
+        {
+            urls: [
+                "turn:global.relay.metered.ca:80",
+                "turn:global.relay.metered.ca:80?transport=tcp",
+                "turn:global.relay.metered.ca:443",
+                "turns:global.relay.metered.ca:443?transport=tcp"
+            ],
+            username: "e8dd65b92f6c289b0362834b",
+            credential: "pW8M56S4dI7619s4"
+        },
+        {
+            urls: [
+                "turn:openrelay.metered.ca:80",
+                "turn:openrelay.metered.ca:443",
+                "turn:openrelay.metered.ca:443?transport=tcp"
+            ],
+            username: "openrelayproject",
+            credential: "openrelayproject"
+        }
     ]
 };
 
-let pc = null, localStream = null, remoteStream = null, activeCallPath = null;
-let callListeners = [], pendingIncoming = null, pendingIce = [];
+let pc = null, localStream = null, remoteStream = null, activeCallPath = null, activeCallId = null;
+let callListeners = [], pendingIncoming = null, pendingRemoteIce = [], localIceQueue = [];
+let callNodeReady = false, isCaller = false, callConnectWatchdog = null;
 let callTimer = null, callSec = 0, micMuted = false, camOff = false, facingMode = "user";
 
-function clearCallListeners() { callListeners.forEach(r => r.off()); callListeners = []; }
+function setCallNetState(txt) {
+    const el = document.getElementById("callNetState");
+    if (el) el.innerText = txt || "";
+}
+
+function clearCallListeners() {
+    callListeners.forEach(r => r.off());
+    callListeners = [];
+    clearTimeout(callConnectWatchdog);
+    callConnectWatchdog = null;
+}
+
 function startCallTimer() {
-    clearInterval(callTimer); callSec = 0;
+    if (callTimer) return;
+    stopRingtone();
+    clearTimeout(callConnectWatchdog);
+    document.getElementById("reconnectCallBtn").style.display = "none";
+    setCallNetState("اتصال مشفّر ومستقر 🟢");
+    callSec = 0;
     callTimer = setInterval(() => {
         callSec++;
-        document.getElementById("callStatus").innerText = `متصل الآن 🟢 ${String(Math.floor(callSec / 60)).padStart(2, "0")}:${String(callSec % 60).padStart(2, "0")}`;
+        document.getElementById("callStatus").innerText = `متصل الآن ${String(Math.floor(callSec / 60)).padStart(2, "0")}:${String(callSec % 60).padStart(2, "0")}`;
     }, 1000);
 }
 
@@ -1180,10 +1328,14 @@ function bindRemoteTrackHandler(peerConn) {
     ra.srcObject = remoteStream;
 
     peerConn.ontrack = ev => {
-        const track = ev.track;
-        if (!track) return;
-        remoteStream.addTrack(track);
-        if (track.kind === "video") {
+        if (ev.streams && ev.streams[0]) {
+            ev.streams[0].getTracks().forEach(tr => {
+                if (!remoteStream.getTracks().some(t => t.id === tr.id)) remoteStream.addTrack(tr);
+            });
+        } else if (ev.track && !remoteStream.getTracks().some(t => t.id === ev.track.id)) {
+            remoteStream.addTrack(ev.track);
+        }
+        if (ev.track && ev.track.kind === "video") {
             rv.style.display = "block";
             document.getElementById("callAvatarFallback").style.display = "none";
             rv.play().catch(() => {});
@@ -1201,15 +1353,53 @@ function setupCallBackdrop(partnerObj, label) {
     document.getElementById("callTypeLabel").innerText = label;
 }
 
+function attachCallStateWatchers(peerConn) {
+    const onStateChange = () => {
+        if (!pc || pc !== peerConn) return;
+        const st = pc.connectionState;
+        const ice = pc.iceConnectionState;
+
+        if (st === "connected" || ice === "connected" || ice === "completed") {
+            startCallTimer();
+        } else if (ice === "checking" || st === "connecting") {
+            setCallNetState("جاري فتح المسار الشبكي (TURN/STUN)...");
+        } else if (ice === "disconnected" || st === "disconnected") {
+            setCallNetState("ضعف مؤقت بالشبكة — جاري إعادة الربط...");
+            document.getElementById("reconnectCallBtn").style.display = "flex";
+        } else if (ice === "failed" || st === "failed") {
+            setCallNetState("تعثر المسار — اضغط 📡 لإعادة الربط");
+            document.getElementById("reconnectCallBtn").style.display = "flex";
+            if (isCaller) restartCallIce();
+        }
+    };
+    peerConn.onconnectionstatechange = onStateChange;
+    peerConn.oniceconnectionstatechange = onStateChange;
+}
+
+async function flushPendingRemoteIce() {
+    while (pendingRemoteIce.length > 0 && pc && pc.currentRemoteDescription) {
+        const c = pendingRemoteIce.shift();
+        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+    }
+}
+
+function flushLocalIceQueue(subPath) {
+    if (!callNodeReady || !activeCallPath) return;
+    while (localIceQueue.length > 0) {
+        const c = localIceQueue.shift();
+        db.ref(`${activeCallPath}/${subPath}`).push(c).catch(() => {});
+    }
+}
+
 function listenForIncomingCalls() {
     db.ref("calls/" + me.username).on("value", snap => {
         const data = snap.val();
         if (!data) {
-            if (activeCallPath === "calls/" + me.username && pc) endCall(false);
+            if (activeCallPath === "calls/" + me.username && (pc || pendingIncoming)) endCall(false);
             return;
         }
         if (myBlocked[data.from]) { db.ref("calls/" + me.username + "/status").set("rejected"); return; }
-        if (data.ts && Date.now() - data.ts > 45000 && data.status === "ringing") { db.ref("calls/" + me.username).remove(); return; }
+        if (data.ts && Date.now() - data.ts > 50000 && data.status === "ringing") { db.ref("calls/" + me.username).remove(); return; }
         if (data.status === "ended" || data.status === "rejected") {
             if (activeCallPath === "calls/" + me.username || pendingIncoming) { showToast("انتهت المكالمة"); endCall(false); }
             return;
@@ -1217,24 +1407,21 @@ function listenForIncomingCalls() {
         if (data.status === "ringing" && data.offer && !pc && !pendingIncoming) {
             pendingIncoming = data;
             activeCallPath = "calls/" + me.username;
+            activeCallId = data.callId || "";
+            isCaller = false;
             const caller = contactProfiles[data.from] || { name: data.fromName || data.from };
             document.getElementById("callName").innerHTML = `${escapeHTML(caller.name)} ${getVerifiedBadgeHTML(caller.verified)}`;
             document.getElementById("callStatus").innerText = data.video ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...";
+            setCallNetState("اضغط للرد");
             setupCallBackdrop(caller, data.video ? "مكالمة فيديو واردة" : "مكالمة صوتية واردة");
             document.getElementById("acceptCallBtn").style.display = "flex";
             document.getElementById("flipCamBtn").style.display = "none";
             document.getElementById("camBtn").style.display = "none";
+            document.getElementById("reconnectCallBtn").style.display = "none";
             document.getElementById("callOverlay").style.display = "flex";
             startRingtone(true);
         }
     });
-}
-
-async function flushPendingIce() {
-    while (pendingIce.length > 0 && pc && pc.currentRemoteDescription) {
-        const c = pendingIce.shift();
-        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
-    }
 }
 
 async function startCall(withVideo) {
@@ -1243,12 +1430,14 @@ async function startCall(withVideo) {
     if (pc) return;
 
     facingMode = "user";
-    pendingIce = [];
-    // إنشاء الاتصال وتجهيز المرشحات بالتوازي مع طلب المايك/الكاميرا لتسريع الربط
-    pc = new RTCPeerConnection(RTC_CONFIG);
+    pendingRemoteIce = [];
+    localIceQueue = [];
+    callNodeReady = false;
+    isCaller = true;
+    activeCallId = "c_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
 
     try { localStream = await acquireMedia(withVideo); }
-    catch { pc.close(); pc = null; showToast("اسمح بالوصول للمايكروفون/الكاميرا"); return; }
+    catch { showToast("يرجى السماح بالوصول إلى المايكروفون/الكاميرا"); return; }
 
     const hasVid = localStream.getVideoTracks().length > 0;
     const partner = contactProfiles[activePartner] || { name: activePartner };
@@ -1256,53 +1445,73 @@ async function startCall(withVideo) {
 
     document.getElementById("callName").innerHTML = `${escapeHTML(partner.name)} ${getVerifiedBadgeHTML(partner.verified)}`;
     document.getElementById("callStatus").innerText = "جاري الرنين...";
+    setCallNetState("جاري تجهيز الاتصال المشفر...");
     document.getElementById("acceptCallBtn").style.display = "none";
+    document.getElementById("reconnectCallBtn").style.display = "none";
     setupCallBackdrop(partner, hasVid ? "مكالمة فيديو" : "مكالمة صوتية");
     attachLocalVideo(localStream);
     document.getElementById("callOverlay").style.display = "flex";
     startRingtone(false);
 
-    await db.ref(activeCallPath).remove();
+    pc = new RTCPeerConnection(RTC_CONFIG);
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
     bindRemoteTrackHandler(pc);
+    attachCallStateWatchers(pc);
 
+    // حجز المسارات مؤقتاً حتى ينكتب الطلب بقاعدة البيانات (إصلاح مشكلة المسح التلقائي)
     pc.onicecandidate = ev => {
-        if (ev.candidate && activeCallPath) db.ref(activeCallPath + "/offerCandidates").push(ev.candidate.toJSON());
-    };
-    pc.onconnectionstatechange = () => {
-        if (!pc) return;
-        if (pc.connectionState === "connected") { stopRingtone(); startCallTimer(); }
-        else if (pc.connectionState === "failed") { showToast("فشل الاتصال بسبب الشبكة"); endCall(true); }
-    };
-    pc.oniceconnectionstatechange = () => {
-        if (!pc) return;
-        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") { stopRingtone(); if (!callTimer) startCallTimer(); }
+        if (!ev.candidate || !activeCallPath) return;
+        const json = ev.candidate.toJSON();
+        if (callNodeReady) db.ref(activeCallPath + "/offerCandidates").push(json).catch(() => {});
+        else localIceQueue.push(json);
     };
 
     const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
     await pc.setLocalDescription(offer);
 
+    // إنشاء عقدة المكالمة أولاً ثم دفع كل مسارات الشبكة
     await db.ref(activeCallPath).set({
-        from: me.username, fromName: me.name, video: hasVid, status: "ringing",
-        offer: { type: offer.type, sdp: offer.sdp }, ts: Date.now()
+        callId: activeCallId,
+        from: me.username,
+        fromName: me.name,
+        video: hasVid,
+        status: "ringing",
+        offer: { type: offer.type, sdp: offer.sdp, rev: 1 },
+        ts: Date.now()
     });
+    callNodeReady = true;
+    flushLocalIceQueue("offerCandidates");
 
+    let handledAnswerRev = 0;
     const ansRef = db.ref(activeCallPath + "/answer"); callListeners.push(ansRef);
     ansRef.on("value", async s => {
         const ans = s.val();
-        if (ans && pc && !pc.currentRemoteDescription) {
-            stopRingtone();
-            document.getElementById("callStatus").innerText = "جاري ربط الاتصال...";
-            await pc.setRemoteDescription(new RTCSessionDescription(ans));
-            await flushPendingIce();
-        }
+        if (!ans || !pc) return;
+        const rev = ans.rev || 1;
+        if (rev <= handledAnswerRev) return;
+        handledAnswerRev = rev;
+        stopRingtone();
+        document.getElementById("callStatus").innerText = "جاري ربط الصوت والصورة...";
+        setCallNetState("تم الرد — جاري توصيل المسار...");
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: ans.type, sdp: ans.sdp }));
+            await flushPendingRemoteIce();
+            clearTimeout(callConnectWatchdog);
+            callConnectWatchdog = setTimeout(() => {
+                if (pc && !callTimer) {
+                    document.getElementById("reconnectCallBtn").style.display = "flex";
+                    setCallNetState("الشبكة بطيئة — جاري تجربة مسار بديل...");
+                    restartCallIce();
+                }
+            }, 9000);
+        } catch {}
     });
 
     const acRef = db.ref(activeCallPath + "/answerCandidates"); callListeners.push(acRef);
     acRef.on("child_added", async s => {
         const c = s.val(); if (!c || !pc) return;
         if (pc.currentRemoteDescription) { try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {} }
-        else pendingIce.push(c);
+        else pendingRemoteIce.push(c);
     });
 
     const stRef = db.ref(activeCallPath + "/status"); callListeners.push(stRef);
@@ -1314,44 +1523,87 @@ async function startCall(withVideo) {
 async function answerIncomingCall() {
     if (!pendingIncoming) return;
     stopRingtone();
-    const data = pendingIncoming; pendingIncoming = null; pendingIce = []; facingMode = "user";
+    const data = pendingIncoming;
+    pendingIncoming = null;
+    pendingRemoteIce = [];
+    localIceQueue = [];
+    callNodeReady = true;
+    isCaller = false;
+    facingMode = "user";
 
-    pc = new RTCPeerConnection(RTC_CONFIG);
     try { localStream = await acquireMedia(!!data.video); }
-    catch { pc.close(); pc = null; showToast("تعذر فتح المايكروفون/الكاميرا"); endCall(true); return; }
+    catch { showToast("تعذر فتح المايكروفون/الكاميرا"); endCall(true); return; }
 
     document.getElementById("acceptCallBtn").style.display = "none";
     document.getElementById("callStatus").innerText = "جاري الربط...";
+    setCallNetState("جاري فتح المسار الشبكي...");
     attachLocalVideo(localStream);
 
+    pc = new RTCPeerConnection(RTC_CONFIG);
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
     bindRemoteTrackHandler(pc);
+    attachCallStateWatchers(pc);
 
     pc.onicecandidate = ev => {
-        if (ev.candidate && activeCallPath) db.ref(activeCallPath + "/answerCandidates").push(ev.candidate.toJSON());
-    };
-    pc.onconnectionstatechange = () => {
-        if (!pc) return;
-        if (pc.connectionState === "connected") startCallTimer();
-        else if (pc.connectionState === "failed") { showToast("انقطع الاتصال"); endCall(true); }
-    };
-    pc.oniceconnectionstatechange = () => {
-        if (!pc) return;
-        if ((pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") && !callTimer) startCallTimer();
+        if (ev.candidate && activeCallPath) {
+            db.ref(activeCallPath + "/answerCandidates").push(ev.candidate.toJSON()).catch(() => {});
+        }
     };
 
     const ocRef = db.ref(activeCallPath + "/offerCandidates"); callListeners.push(ocRef);
     ocRef.on("child_added", async s => {
         const c = s.val(); if (!c || !pc) return;
         if (pc.currentRemoteDescription) { try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {} }
-        else pendingIce.push(c);
+        else pendingRemoteIce.push(c);
     });
 
-    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-    await flushPendingIce();
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: data.offer.type, sdp: data.offer.sdp }));
+    await flushPendingRemoteIce();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await db.ref(activeCallPath).update({ status: "connected", answer: { type: answer.type, sdp: answer.sdp } });
+    await db.ref(activeCallPath).update({
+        status: "connected",
+        answer: { type: answer.type, sdp: answer.sdp, rev: data.offer.rev || 1 }
+    });
+
+    // الاستماع لأي إعادة تفاوض (ICE Restart) من المتصل في حال ضعف الشبكة
+    let handledOfferRev = data.offer.rev || 1;
+    const offRef = db.ref(activeCallPath + "/offer"); callListeners.push(offRef);
+    offRef.on("value", async s => {
+        const newOff = s.val();
+        if (!newOff || !pc) return;
+        const rev = newOff.rev || 1;
+        if (rev <= handledOfferRev) return;
+        handledOfferRev = rev;
+        setCallNetState("جاري إعادة ربط الشبكة...");
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: newOff.type, sdp: newOff.sdp }));
+            await flushPendingRemoteIce();
+            const newAns = await pc.createAnswer();
+            await pc.setLocalDescription(newAns);
+            await db.ref(activeCallPath).update({
+                answer: { type: newAns.type, sdp: newAns.sdp, rev }
+            });
+        } catch {}
+    });
+}
+
+async function restartCallIce() {
+    if (!pc || !activeCallPath) return;
+    if (!isCaller) {
+        showToast("جاري انتظار إعادة الربط من المتصل...");
+        return;
+    }
+    try {
+        setCallNetState("جاري إعادة الربط عبر مسار بديل...");
+        const newOffer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(newOffer);
+        await db.ref(activeCallPath + "/offer").set({
+            type: newOffer.type,
+            sdp: newOffer.sdp,
+            rev: Date.now()
+        });
+    } catch {}
 }
 
 function toggleMicMute() {
@@ -1388,7 +1640,8 @@ async function flipCamera() {
 async function endCall(notify = true) {
     stopRingtone(); clearInterval(callTimer); callTimer = null; clearCallListeners();
     const path = activeCallPath; const wasRing = !!pendingIncoming;
-    activeCallPath = null; pendingIncoming = null; pendingIce = [];
+    activeCallPath = null; activeCallId = null; pendingIncoming = null;
+    pendingRemoteIce = []; localIceQueue = []; callNodeReady = false;
     if (notify && path) {
         try { await db.ref(path + "/status").set(wasRing ? "rejected" : "ended"); setTimeout(() => db.ref(path).remove(), 1200); } catch {}
     }
@@ -1397,13 +1650,62 @@ async function endCall(notify = true) {
     remoteStream = null; micMuted = false; camOff = false;
     document.getElementById("muteBtn").classList.remove("muted");
     document.getElementById("camBtn").classList.remove("muted");
+    document.getElementById("reconnectCallBtn").style.display = "none";
     document.getElementById("remoteVideo").srcObject = null;
     document.getElementById("localVideo").srcObject = null;
     document.getElementById("remoteAudio").srcObject = null;
+    setCallNetState("");
     document.getElementById("callOverlay").style.display = "none";
 }
 
-// ==================== 7. لوحة تحكم المطور (9988) ====================
+// ==================== 7. مولّد أيقونات PNG الأصلية (حل التثبيت بكروم) ====================
+function downloadOfficialPngIcon(size) {
+    const c = document.createElement("canvas");
+    c.width = size; c.height = size;
+    const ctx = c.getContext("2d");
+
+    // خلفية متدرجة أصلية كاملة الإطار بدون حواف
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, "#0ea5e9");
+    grad.addColorStop(0.55, "#3b82f6");
+    grad.addColorStop(1, "#4f46e5");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // رمز المفكرة الزجاجي بالمنتصف
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.beginPath();
+    ctx.arc(size * 0.22, size * 0.2, size * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    const w = size * 0.44, h = size * 0.56;
+    const x = (size - w) / 2, y = (size - h) / 2;
+    const r = size * 0.06;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x + w / 2, y + h - size * 0.12);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+
+    c.toBlob(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `icon-${size}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        showToast(`تم تنزيل icon-${size}.png الأصلي ✅`);
+    }, "image/png");
+}
+
+// ==================== 8. لوحة تحكم المطور (9988) ====================
 function openAdminDashboard() {
     document.getElementById("adminScreen").style.display = "block";
     updateAdminButtons();
@@ -1419,8 +1721,8 @@ function openAdminDashboard() {
             const r = document.createElement("div"); r.className = "adm-row";
             r.innerHTML = `
                 <div>
-                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center;">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(v)} ${getDevBadgeHTML(u)} <span style="color:var(--accent); font-size:12px; margin-right:6px;">(${escapeHTML(getDisplayTag(u))})</span></div>
-                    <div style="font-size:11.5px; color:${u.banned ? '#f87171' : (u.online ? '#10b981' : '#94a3b8')};">${u.banned ? '🚫 محظور' : (u.online ? '● متصل' : 'غير متصل')}</div>
+                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(v)} ${getDevBadgeHTML(u)} <span class="handle-ltr" dir="ltr" style="font-size:12px;">(${escapeHTML(getDisplayTag(u))})</span></div>
+                    <div style="font-size:11.5px; color:${u.banned ? '#fb7185' : (u.online ? '#10b981' : '#94a3b8')};">${u.banned ? '🚫 محظور' : (u.online ? '● متصل' : 'غير متصل')}</div>
                 </div>
                 <div style="display:flex; gap:5px; flex-wrap:wrap;">
                     <button class="btn btn-sm ${v==='blue'?'':'btn-outline'}" onclick="adminSetVerified('${u.username}','${v==='blue'?'':'blue'}')">✓ أزرق</button>
@@ -1433,7 +1735,6 @@ function openAdminDashboard() {
         });
     });
 
-    // إدارة وتوثيق القنوات والمجموعات بأمرك فقط
     db.ref("spaces").on("value", snap => {
         const arr = Object.values(snap.val() || {});
         document.getElementById("admStatSpaces").innerText = arr.length;
@@ -1445,8 +1746,8 @@ function openAdminDashboard() {
             const r = document.createElement("div"); r.className = "adm-row";
             r.innerHTML = `
                 <div>
-                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center;">${escapeHTML(s.name)} ${getVerifiedBadgeHTML(v)} <span style="color:var(--accent); font-size:12px; margin-right:6px;">(@${escapeHTML(s.handle)})</span></div>
-                    <div style="font-size:11.5px; color:var(--text-dim);">${s.type === 'channel' ? '📢 قناة' : '👥 مجموعة'} • المالك: @${escapeHTML(s.owner)}</div>
+                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px;">${escapeHTML(s.name)} ${getVerifiedBadgeHTML(v)} <span class="handle-ltr" dir="ltr" style="font-size:12px;">(@${escapeHTML(s.handle)})</span></div>
+                    <div style="font-size:11.5px; color:var(--text-dim);">${s.type === 'channel' ? '📢 قناة' : '👥 مجموعة'} • المالك: <span class="handle-ltr" dir="ltr" style="font-size:11.5px;">@${escapeHTML(s.owner)}</span></div>
                 </div>
                 <div style="display:flex; gap:5px; flex-wrap:wrap;">
                     <button class="btn btn-sm ${v==='blue'?'':'btn-outline'}" onclick="adminSetSpaceVerified('${s.id}','${v==='blue'?'':'blue'}')">✓ أزرق</button>
@@ -1457,7 +1758,6 @@ function openAdminDashboard() {
         });
     });
 
-    // طلبات التوثيق (حسابات + قنوات)
     db.ref("verify_requests").on("value", s => {
         const entries = Object.entries(s.val() || {});
         const box = document.getElementById("admVerifyReqs");
@@ -1465,7 +1765,7 @@ function openAdminDashboard() {
         box.innerHTML = entries.map(([reqKey, q]) => `
             <div class="adm-row">
                 <div>
-                    <strong>${q.targetType === 'space' ? '📢 ' : '👤 '}${escapeHTML(q.name)}</strong> <span style="color:var(--accent);">(@${escapeHTML(q.displayTag || q.username)})</span>
+                    <strong>${q.targetType === 'space' ? '📢 ' : '👤 '}${escapeHTML(q.name)}</strong> <span class="handle-ltr" dir="ltr" style="font-size:12px;">(@${escapeHTML(q.displayTag || q.username)})</span>
                     <div style="font-size:12px; color:var(--text-dim);">الطلب: ${q.requestedType==='gold'?'ذهبي VIP ★':'أزرق ✓'} — ${escapeHTML(q.reason)}</div>
                 </div>
                 <div style="display:flex; gap:6px;">
@@ -1481,7 +1781,7 @@ function openAdminDashboard() {
         if (!reps.length) { box.innerHTML = `<span style="color:var(--text-dim); font-size:12.5px;">لا توجد بلاغات</span>`; return; }
         box.innerHTML = reps.reverse().map(([id, r]) => `
             <div class="adm-row">
-                <div style="font-size:12.5px;">بلاغ من <b>@${escapeHTML(r.reporter)}</b> ضد <b style="color:#f87171;">@${escapeHTML(r.target)}</b>: ${escapeHTML(r.reason)}</div>
+                <div style="font-size:12.5px;">بلاغ من <b>@${escapeHTML(r.reporter)}</b> ضد <b style="color:#fb7185;">@${escapeHTML(r.target)}</b>: ${escapeHTML(r.reason)}</div>
                 <div style="display:flex; gap:5px;">
                     <button class="btn btn-danger btn-sm" onclick="adminToggleBan('${r.target}', true)">حظر</button>
                     <button class="btn btn-outline btn-sm" onclick="db.ref('reports/${id}').remove()">إزالة</button>
