@@ -1,4 +1,4 @@
-// ==================== نظام المميزات المستقل + حزم الملصقات التفاعلية (V7 Premium) ====================
+// ==================== نظام المميزات المستقل (V7.1 Turbo — صفر ثقل، 60fps) ====================
 (function () {
     if (window.__PREMIUM_V7_LOADED__) return;
     window.__PREMIUM_V7_LOADED__ = true;
@@ -57,12 +57,91 @@
 
     let selectedMsgEffect = "";
     let sharedWpRef = null;
-    let allStickerPacks = {};      // tg_packs/{packId}
-    let mySavedPacks = {};         // user_sticker_packs/{me.username}/{packId}
-    let uploadTargetPackId = null; // الحزمة المختارة لرفع ملصقات جديدة بداخلها
+    let allStickerPacks = {};       // كاش محلي للحزم المحمّلة عند الطلب فقط
+    let loadingPacksSet = new Set();
+    let mySavedPacks = {};          // user_sticker_packs/{me.username}
+    let activeSelectedPackId = "";  // الحزمة المفتوحة حالياً فقط باللوحة
+    let activePackVisibleCount = 12;
+    let uploadTargetPackId = null;
     const playedFxIds = new Set();
 
-    // ==================== 1. حقن ستايلات المميزات الخفيفة (60fps GPU) ====================
+    // ==================== محرّك الذاكرة الخفيف (Blob Cache + Video Decoder Cap) ====================
+    const blobUrlCache = new Map();
+    function toBlobUrl(src) {
+        if (!src || typeof src !== "string" || !src.startsWith("data:")) return src || "";
+        const key = src.length + "_" + src.slice(0, 44) + "_" + src.slice(-28);
+        if (blobUrlCache.has(key)) return blobUrlCache.get(key);
+        try {
+            const comma = src.indexOf(",");
+            if (comma < 0) return src;
+            const mime = src.slice(5, comma).split(";")[0] || "application/octet-stream";
+            const bin = atob(src.slice(comma + 1));
+            const len = bin.length;
+            const arr = new Uint8Array(len);
+            for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+            const url = URL.createObjectURL(new Blob([arr], { type: mime }));
+            blobUrlCache.set(key, url);
+            return url;
+        } catch {
+            return src;
+        }
+    }
+
+    // تحديد أقصى عدد فيديوهات ملصقات تعمل بنفس اللحظة بـ 4 فقط لحماية معالج الموبايل
+    const MAX_CONCURRENT_VIDEOS = 4;
+    const activePlayingVids = [];
+
+    function pauseManagedVideo(v) {
+        if (!v) return;
+        try { v.pause(); } catch {}
+        const idx = activePlayingVids.indexOf(v);
+        if (idx !== -1) activePlayingVids.splice(idx, 1);
+    }
+
+    function requestManagedVideoPlay(v) {
+        if (!v || !document.body.contains(v)) return;
+        const src = v.getAttribute("data-vsrc");
+        if (src && !v.getAttribute("src")) v.setAttribute("src", src);
+        if (activePlayingVids.includes(v)) {
+            if (v.paused) v.play().catch(() => {});
+            return;
+        }
+        while (activePlayingVids.length >= MAX_CONCURRENT_VIDEOS) {
+            const oldest = activePlayingVids.shift();
+            if (oldest && oldest !== v) { try { oldest.pause(); } catch {} }
+        }
+        activePlayingVids.push(v);
+        v.play().catch(() => {});
+    }
+
+    const vidObserver = ("IntersectionObserver" in window)
+        ? new IntersectionObserver(entries => {
+            entries.forEach(ent => {
+                const v = ent.target;
+                if (ent.isIntersecting) requestManagedVideoPlay(v);
+                else pauseManagedVideo(v);
+            });
+        }, { threshold: 0.15 })
+        : null;
+
+    function attachLazyVideos(container) {
+        if (!container) return;
+        container.querySelectorAll("video.tg-lazy-vid").forEach(v => {
+            if (vidObserver) vidObserver.observe(v);
+            else requestManagedVideoPlay(v);
+        });
+    }
+
+    function stopAndReleaseVideos(container) {
+        if (!container) return;
+        container.querySelectorAll("video.tg-lazy-vid").forEach(v => {
+            if (vidObserver) vidObserver.unobserve(v);
+            pauseManagedVideo(v);
+            try { v.removeAttribute("src"); v.load(); } catch {}
+        });
+    }
+
+    // ==================== 1. حقن ستايلات المميزات الخفيفة ====================
     function injectPremiumStyles() {
         if (document.getElementById("premStylesV7")) return;
         const s = document.createElement("style");
@@ -78,7 +157,7 @@
             @keyframes premWiggle{ 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
             @keyframes premSpin  { 0%,100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.16) rotate(12deg); } }
 
-            .anim-em { display: inline-block; font-size: 1.32em; vertical-align: -2px; margin: 0 1px; will-change: transform; }
+            .anim-em { display: inline-block; font-size: 1.32em; vertical-align: -2px; margin: 0 1px; }
             .anim-em.beat   { animation: premBeat 1.4s ease-in-out infinite; }
             .anim-em.bounce { animation: premBounce 1.2s ease-in-out infinite; }
             .anim-em.wiggle { animation: premWiggle 1.3s ease-in-out infinite; }
@@ -123,18 +202,18 @@
             }
 
             .prem-big-sticker {
-                width: 148px; height: 148px; border-radius: 26px;
+                width: 146px; height: 146px; border-radius: 26px;
                 display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-                cursor: pointer; box-shadow: 0 10px 26px rgba(0,0,0,0.38); position: relative;
+                cursor: pointer; box-shadow: 0 8px 22px rgba(0,0,0,0.34); position: relative;
                 border: 1px solid rgba(255,255,255,0.22);
             }
-            .prem-big-sticker .pbs-em { font-size: 62px; animation: premBeat 1.8s ease-in-out infinite; }
+            .prem-big-sticker .pbs-em { font-size: 60px; animation: premBeat 1.8s ease-in-out infinite; }
             .prem-big-sticker .pbs-cap { font-size: 12px; font-weight: 800; color: #fff; }
             .prem-big-sticker .pbs-spark { position: absolute; top: 8px; left: 8px; font-size: 14px; }
 
             .tg-st-wrap { position: relative; display: inline-block; cursor: pointer; }
             .tg-st-media {
-                width: 152px; height: 152px; object-fit: contain; border-radius: 14px;
+                width: 148px; height: 148px; object-fit: contain; border-radius: 14px;
                 display: block; background: transparent;
             }
             .tg-st-hint {
@@ -142,11 +221,27 @@
                 background: rgba(8, 13, 26, 0.78); border: 1px solid rgba(255,255,255,0.22);
                 color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
             }
-            .tg-tile video { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; pointer-events: none; }
+            .tg-tile { contain: content; }
+            .tg-tile video { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; pointer-events: none; background: rgba(0,0,0,0.2); }
+            .tg-vid-dot {
+                position: absolute; bottom: 4px; right: 4px;
+                background: rgba(0,0,0,0.68); color: #fff; font-size: 9px; font-weight: 800;
+                padding: 1px 5px; border-radius: 6px; pointer-events: none;
+            }
+
+            .pack-tabs-bar {
+                display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 4px;
+            }
+            .pack-tab-pill {
+                background: var(--bg-card); border: 1px solid var(--border); color: var(--text-dim);
+                padding: 5px 11px; border-radius: 99px; font-size: 12px; font-weight: 700;
+                cursor: pointer; white-space: nowrap; flex-shrink: 0;
+            }
+            .pack-tab-pill.active { background: var(--primary-grad); border-color: transparent; color: #fff; }
 
             .pack-head-row {
                 display: flex; justify-content: space-between; align-items: center; gap: 8px;
-                margin: 10px 0 6px; padding: 6px 10px; background: var(--glass-inner);
+                margin: 4px 0 8px; padding: 6px 10px; background: var(--glass-inner);
                 border: 1px solid var(--border); border-radius: 12px;
             }
             .pack-head-title { font-size: 12.5px; font-weight: 800; color: var(--text); }
@@ -291,12 +386,11 @@
             document.body.appendChild(m);
         }
 
-        // نافذة معاينة وإضافة حزمة الملصقات عند الضغط على أي ملصق بالمحادثة (نفس تليگرام)
         if (!document.getElementById("stickerPackPreviewModal")) {
             const m = document.createElement("div");
             m.id = "stickerPackPreviewModal";
             m.className = "modal-bg sheet-bg story-top-modal";
-            m.onclick = e => { if (e.target === m) m.style.display = "none"; };
+            m.onclick = e => { if (e.target === m) window.closeStickerPackPreview(); };
             m.innerHTML = `
                 <div class="bottom-sheet" style="max-height:80dvh; display:flex; flex-direction:column;">
                     <div style="text-align:center; margin-bottom:10px;">
@@ -309,7 +403,6 @@
             document.body.appendChild(m);
         }
 
-        // مدخل رفع ملصق واحد أو عدة ملصقات دفعة واحدة للحزمة
         if (!document.getElementById("tgStickerUploadInput")) {
             const inp = document.createElement("input");
             inp.type = "file";
@@ -329,7 +422,7 @@
         if (!fx || !stage) return;
 
         const fromTop = fxKey === "snow" || fxKey === "confetti";
-        const count = 20;
+        const count = 18;
         const frag = document.createDocumentFragment();
         const nodes = [];
 
@@ -342,12 +435,12 @@
             const dx = (Math.random() - 0.5) * 140;
             const dy = fromTop ? (window.innerHeight * 0.92) : -(window.innerHeight * (0.55 + Math.random() * 0.35));
             const rot = (Math.random() - 0.5) * 90;
-            const dur = 1.6 + Math.random() * 1.0;
+            const dur = 1.6 + Math.random() * 0.9;
 
             p.style.left = startX + "vw";
             p.style.top = startY + "vh";
-            p.style.fontSize = (22 + Math.random() * 16) + "px";
-            p.style.animationDelay = (Math.random() * 0.35) + "s";
+            p.style.fontSize = (22 + Math.random() * 15) + "px";
+            p.style.animationDelay = (Math.random() * 0.32) + "s";
             p.style.setProperty("--dx", dx.toFixed(0) + "px");
             p.style.setProperty("--dy", dy.toFixed(0) + "px");
             p.style.setProperty("--rot", rot.toFixed(0) + "deg");
@@ -356,7 +449,7 @@
             nodes.push(p);
         }
         stage.appendChild(frag);
-        setTimeout(() => nodes.forEach(n => n.remove()), 3100);
+        setTimeout(() => nodes.forEach(n => n.remove()), 2900);
     };
 
     window.toggleEffectPicker = function (force) {
@@ -445,7 +538,8 @@
         if (!area) return;
         if (!wpVal) { applyWallpaper(localStorage.getItem("app_wp") || "pattern", true); return; }
         if (wpVal.startsWith("data:image")) {
-            area.style.backgroundImage = `linear-gradient(rgba(4,8,18,0.52), rgba(4,8,18,0.56)), url(${wpVal})`;
+            const url = toBlobUrl(wpVal);
+            area.style.backgroundImage = `linear-gradient(rgba(4,8,18,0.52), rgba(4,8,18,0.56)), url(${url})`;
             area.style.backgroundSize = "cover";
             area.style.backgroundPosition = "center";
         } else {
@@ -484,22 +578,67 @@
         if (btn) btn.style.display = "none";
     }
 
-    // ==================== 6. نظام حزم الملصقات الشخصية + إضافة الحزمة بالضغط على الملصق ====================
+    // ==================== 6. نظام حزم الملصقات الخفيف (تحميل عند الطلب فقط) ====================
+    async function fetchPackOnce(packId, force = false) {
+        if (!packId) return null;
+        if (!force && allStickerPacks[packId]) return allStickerPacks[packId];
+        if (loadingPacksSet.has(packId)) return allStickerPacks[packId] || null;
+        loadingPacksSet.add(packId);
+        try {
+            const snap = await db.ref(`tg_packs/${packId}`).once("value");
+            if (snap.exists()) {
+                allStickerPacks[packId] = snap.val();
+            } else {
+                delete allStickerPacks[packId];
+            }
+            return allStickerPacks[packId] || null;
+        } catch {
+            return null;
+        } finally {
+            loadingPacksSet.delete(packId);
+        }
+    }
+
+    async function ensureMyPacksLoaded() {
+        const ids = Object.keys(mySavedPacks || {}).filter(pid => mySavedPacks[pid]);
+        const missing = ids.filter(pid => !allStickerPacks[pid]);
+        if (missing.length > 0) {
+            await Promise.all(missing.map(pid => fetchPackOnce(pid)));
+        }
+        const validIds = ids.filter(pid => allStickerPacks[pid]);
+        if (!activeSelectedPackId || !validIds.includes(activeSelectedPackId)) {
+            activeSelectedPackId = validIds[0] || "";
+            activePackVisibleCount = 12;
+        }
+        return validIds;
+    }
+
+    window.selectStickerPackTab = function (pid) {
+        activeSelectedPackId = pid;
+        activePackVisibleCount = 12;
+        const body = document.getElementById("drawerBody");
+        if (body) renderPremiumDrawerTab(body);
+    };
+
+    window.showMorePackStickers = function () {
+        activePackVisibleCount += 12;
+        const body = document.getElementById("drawerBody");
+        if (body) renderPremiumDrawerTab(body);
+    };
+
     window.createNewStickerPack = async function () {
         if (!me) return;
         const name = prompt("اكتب اسم حزمة الملصقات الجديدة (مثال: ملصقاتي، ضحك، حب):", "ملصقات " + me.name);
         if (!name || !name.trim()) return;
         const packId = "pk_" + me.username + "_" + Date.now();
-        await db.ref(`tg_packs/${packId}`).set({
-            id: packId,
-            name: name.trim(),
-            owner: me.username,
-            ownerName: me.name,
-            ts: Date.now(),
-            stickers: {}
-        });
-        // تنضاف لحزمك أنت فقط، مو للجميع!
+        const packObj = {
+            id: packId, name: name.trim(), owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {}
+        };
+        await db.ref(`tg_packs/${packId}`).set(packObj);
         await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
+        allStickerPacks[packId] = packObj;
+        activeSelectedPackId = packId;
+        activePackVisibleCount = 12;
         uploadTargetPackId = packId;
         showToast(`تم إنشاء حزمة «${name.trim()}» — اختر ملصقات لإضافتها ✨`);
         document.getElementById("tgStickerUploadInput").click();
@@ -515,7 +654,6 @@
         e.target.value = "";
         if (!files.length || !me) return;
 
-        // إذا ما محددة حزمة، نستخدم أول حزمة يملكها المستخدم أو ننشئ وحدة إله تلقائياً
         let packId = uploadTargetPackId;
         if (!packId || !allStickerPacks[packId]) {
             const owned = Object.values(allStickerPacks).find(p => p && p.owner === me.username);
@@ -523,20 +661,17 @@
                 packId = owned.id;
             } else {
                 packId = "pk_" + me.username + "_" + Date.now();
-                await db.ref(`tg_packs/${packId}`).set({
-                    id: packId, name: "حزمة " + me.name, owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {}
-                });
+                const obj = { id: packId, name: "حزمة " + me.name, owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {} };
+                await db.ref(`tg_packs/${packId}`).set(obj);
                 await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
+                allStickerPacks[packId] = obj;
             }
         }
 
         let uploaded = 0;
         showToast(`جاري رفع ${files.length} ملصق لحزمتك...`);
         for (const f of files.slice(0, 12)) {
-            if (f.size > 1.85 * 1024 * 1024) {
-                showToast(`تم تخطي ملف أكبر من 1.8 ميجابايت`);
-                continue;
-            }
+            if (f.size > 1.85 * 1024 * 1024) { showToast("تم تخطي ملف أكبر من 1.8 ميجابايت"); continue; }
             const isVideo = f.type.startsWith("video/");
             const isAnimatedImg = f.type === "image/gif" || f.type === "image/webp";
             let dataUrl = "";
@@ -548,12 +683,20 @@
                 dataUrl = await compressImageFile(f, 340, 0.78);
             }
             const stId = "st_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-            await db.ref(`tg_packs/${packId}/stickers/${stId}`).set({
-                id: stId, mediaType: isVideo ? "video" : "image", src: dataUrl, ts: Date.now()
-            });
+            const stObj = { id: stId, mediaType: isVideo ? "video" : "image", src: dataUrl, ts: Date.now() };
+            await db.ref(`tg_packs/${packId}/stickers/${stId}`).set(stObj);
+            if (!allStickerPacks[packId].stickers) allStickerPacks[packId].stickers = {};
+            allStickerPacks[packId].stickers[stId] = stObj;
             uploaded++;
         }
-        if (uploaded > 0) showToast(`تمت إضافة ${uploaded} ملصق لحزمتك الخاصة ✅`);
+        if (uploaded > 0) {
+            activeSelectedPackId = packId;
+            showToast(`تمت إضافة ${uploaded} ملصق لحزمتك الخاصة ✅`);
+            const body = document.getElementById("drawerBody");
+            if (body && activeDrawerTab === "premium" && document.getElementById("stickerDrawer").style.display === "flex") {
+                renderPremiumDrawerTab(body);
+            }
+        }
     };
 
     window.sendPremBigSticker = function (psId) {
@@ -579,7 +722,10 @@
     window.deleteStickerFromPack = async function (packId, stId) {
         if (!confirm("حذف هذا الملصق من الحزمة؟")) return;
         await db.ref(`tg_packs/${packId}/stickers/${stId}`).remove();
+        if (allStickerPacks[packId]?.stickers) delete allStickerPacks[packId].stickers[stId];
         showToast("تم حذف الملصق");
+        const body = document.getElementById("drawerBody");
+        if (body && activeDrawerTab === "premium") renderPremiumDrawerTab(body);
     };
 
     window.removePackFromMyList = async function (packId) {
@@ -587,29 +733,48 @@
         if (pack && pack.owner === me.username) {
             if (!confirm(`حذف حزمتك «${pack.name}» بالكامل؟`)) return;
             await db.ref(`tg_packs/${packId}`).remove();
+            delete allStickerPacks[packId];
         }
         await db.ref(`user_sticker_packs/${me.username}/${packId}`).remove();
-        document.getElementById("stickerPackPreviewModal").style.display = "none";
+        if (activeSelectedPackId === packId) activeSelectedPackId = "";
+        window.closeStickerPackPreview();
         showToast("تمت إزالة الحزمة من ملصقاتك");
     };
 
     window.addPackToMyList = async function (packId) {
         if (!me || !packId) return;
         await db.ref(`user_sticker_packs/${me.username}/${packId}`).set(true);
-        document.getElementById("stickerPackPreviewModal").style.display = "none";
+        activeSelectedPackId = packId;
+        window.closeStickerPackPreview();
         const pName = allStickerPacks[packId]?.name || "الحزمة";
         showToast(`تمت إضافة «${pName}» إلى ملصقاتك بنجاح ✅🎭`);
     };
 
-    // الضغط على أي ملصق داخل المحادثة -> يفتح معاينة الحزمة مع زر «إضافة الحزمة لملصقاتي»
+    window.closeStickerPackPreview = function () {
+        const grid = document.getElementById("sppGrid");
+        if (grid) { stopAndReleaseVideos(grid); grid.innerHTML = ""; }
+        const m = document.getElementById("stickerPackPreviewModal");
+        if (m) m.style.display = "none";
+    };
+
     window.openStickerPackPreview = async function (packId, fallbackSrc, fallbackMedia) {
-        let pack = packId ? allStickerPacks[packId] : null;
-        if (packId && !pack) {
-            const snap = await db.ref(`tg_packs/${packId}`).once("value");
-            if (snap.exists()) { pack = snap.val(); allStickerPacks[packId] = pack; }
+        const m = document.getElementById("stickerPackPreviewModal");
+        const grid = document.getElementById("sppGrid");
+        const actRow = document.getElementById("sppActionRow");
+
+        if (packId && !allStickerPacks[packId]) {
+            document.getElementById("sppTitle").innerText = "⏳ جاري فتح الحزمة...";
+            document.getElementById("sppMeta").innerText = "";
+            grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim); font-size:13px;">جاري تحميل الملصقات...</div>`;
+            actRow.innerHTML = `<button class="btn btn-sm btn-outline" style="width:100%;" onclick="window.closeStickerPackPreview()">إغلاق</button>`;
+            m.style.display = "flex";
+            await fetchPackOnce(packId, true);
         }
+
+        const pack = packId ? allStickerPacks[packId] : null;
         if (!pack) {
-            if (fallbackSrc && fallbackMedia !== "video") openLightbox(fallbackSrc);
+            window.closeStickerPackPreview();
+            if (fallbackSrc && fallbackMedia !== "video") openLightbox(toBlobUrl(fallbackSrc));
             else showToast("هذه الحزمة لم تعد متوفرة");
             return;
         }
@@ -621,40 +786,111 @@
         document.getElementById("sppTitle").innerText = `🎭 ${pack.name}`;
         document.getElementById("sppMeta").innerText = `${stickersList.length} ملصق • بواسطة ${pack.ownerName || pack.owner}`;
 
-        const grid = document.getElementById("sppGrid");
+        stopAndReleaseVideos(grid);
         if (stickersList.length === 0) {
             grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim); font-size:13px;">الحزمة فارغة حالياً</div>`;
         } else {
-            grid.innerHTML = stickersList.map(st => {
+            grid.innerHTML = stickersList.slice(0, 24).map(st => {
+                const url = toBlobUrl(st.src);
                 const mediaHTML = st.mediaType === "video"
-                    ? `<video src="${st.src}" autoplay loop muted playsinline></video>`
-                    : `<img src="${st.src}" loading="lazy">`;
-                return `<div class="sticker-tile tg-tile" onclick="if('${hasIt}'==='true'){ window.sendPackSticker('${escapeHTML(pack.id)}','${escapeHTML(st.id)}'); document.getElementById('stickerPackPreviewModal').style.display='none'; }">${mediaHTML}</div>`;
+                    ? `<video class="tg-lazy-vid" data-vsrc="${url}" preload="metadata" loop muted playsinline></video><span class="tg-vid-dot">🎬</span>`
+                    : `<img src="${url}" loading="lazy" decoding="async">`;
+                return `<div class="sticker-tile tg-tile" style="position:relative;" onclick="if('${hasIt}'==='true'){ window.sendPackSticker('${escapeHTML(pack.id)}','${escapeHTML(st.id)}'); window.closeStickerPackPreview(); }">${mediaHTML}</div>`;
             }).join("");
+            attachLazyVideos(grid);
         }
 
-        const actRow = document.getElementById("sppActionRow");
         if (hasIt) {
             actRow.innerHTML = `
-                ${isOwner ? `<button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('stickerPackPreviewModal').style.display='none'; window.triggerAddStickerToPack('${escapeHTML(pack.id)}')">➕ إضافة ملصقات</button>` : `<button class="btn btn-sm btn-success" style="flex:1;" disabled>✓ مضافة لديك بالفعل</button>`}
-                <button class="btn btn-sm btn-danger" onclick="window.removePackFromMyList('${escapeHTML(pack.id)}')">${isOwner ? 'حذف الحزمة' : 'إزالة'}</button>
-                <button class="btn btn-sm btn-outline" onclick="document.getElementById('stickerPackPreviewModal').style.display='none'">إغلاق</button>`;
+                ${isOwner ? `<button class="btn btn-sm" style="flex:1;" onclick="window.closeStickerPackPreview(); window.triggerAddStickerToPack('${escapeHTML(pack.id)}')">➕ إضافة ملصقات</button>` : `<button class="btn btn-sm btn-success" style="flex:1;" disabled>✓ مضافة لديك</button>`}
+                <button class="btn btn-sm btn-danger" onclick="window.removePackFromMyList('${escapeHTML(pack.id)}')">${isOwner ? 'حذف' : 'إزالة'}</button>
+                <button class="btn btn-sm btn-outline" onclick="window.closeStickerPackPreview()">إغلاق</button>`;
         } else {
             actRow.innerHTML = `
                 <button class="btn" style="flex:1;" onclick="window.addPackToMyList('${escapeHTML(pack.id)}')">➕ إضافة الحزمة لملصقاتي (${stickersList.length})</button>
-                <button class="btn btn-outline btn-sm" onclick="document.getElementById('stickerPackPreviewModal').style.display='none'">إغلاق</button>`;
+                <button class="btn btn-outline btn-sm" onclick="window.closeStickerPackPreview()">إغلاق</button>`;
         }
 
-        document.getElementById("stickerPackPreviewModal").style.display = "flex";
+        m.style.display = "flex";
     };
 
-    function renderPremiumDrawerTab(body) {
-        let html = `<div class="st-sec-title">✨ رموز تعبيرية متحركة (تندمج داخل نص الرسالة)</div>
-            <div class="emoji-grid" style="margin-bottom:12px;">
+    async function renderPremiumDrawerTab(body) {
+        stopAndReleaseVideos(body);
+
+        const savedIds = Object.keys(mySavedPacks || {}).filter(pid => mySavedPacks[pid]);
+        const needFetch = savedIds.some(pid => !allStickerPacks[pid]);
+        if (needFetch) {
+            body.innerHTML = `<div style="text-align:center; padding:34px; color:var(--text-dim); font-size:13px;">⏳ جاري تجهيز حزم ملصقاتك...</div>`;
+            await ensureMyPacksLoaded();
+            if (activeDrawerTab !== "premium" || document.getElementById("stickerDrawer").style.display !== "flex") return;
+        } else {
+            await ensureMyPacksLoaded();
+        }
+
+        const myPackIds = savedIds.filter(pid => allStickerPacks[pid]);
+
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span class="st-sec-title" style="margin:0;">🎭 حزم ملصقاتي (${myPackIds.length})</span>
+                <button type="button" class="pack-mini-btn" onclick="window.createNewStickerPack()">➕ حزمة جديدة</button>
+            </div>`;
+
+        if (myPackIds.length === 0) {
+            html += `<div style="background:var(--glass-inner); border:1px dashed var(--border-bright); border-radius:14px; padding:12px; text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:12px;">
+                ما عندك حزم بعد — اضغط <b>«➕ حزمة جديدة»</b> أو اضغط على أي ملصق يدزه صديقك بالمحادثة!
+            </div>`;
+        } else {
+            // شريط تبويبات الحزم — يعرض حزمة وحدة فقط بالمرة لمنع التعليق نهائياً
+            html += `<div class="pack-tabs-bar">`;
+            myPackIds.forEach(pid => {
+                const pk = allStickerPacks[pid];
+                const cnt = Object.keys(pk.stickers || {}).length;
+                html += `<button type="button" class="pack-tab-pill ${pid === activeSelectedPackId ? 'active' : ''}" onclick="window.selectStickerPackTab('${escapeHTML(pid)}')">📦 ${escapeHTML(pk.name)} (${cnt})</button>`;
+            });
+            html += `</div>`;
+
+            const pack = allStickerPacks[activeSelectedPackId] || allStickerPacks[myPackIds[0]];
+            if (pack) {
+                const isOwner = pack.owner === me.username;
+                const stEntries = Object.entries(pack.stickers || {});
+                const visibleSlice = stEntries.slice(0, activePackVisibleCount);
+
+                html += `<div class="pack-head-row">
+                    <span class="pack-head-title">${escapeHTML(pack.name)} (${stEntries.length})</span>
+                    <div class="pack-head-acts">
+                        ${isOwner ? `<button type="button" class="pack-mini-btn" onclick="window.triggerAddStickerToPack('${escapeHTML(pack.id)}')">＋ إضافة</button>` : ""}
+                        <button type="button" class="pack-mini-btn danger" onclick="window.removePackFromMyList('${escapeHTML(pack.id)}')">${isOwner ? 'حذف' : 'إزالة'}</button>
+                    </div>
+                </div><div class="sticker-grid">`;
+
+                if (stEntries.length === 0) {
+                    html += `<div class="sticker-tile sticker-create-tile" onclick="window.triggerAddStickerToPack('${escapeHTML(pack.id)}')"><span>＋</span><span>رفع ملصق</span></div>`;
+                } else {
+                    visibleSlice.forEach(([stId, st]) => {
+                        if (!st || !st.src) return;
+                        const url = toBlobUrl(st.src);
+                        const mediaHTML = st.mediaType === "video"
+                            ? `<video class="tg-lazy-vid" data-vsrc="${url}" preload="metadata" loop muted playsinline></video><span class="tg-vid-dot">🎬</span>`
+                            : `<img src="${url}" loading="lazy" decoding="async">`;
+                        html += `<div class="sticker-tile tg-tile" style="position:relative;" onclick="window.sendPackSticker('${escapeHTML(pack.id)}','${escapeHTML(stId)}')">
+                            ${mediaHTML}
+                            ${isOwner ? `<button type="button" onclick="event.stopPropagation(); window.deleteStickerFromPack('${escapeHTML(pack.id)}','${escapeHTML(stId)}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.72); color:#fff; font-size:10px; cursor:pointer;">✕</button>` : ""}
+                        </div>`;
+                    });
+                }
+                html += `</div>`;
+
+                if (stEntries.length > activePackVisibleCount) {
+                    html += `<button type="button" class="btn btn-sm btn-outline" style="width:100%; margin-bottom:12px;" onclick="window.showMorePackStickers()">عرض المزيد (+${stEntries.length - activePackVisibleCount})</button>`;
+                }
+            }
+        }
+
+        html += `<div class="st-sec-title">✨ رموز تعبيرية متحركة</div>
+            <div class="emoji-grid" style="margin-bottom:10px;">
                 ${ANIM_EMOJIS.map(a => `<button type="button" class="emoji-cell" onclick="insertEmojiToInput('[[${a.em}]]')"><span class="anim-em ${a.anim}">${a.em}</span></button>`).join("")}
             </div>`;
 
-        html += `<div class="st-sec-title">🌟 ملصقات مميزة كبيرة (تنفجر بتأثير على الشاشة)</div>
+        html += `<div class="st-sec-title">🌟 ملصقات مميزة بتأثيرات</div>
             <div class="sticker-grid">
                 ${PREM_BIG_STICKERS.map(ps => `
                     <div class="sticker-tile" style="background:${ps.bg}; border-color:rgba(255,255,255,0.2);" onclick="window.sendPremBigSticker('${ps.id}')">
@@ -663,48 +899,8 @@
                     </div>`).join("")}
             </div>`;
 
-        // قسم حزم المستخدم فقط (اللي أنشأها أو أضافها بالضغط على ملصقات أصدقائه)
-        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin:10px 0 6px;">
-                <span class="st-sec-title" style="margin:0;">🎭 حزم ملصقاتي الخاصة (المتحركة وتليگرام)</span>
-                <button type="button" class="pack-mini-btn" onclick="window.createNewStickerPack()">➕ حزمة جديدة</button>
-            </div>`;
-
-        const myPackIds = Object.keys(mySavedPacks || {}).filter(pid => mySavedPacks[pid] && allStickerPacks[pid]);
-        if (myPackIds.length === 0) {
-            html += `<div style="background:var(--glass-inner); border:1px dashed var(--border-bright); border-radius:14px; padding:14px; text-align:center; font-size:12px; color:var(--text-dim);">
-                ما عندك حزم بعد — اضغط <b>«➕ حزمة جديدة»</b> لرفع ملصقاتك المتحركة، أو اضغط على أي ملصق يدزه صديقك بالمحادثة لإضافة حزمته!
-            </div>`;
-        } else {
-            myPackIds.forEach(pid => {
-                const pack = allStickerPacks[pid];
-                const isOwner = pack.owner === me.username;
-                const stEntries = Object.entries(pack.stickers || {});
-                html += `<div class="pack-head-row">
-                    <span class="pack-head-title">📦 ${escapeHTML(pack.name)} (${stEntries.length})</span>
-                    <div class="pack-head-acts">
-                        ${isOwner ? `<button type="button" class="pack-mini-btn" onclick="window.triggerAddStickerToPack('${escapeHTML(pid)}')">＋ إضافة</button>` : ""}
-                        <button type="button" class="pack-mini-btn danger" onclick="window.removePackFromMyList('${escapeHTML(pid)}')">${isOwner ? 'حذف' : 'إزالة'}</button>
-                    </div>
-                </div><div class="sticker-grid">`;
-
-                if (stEntries.length === 0) {
-                    html += `<div class="sticker-tile sticker-create-tile" onclick="window.triggerAddStickerToPack('${escapeHTML(pid)}')"><span>＋</span><span>رفع ملصق</span></div>`;
-                } else {
-                    stEntries.forEach(([stId, st]) => {
-                        if (!st || !st.src) return;
-                        const mediaHTML = st.mediaType === "video"
-                            ? `<video src="${st.src}" autoplay loop muted playsinline></video>`
-                            : `<img src="${st.src}" loading="lazy">`;
-                        html += `<div class="sticker-tile tg-tile" style="position:relative;" onclick="window.sendPackSticker('${escapeHTML(pid)}','${escapeHTML(stId)}')">
-                            ${mediaHTML}
-                            ${isOwner ? `<button type="button" onclick="event.stopPropagation(); window.deleteStickerFromPack('${escapeHTML(pid)}','${escapeHTML(stId)}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.72); color:#fff; font-size:10px; cursor:pointer;">✕</button>` : ""}
-                        </div>`;
-                    });
-                }
-                html += `</div>`;
-            });
-        }
         body.innerHTML = html;
+        attachLazyVideos(body);
     }
 
     // ==================== 7. ربط المميزات مع محرّك V6 بدون لمس ملفاته ====================
@@ -721,9 +917,10 @@
             if (el && obj && obj.avatarVideo) {
                 const sig = String(obj.avatarVideo).slice(-28);
                 if (el.getAttribute("data-avid") !== sig) {
+                    const url = toBlobUrl(obj.avatarVideo);
                     el.setAttribute("data-avid", sig);
                     el.style.backgroundImage = "none";
-                    el.innerHTML = `<div class="av-vid-mask"><video src="${obj.avatarVideo}" autoplay loop muted playsinline></video></div>` +
+                    el.innerHTML = `<div class="av-vid-mask"><video src="${url}" autoplay loop muted playsinline></video></div>` +
                         (showOnline ? `<span class="online-badge ${obj.online ? 'on' : ''}"></span>` : "");
                 } else if (showOnline) {
                     const dot = el.querySelector(".online-badge");
@@ -780,12 +977,13 @@
                 </div>`;
             } else if (m.type === "tg_sticker" && slot) {
                 if (bubble) bubble.classList.add("sticker-bubble");
+                const url = toBlobUrl(m.content);
                 const stWrap = document.createElement("div");
                 stWrap.className = "tg-st-wrap";
                 if (m.mediaType === "video") {
-                    stWrap.innerHTML = `<video class="tg-st-media" src="${m.content}" autoplay loop muted playsinline></video>`;
+                    stWrap.innerHTML = `<video class="tg-st-media tg-lazy-vid" data-vsrc="${url}" preload="metadata" loop muted playsinline></video>`;
                 } else {
-                    stWrap.innerHTML = `<img class="tg-st-media" src="${m.content}">`;
+                    stWrap.innerHTML = `<img class="tg-st-media" src="${url}" loading="lazy" decoding="async">`;
                 }
                 if (m.packId) {
                     const hint = document.createElement("span");
@@ -799,6 +997,7 @@
                 };
                 slot.innerHTML = "";
                 slot.appendChild(stWrap);
+                attachLazyVideos(stWrap);
             }
 
             const senderObj = contactProfiles[m.sender] || (m.sender === me?.username ? me : null);
@@ -860,6 +1059,12 @@
             if (nm) nm.style.color = u.accentColor && u.accentColor !== "default" ? pal.main : "";
         };
 
+        const _origDetach = window.detachRoomListeners;
+        window.detachRoomListeners = function () {
+            stopAndReleaseVideos(document.getElementById("messagesList"));
+            if (_origDetach) _origDetach();
+        };
+
         const _origOpenDM = window.openDM;
         window.openDM = function (partnerUsername) {
             detachSharedWp();
@@ -884,6 +1089,26 @@
         const _origCloseChat = window.closeActiveChat;
         window.closeActiveChat = function () { detachSharedWp(); window.toggleEffectPicker(false); _origCloseChat(); };
 
+        // تفريغ الفيديوهات فوراً عند إغلاق لوحة الملصقات أو التبديل لتبويب آخر
+        const _origToggleDrawer = window.toggleStickerDrawer;
+        window.toggleStickerDrawer = function (force) {
+            const d = document.getElementById("stickerDrawer");
+            const willShow = typeof force === "boolean" ? force : d.style.display !== "flex";
+            if (!willShow) {
+                const body = document.getElementById("drawerBody");
+                stopAndReleaseVideos(body);
+                if (body && activeDrawerTab === "premium") body.innerHTML = "";
+            }
+            _origToggleDrawer(force);
+        };
+
+        const _origSwitchDTab = window.switchDrawerTab;
+        window.switchDrawerTab = function (tab) {
+            const body = document.getElementById("drawerBody");
+            if (body) stopAndReleaseVideos(body);
+            _origSwitchDTab(tab);
+        };
+
         const _origRenderDrawer = window.renderDrawerContent;
         window.renderDrawerContent = function () {
             if (typeof activeDrawerTab !== "undefined" && activeDrawerTab === "premium") {
@@ -894,16 +1119,16 @@
             if (_origRenderDrawer) _origRenderDrawer();
         };
 
+        // استماع خفيف جداً لقائمة أسماء حزم المستخدم فقط (بدون تحميل بيانات الملصقات عند فتح التطبيق!)
         const _origEnter = window.enterMainApp;
         window.enterMainApp = function (uData) {
             _origEnter(uData);
-            const refreshIfPrem = () => {
+            db.ref(`user_sticker_packs/${me.username}`).on("value", s => {
+                mySavedPacks = s.val() || {};
                 if (typeof activeDrawerTab !== "undefined" && activeDrawerTab === "premium" && document.getElementById("stickerDrawer").style.display === "flex") {
                     window.renderDrawerContent();
                 }
-            };
-            db.ref("tg_packs").on("value", s => { allStickerPacks = s.val() || {}; refreshIfPrem(); });
-            db.ref(`user_sticker_packs/${me.username}`).on("value", s => { mySavedPacks = s.val() || {}; refreshIfPrem(); });
+            });
         };
     }
 
