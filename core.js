@@ -1,4 +1,4 @@
-// ==================== الإعدادات والتهيئة الأساسية (V5 Glass) ====================
+// ==================== الإعدادات والتهيئة الأساسية (V6 Ultra-Smooth) ====================
 const DB_URL = "https://notes-app-c738e-default-rtdb.firebaseio.com";
 const DEFAULT_PIN = "2007H";
 const ADMIN_PIN = "9988";
@@ -15,8 +15,8 @@ const GRADIENTS = [
 ];
 
 const CH_REACTIONS = [
-    { k: "fire", em: "🔥" }, { k: "heart", em: "❤️" }, { k: "like", em: "👍" },
-    { k: "clap", em: "👏" }, { k: "wow", em: "🤯" }, { k: "laugh", em: "😂" }
+    { k: "heart", em: "❤️" }, { k: "fire", em: "🔥" }, { k: "like", em: "👍" },
+    { k: "laugh", em: "😂" }, { k: "wow", em: "🤯" }, { k: "clap", em: "👏" }
 ];
 
 // ==================== متغيرات الحالة المشتركة ====================
@@ -24,6 +24,7 @@ let sysConfig = { pin: DEFAULT_PIN, locked: false, allowRegister: true };
 let failedAttempts = parseInt(localStorage.getItem("sec_fails") || "0");
 let soundEnabled = localStorage.getItem("app_sound") !== "off";
 let appInitialized = false;
+let isDbConnected = true;
 
 let me = null;
 let myContacts = {};
@@ -37,31 +38,41 @@ let allSpaces = {};
 let myHighlights = {};
 let myNotifications = {};
 
-// المحادثة النشطة مع قفل لمنع تداخل الغرف
+// المحادثة النشطة مع التحديث الموضعي الذكي
 let activeChatType = null; // "dm" | "saved" | "group" | "channel"
 let activePartner = null;
 let activeRoomId = null;
 let activeSpaceObj = null;
 let activeRoomToken = 0;
-
-let msgRef = null, typingRef = null, pinnedRef = null, blockCheckRef = null;
+let activeRoomLimit = 45;
+let activeMsgsMap = {};
+let roomQueryRef = null;
+let typingRef = null, pinnedRef = null, blockCheckRef = null;
 let contactListeners = {};
 let typingTimeout = null;
+let seenFlushTimer = null;
+let pendingSeenBatch = {};
 
-// حماية منع تكرار الرسائل 100%
+// طابور الإرسال الذكي للنت الضعيف ومنع التكرار
 let sendLock = false;
 let lastSentSig = "";
 let lastSentTs = 0;
 let seenMarkedSet = new Set();
+let offlineQueue = [];
+try { offlineQueue = JSON.parse(localStorage.getItem("offline_msg_queue") || "[]"); } catch { offlineQueue = []; }
 
 let replyTarget = null;
 let editingMsgId = null;
 let selectedMsg = null;
 
-// تطبيق التخصيصات المحفوظة فوراً (الثيم + الخط + خلفية المحادثة)
+// مشغّل الصوت الواحد النشط
+let currentPlayingAudio = null;
+let currentPlayingBtn = null;
+
+// تطبيق التخصيصات المحفوظة فوراً
 applyTheme(localStorage.getItem("app_theme") || "midnight", true);
 applyFont(localStorage.getItem("app_font") || "tajawal", true);
-applyWallpaper(localStorage.getItem("app_wp") || "aurora", true);
+applyWallpaper(localStorage.getItem("app_wp") || "pattern", true);
 if (failedAttempts >= 3) renderSelfDestructScreen();
 
 db.ref("sys_config").on("value", snap => {
@@ -78,9 +89,46 @@ db.ref("sys_config").on("value", snap => {
     if (document.getElementById("adminScreen").style.display === "block") updateAdminButtons();
 });
 
+// مراقبة الشبكة وإرسال الطابور تلقائياً عند تحسن الاتصال
+function updateNetBanner(connected) {
+    isDbConnected = connected;
+    const b = document.getElementById("netBanner");
+    if (b) b.classList.toggle("show", !connected);
+    if (connected) flushOfflineQueue();
+}
+window.addEventListener("offline", () => updateNetBanner(false));
+window.addEventListener("online", () => flushOfflineQueue());
+
+function saveOfflineQueue() {
+    try { localStorage.setItem("offline_msg_queue", JSON.stringify(offlineQueue.slice(-25))); } catch {}
+}
+
+async function flushOfflineQueue() {
+    if (!me || !navigator.onLine || offlineQueue.length === 0) return;
+    const copy = [...offlineQueue];
+    for (const item of copy) {
+        if (item.owner !== me.username) continue;
+        try {
+            const cleanPayload = { ...item.payload };
+            delete cleanPayload._pending;
+            await db.ref(`${item.dbPath}/${cleanPayload.id}`).set(cleanPayload);
+            if (item.chatType === "dm" && item.partner) {
+                await db.ref(`user_contacts/${item.partner}/${me.username}`).update({ addedAt: cleanPayload.ts });
+                await db.ref(`chat_meta/${item.roomId}`).set({
+                    lastMsg: item.previewLabel, lastSender: me.username, lastTs: cleanPayload.ts, unreadFor: item.partner
+                });
+            }
+            offlineQueue = offlineQueue.filter(q => q.payload.id !== cleanPayload.id);
+            saveOfflineQueue();
+        } catch {
+            break;
+        }
+    }
+}
+
 // ==================== المؤثرات الصوتية ====================
 let audioCtx = null, ringtoneInterval = null;
-function playTone(freq, dur, type = "sine", vol = 0.08) {
+function playTone(freq, dur, type = "sine", vol = 0.07) {
     if (!soundEnabled) return;
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -94,8 +142,8 @@ function playTone(freq, dur, type = "sine", vol = 0.08) {
         o.start(); o.stop(audioCtx.currentTime + dur);
     } catch {}
 }
-function playSendSound() { playTone(660, 0.08, "sine", 0.05); }
-function playRecvSound() { playTone(520, 0.08, "triangle", 0.06); setTimeout(() => playTone(780, 0.1, "triangle", 0.06), 70); }
+function playSendSound() { playTone(660, 0.07, "sine", 0.045); }
+function playRecvSound() { playTone(520, 0.07, "triangle", 0.055); setTimeout(() => playTone(780, 0.09, "triangle", 0.055), 65); }
 function startRingtone(incoming) {
     stopRingtone();
     const fn = () => {
@@ -114,7 +162,7 @@ function applyTheme(t, silent = false) {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("app_theme", theme);
     document.querySelectorAll(".theme-swatch").forEach(el => el.classList.toggle("active", el.getAttribute("data-t") === theme));
-    if (!silent) showToast("تم تحديث الثيم الزجاجي ✨");
+    if (!silent) showToast("تم تحديث الثيم ✨");
 }
 
 function applyFont(f, silent = false) {
@@ -127,8 +175,8 @@ function applyFont(f, silent = false) {
 }
 
 function applyWallpaper(w, silent = false) {
-    const valid = ["aurora", "dots", "clean", "custom"];
-    const wp = valid.includes(w) ? w : "aurora";
+    const valid = ["pattern", "aurora", "clean", "custom"];
+    const wp = valid.includes(w) ? w : "pattern";
     document.documentElement.setAttribute("data-wp", wp);
     localStorage.setItem("app_wp", wp);
     document.querySelectorAll("#wpGrid .chip-btn").forEach(el => el.classList.toggle("active", el.getAttribute("data-w") === wp));
@@ -138,11 +186,11 @@ function applyWallpaper(w, silent = false) {
         if (wp === "custom") {
             const img = localStorage.getItem("app_wp_img");
             if (img) {
-                area.style.backgroundImage = `linear-gradient(rgba(4,8,18,0.58), rgba(4,8,18,0.62)), url(${img})`;
+                area.style.backgroundImage = `linear-gradient(rgba(4,8,18,0.55), rgba(4,8,18,0.58)), url(${img})`;
                 area.style.backgroundSize = "cover";
                 area.style.backgroundPosition = "center";
             } else {
-                document.documentElement.setAttribute("data-wp", "aurora");
+                document.documentElement.setAttribute("data-wp", "pattern");
                 area.style.backgroundImage = "";
             }
         } else {
@@ -159,13 +207,11 @@ async function handleChatWallpaperUpload(e) {
     e.target.value = "";
     if (!f) return;
     showToast("جاري تجهيز الخلفية...");
-    const dataUrl = await compressImageFile(f, 960, 0.72);
+    const dataUrl = await compressImageFile(f, 900, 0.7);
     try {
         localStorage.setItem("app_wp_img", dataUrl);
         applyWallpaper("custom");
-    } catch {
-        showToast("حجم الصورة كبير، اختر صورة أصغر");
-    }
+    } catch { showToast("حجم الصورة كبير، اختر صورة أصغر"); }
 }
 
 function toggleSoundPref() {
@@ -198,7 +244,7 @@ function showToast(txt) {
     t.innerText = txt;
     t.classList.add("show");
     clearTimeout(t._tm);
-    t._tm = setTimeout(() => t.classList.remove("show"), 2600);
+    t._tm = setTimeout(() => t.classList.remove("show"), 2400);
 }
 
 function simpleHash(str) {
@@ -212,12 +258,26 @@ function simpleHash(str) {
 
 function sanitizeKey(u) { return (u || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, ""); }
 function formatTime(ts) { return ts ? new Date(ts).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" }) : ""; }
+function formatDateKey(ts) {
+    const d = new Date(ts || Date.now());
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+function formatDateLabel(ts) {
+    const d = new Date(ts || Date.now());
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diff = Math.round((today - target) / 86400000);
+    if (diff === 0) return "اليوم";
+    if (diff === 1) return "أمس";
+    return d.toLocaleDateString("ar-IQ", { day: "numeric", month: "long" });
+}
 function logSecurityEvent(msg) { db.ref("sys_logs").push({ msg: `[${formatTime(Date.now())}] ${msg}`, ts: Date.now() }); }
 function quickLock() { location.reload(); }
 function getRoomId(u1, u2) { return [u1, u2].sort().join("__"); }
 function getDisplayTag(uObj) { return "@" + (uObj?.displayTag || uObj?.username || ""); }
 
-function compressImageFile(file, maxW = 860, quality = 0.72) {
+function compressImageFile(file, maxW = 820, quality = 0.70) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = ev => {
@@ -225,7 +285,7 @@ function compressImageFile(file, maxW = 860, quality = 0.72) {
             img.onload = () => {
                 const c = document.createElement("canvas");
                 const ratio = img.width > maxW ? maxW / img.width : 1;
-                c.width = img.width * ratio; c.height = img.height * ratio;
+                c.width = Math.round(img.width * ratio); c.height = Math.round(img.height * ratio);
                 c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
                 resolve(c.toDataURL("image/jpeg", quality));
             };
@@ -257,7 +317,66 @@ function sendNotification(targetUsername, text, icon = "🔔") {
 }
 
 function renderSelfDestructScreen() {
-    document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8; position:relative; z-index:10;"><h1 style="color:#f43f5e; font-size:52px; font-weight:800;">503</h1><h3 style="color:#fff;">Service Temporarily Unavailable</h3><p style="font-size:13px; margin-top:8px;">تم حظر الجلسة ومسح البيانات تلقائياً لأسباب أمنية.</p></div>`;
+    document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8;"><h1 style="color:#f43f5e; font-size:52px; font-weight:800;">503</h1><h3 style="color:#fff;">Service Temporarily Unavailable</h3><p style="font-size:13px; margin-top:8px;">تم حظر الجلسة ومسح البيانات تلقائياً لأسباب أمنية.</p></div>`;
+}
+
+// ==================== تنسيق النصوص الاحترافي (نفس تليگرام) ====================
+function formatRichText(raw) {
+    let s = escapeHTML(raw || "");
+    // روابط بصيغة [نص](رابط)
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, `<a class="msg-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>`);
+    // تشويش ||نص||
+    s = s.replace(/\|\|([^|]+)\|\|/g, `<span class="spoiler-txt" onclick="event.stopPropagation(); this.classList.toggle('revealed')">$1</span>`);
+    // رمز `نص`
+    s = s.replace(/`([^`]+)`/g, `<code class="msg-code-inline">$1</code>`);
+    // عريض **نص**
+    s = s.replace(/\*\*([^*]+)\*\*/g, `<strong>$1</strong>`);
+    // تسطير ++نص++
+    s = s.replace(/\+\+([^+]+)\+\+/g, `<u>$1</u>`);
+    // مائل __نص__
+    s = s.replace(/__([^_]+)__/g, `<em>$1</em>`);
+    // مشطوب ~~نص~~
+    s = s.replace(/~~([^~]+)~~/g, `<s>$1</s>`);
+    // اقتباس بسطر يبدأ بـ >
+    s = s.replace(/^&gt;\s?(.*)$/gm, `<span class="msg-quote-block">$1</span>`);
+    return s;
+}
+
+function toggleFormatBar(force) {
+    const bar = document.getElementById("formatBar");
+    const btn = document.getElementById("formatBtn");
+    const show = typeof force === "boolean" ? force : !bar.classList.contains("open");
+    bar.classList.toggle("open", show);
+    if (btn) btn.classList.toggle("accent", show);
+}
+
+function applyTextFormat(type) {
+    const inp = document.getElementById("msgInput");
+    if (!inp) return;
+    const start = inp.selectionStart || 0;
+    const end = inp.selectionEnd || 0;
+    const val = inp.value;
+    const sel = val.slice(start, end) || "نص";
+
+    let formatted = sel;
+    if (type === "bold") formatted = `**${sel}**`;
+    else if (type === "italic") formatted = `__${sel}__`;
+    else if (type === "underline") formatted = `++${sel}++`;
+    else if (type === "strike") formatted = `~~${sel}~~`;
+    else if (type === "spoiler") formatted = `||${sel}||`;
+    else if (type === "code") formatted = `\`${sel}\``;
+    else if (type === "quote") formatted = `> ${sel}`;
+    else if (type === "link") {
+        const url = prompt("أدخل الرابط (يبدأ بـ https://):", "https://");
+        if (!url || !url.trim()) return;
+        formatted = `[${sel}](${url.trim()})`;
+    }
+
+    inp.value = val.slice(0, start) + formatted + val.slice(end);
+    handleMsgInputResize(inp);
+    inp.focus();
+    const newPos = start + formatted.length;
+    inp.setSelectionRange(newPos, newPos);
 }
 
 // ==================== 1. البوابة المموهة والحسابات ====================
@@ -403,6 +522,7 @@ function switchMainTab(tabName) {
     if (tabName === "profile") renderMyProfilePage();
     if (tabName === "feed") renderFeed();
     if (tabName === "spaces") renderSpacesList();
+    if (tabName === "games" && typeof renderGamesHub === "function") renderGamesHub();
 }
 
 function enterMainApp(userData) {
@@ -414,17 +534,18 @@ function enterMainApp(userData) {
     document.getElementById("authScreen").style.display = "none";
     document.getElementById("appShell").style.display = "flex";
     document.getElementById("soundToggleBtn").innerText = soundEnabled ? "مفعلة" : "صامت";
-    applyWallpaper(localStorage.getItem("app_wp") || "aurora", true);
+    applyWallpaper(localStorage.getItem("app_wp") || "pattern", true);
 
     initStickerDrawer();
     setupPresence();
     listenForIncomingCalls();
+    if (typeof initGamesListeners === "function") initGamesListeners();
 
     db.ref("users/" + me.username).on("value", snap => {
         const d = snap.val();
         if (!d || d.banned) { showToast("تم حظر أو حذف حسابك"); setTimeout(logoutAccount, 1400); return; }
         me = d; contactProfiles[me.username] = d;
-        renderMyProfilePage();
+        if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
         renderStoriesStrip();
     });
 
@@ -433,7 +554,7 @@ function enterMainApp(userData) {
         syncContactListeners();
         renderChatsSidebar();
         renderStoriesStrip();
-        renderMyProfilePage();
+        if (document.getElementById("view-games").classList.contains("active") && typeof renderGamesHub === "function") renderGamesHub();
     });
 
     db.ref(`user_blocks/${me.username}`).on("value", snap => {
@@ -453,26 +574,39 @@ function enterMainApp(userData) {
 
     db.ref(`highlights/${me.username}`).on("value", snap => {
         myHighlights = snap.val() || {};
-        renderMyProfilePage();
+        if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
     });
 
-    db.ref("posts").on("value", snap => {
-        allPosts = snap.val() || {};
-        renderFeed();
-        renderMyProfilePage();
+    // تحميل المنشورات بتحديثات موضعية بدون تصفير الشاشة عند التفاعل
+    const postsRef = db.ref("posts");
+    postsRef.on("child_added", s => {
+        allPosts[s.key] = s.val();
+        if (document.getElementById("view-feed").classList.contains("active")) {
+            if (typeof syncFeedPostCard === "function") syncFeedPostCard(s.key, s.val());
+        }
+    });
+    postsRef.on("child_changed", s => {
+        allPosts[s.key] = s.val();
+        if (typeof updatePostCardInPlace === "function") updatePostCardInPlace(s.key, s.val());
+        if (activeCommentPostId === s.key && document.getElementById("commentsModal").style.display === "flex") renderCommentsList();
+    });
+    postsRef.on("child_removed", s => {
+        delete allPosts[s.key];
+        const card = document.querySelector(`.ig-post[data-pid="${s.key}"]`);
+        if (card) card.remove();
+        if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
     });
 
     db.ref("spaces").on("value", snap => {
         allSpaces = snap.val() || {};
         renderSpacesList();
-        renderMyProfilePage();
         if ((activeChatType === "group" || activeChatType === "channel") && activeRoomId && allSpaces[activeRoomId]) {
             activeSpaceObj = allSpaces[activeRoomId];
             updateActiveHeader();
         }
     });
 
-    db.ref(`notifications/${me.username}`).limitToLast(40).on("value", snap => {
+    db.ref(`notifications/${me.username}`).limitToLast(35).on("value", snap => {
         myNotifications = snap.val() || {};
         const hasUnread = Object.values(myNotifications).some(n => !n.read);
         document.getElementById("notifDot").classList.toggle("on", hasUnread);
@@ -505,14 +639,16 @@ function syncContactListeners() {
 function setupPresence() {
     const myRef = db.ref("users/" + me.username);
     db.ref(".info/connected").on("value", s => {
-        if (s.val() === true) {
+        const connected = s.val() === true;
+        updateNetBanner(connected);
+        if (connected) {
             myRef.onDisconnect().update({ online: false, lastSeen: firebase.database.ServerValue.TIMESTAMP });
             myRef.update({ online: true, lastSeen: Date.now() });
         }
     });
 }
 
-// ==================== 3. البحث الموحد ====================
+// ==================== 3. البحث الموحد وقائمة المحادثات ====================
 function openUnifiedSearchModal() {
     document.getElementById("unifiedSearchInput").value = "";
     document.getElementById("unifiedSearchResult").innerHTML = "";
@@ -637,24 +773,40 @@ function renderChatsSidebar() {
     });
 }
 
-// ==================== 4. غرفة المحادثة والرسائل (منع التداخل والتكرار 100%) ====================
+// ==================== 4. محرّك المحادثة الموضعي (صفر رمش + 60fps) ====================
+function stopAnyVoicePlayback() {
+    if (currentPlayingAudio) {
+        try { currentPlayingAudio.pause(); } catch {}
+        currentPlayingAudio = null;
+    }
+    if (currentPlayingBtn) {
+        currentPlayingBtn.innerText = "▶";
+        currentPlayingBtn = null;
+    }
+}
+
 function detachRoomListeners() {
     activeRoomToken++;
-    if (msgRef) { msgRef.off(); msgRef = null; }
+    stopAnyVoicePlayback();
+    clearTimeout(seenFlushTimer);
+    pendingSeenBatch = {};
+    if (roomQueryRef) { roomQueryRef.off(); roomQueryRef = null; }
     if (typingRef) { typingRef.off(); typingRef = null; }
     if (pinnedRef) { pinnedRef.off(); pinnedRef = null; }
     if (blockCheckRef) { blockCheckRef.off(); blockCheckRef = null; }
 }
 
 function resetMessagesStage() {
+    activeMsgsMap = {};
     const area = document.getElementById("messagesList");
-    if (area) area.innerHTML = `<div style="margin:auto; text-align:center; color:var(--text-dim); font-size:12.5px;">جاري تحميل المحادثة...</div>`;
+    if (area) area.innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:12.5px;">جاري الفتح...</div>`;
     document.getElementById("pinnedBar").style.display = "none";
 }
 
 function openSavedMessages() {
     detachRoomListeners();
     const myToken = activeRoomToken;
+    activeRoomLimit = 45;
     resetMessagesStage();
 
     activeChatType = "saved";
@@ -664,6 +816,7 @@ function openSavedMessages() {
     seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
+    toggleFormatBar(false);
 
     switchMainTab("chats");
     document.getElementById("chatEmptyState").style.display = "none";
@@ -679,12 +832,13 @@ function openSavedMessages() {
     updateActiveHeader();
     updateChatInputLockState();
     renderChatsSidebar();
-    attachMessagesListener(`saved_msgs/${me.username}`, myToken);
+    attachIncrementalMessages(`saved_msgs/${me.username}`, myToken);
 }
 
 function openDM(partnerUsername) {
     detachRoomListeners();
     const myToken = activeRoomToken;
+    activeRoomLimit = 45;
     resetMessagesStage();
 
     activeChatType = "dm";
@@ -695,6 +849,7 @@ function openDM(partnerUsername) {
     seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
+    toggleFormatBar(false);
 
     document.getElementById("chatEmptyState").style.display = "none";
     document.getElementById("activeChatView").style.display = "flex";
@@ -728,7 +883,7 @@ function openDM(partnerUsername) {
     pinnedRef = db.ref(`chats/${roomIdCopy}/pinned`);
     pinnedRef.on("value", s => { if (myToken === activeRoomToken) renderPinnedBar(s.val()); });
 
-    attachMessagesListener(`chats/${roomIdCopy}/messages`, myToken);
+    attachIncrementalMessages(`chats/${roomIdCopy}/messages`, myToken);
 }
 
 function openSpaceRoom(spaceId) {
@@ -736,6 +891,7 @@ function openSpaceRoom(spaceId) {
     if (!sp) return;
     detachRoomListeners();
     const myToken = activeRoomToken;
+    activeRoomLimit = 45;
     resetMessagesStage();
 
     activeChatType = sp.type;
@@ -745,6 +901,7 @@ function openSpaceRoom(spaceId) {
     seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
+    toggleFormatBar(false);
 
     switchMainTab("chats");
     document.getElementById("chatEmptyState").style.display = "none";
@@ -765,23 +922,522 @@ function openSpaceRoom(spaceId) {
     pinnedRef = db.ref(`spaces/${spaceId}/pinned`);
     pinnedRef.on("value", s => { if (myToken === activeRoomToken) renderPinnedBar(s.val()); });
 
-    attachMessagesListener(`space_msgs/${spaceId}`, myToken);
+    attachIncrementalMessages(`space_msgs/${spaceId}`, myToken);
 }
 
-function attachMessagesListener(dbPath, token) {
-    let init = true, prevCount = 0;
-    msgRef = db.ref(dbPath);
-    msgRef.on("value", snap => {
-        if (token !== activeRoomToken) return; // حماية مطلقة ضد تداخل المحادثات
-        const val = snap.val() || {};
-        const keys = Object.keys(val);
-        if (!init && keys.length > prevCount) {
-            const lastM = val[keys[keys.length - 1]];
-            if (lastM && lastM.sender !== me.username) playRecvSound();
+function loadOlderMessages() {
+    if (!activeRoomId) return;
+    activeRoomLimit += 45;
+    const basePath = getActiveRoomBasePath();
+    if (roomQueryRef) { roomQueryRef.off(); roomQueryRef = null; }
+    const token = activeRoomToken;
+    activeMsgsMap = {};
+    document.getElementById("messagesList").innerHTML = "";
+    attachIncrementalMessages(basePath, token, true);
+}
+
+function attachIncrementalMessages(dbPath, token, keepScroll = false) {
+    const area = document.getElementById("messagesList");
+    let initialDone = false;
+    let addedCount = 0;
+
+    // أولاً فحص سريع إذا كانت الغرفة فارغة
+    roomQueryRef = db.ref(dbPath).orderByChild("ts").limitToLast(activeRoomLimit);
+
+    roomQueryRef.once("value", snap => {
+        if (token !== activeRoomToken) return;
+        initialDone = true;
+        const hint = area.querySelector(".empty-room-hint");
+        if (hint) hint.remove();
+
+        const count = snap.numChildren();
+        if (count === 0 && !area.querySelector(".msg-wrap")) {
+            area.innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); padding:14px 20px; border-radius:16px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
+        } else if (count >= activeRoomLimit && !area.querySelector(".load-more-btn")) {
+            const btn = document.createElement("button");
+            btn.className = "load-more-btn";
+            btn.innerText = "⬆️ تحميل رسائل أقدم";
+            btn.onclick = loadOlderMessages;
+            area.insertBefore(btn, area.firstChild);
         }
-        init = false; prevCount = keys.length;
-        renderMessages(val, token);
+        if (!keepScroll) area.scrollTop = area.scrollHeight;
     });
+
+    roomQueryRef.on("child_added", snap => {
+        if (token !== activeRoomToken) return;
+        const id = snap.key;
+        const m = snap.val();
+        if (!m || (m.deletedFor && m.deletedFor[me.username])) return;
+
+        const hint = area.querySelector(".empty-room-hint");
+        if (hint) hint.remove();
+
+        // إذا كانت موجودة مسبقاً كرسالة مؤقتة بالطابور، حدّثها بمكانها بدون تكرار
+        activeMsgsMap[id] = m;
+        const existing = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
+        if (existing) {
+            updateMessageNodeInPlace(existing, id, m);
+            return;
+        }
+
+        const nearBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 160;
+        appendMessageWithDateSep(area, id, m);
+        addedCount++;
+
+        scheduleSeenMark(id, m, token);
+
+        if (initialDone && m.sender !== me.username) playRecvSound();
+        if (!keepScroll && (nearBottom || !initialDone || m.sender === me.username)) {
+            area.scrollTop = area.scrollHeight;
+        }
+    });
+
+    // عند التفاعل أو التعديل أو القراءة: نحدّث الرسالة بمكانها فقط (صفر إعادة تحميل)
+    roomQueryRef.on("child_changed", snap => {
+        if (token !== activeRoomToken) return;
+        const id = snap.key;
+        const m = snap.val();
+        if (!m) return;
+        if (m.deletedFor && m.deletedFor[me.username]) {
+            const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
+            if (el) el.remove();
+            delete activeMsgsMap[id];
+            return;
+        }
+        activeMsgsMap[id] = m;
+        const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
+        if (el) updateMessageNodeInPlace(el, id, m);
+    });
+
+    roomQueryRef.on("child_removed", snap => {
+        if (token !== activeRoomToken) return;
+        const id = snap.key;
+        delete activeMsgsMap[id];
+        const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
+        if (el) el.remove();
+    });
+
+    // إظهار الرسائل المعلقة بالطابور (في حال النت مقطوع)
+    offlineQueue.filter(q => q.dbPath === dbPath && q.owner === me.username).forEach(q => {
+        if (!area.querySelector(`.msg-wrap[data-mid="${q.payload.id}"]`)) {
+            const hint = area.querySelector(".empty-room-hint");
+            if (hint) hint.remove();
+            appendMessageWithDateSep(area, q.payload.id, q.payload);
+        }
+    });
+}
+
+function scheduleSeenMark(id, m, token) {
+    if (m._pending) return;
+    const isMe = m.sender === me.username;
+    if (activeChatType === "dm" && !isMe && !m.seen && !seenMarkedSet.has(id)) {
+        seenMarkedSet.add(id);
+        pendingSeenBatch[`${id}/seen`] = true;
+    } else if (activeChatType === "channel" && (!m.views || !m.views[me.username]) && !seenMarkedSet.has(id)) {
+        seenMarkedSet.add(id);
+        pendingSeenBatch[`${id}/views/${me.username}`] = true;
+    } else return;
+
+    clearTimeout(seenFlushTimer);
+    seenFlushTimer = setTimeout(() => {
+        if (token !== activeRoomToken) return;
+        const batch = pendingSeenBatch;
+        pendingSeenBatch = {};
+        if (Object.keys(batch).length > 0) {
+            db.ref(getActiveRoomBasePath()).update(batch).catch(() => {});
+        }
+    }, 220);
+}
+
+function appendMessageWithDateSep(area, id, m) {
+    const dKey = formatDateKey(m.ts);
+    const lastSep = area.querySelectorAll(".date-sep");
+    const lastKey = lastSep.length ? lastSep[lastSep.length - 1].getAttribute("data-dkey") : null;
+    if (dKey !== lastKey) {
+        const sep = document.createElement("div");
+        sep.className = "date-sep";
+        sep.setAttribute("data-dkey", dKey);
+        sep.innerText = formatDateLabel(m.ts);
+        area.appendChild(sep);
+    }
+    area.appendChild(buildMessageNode(id, m));
+}
+
+// ==================== بناء مشغّل البصمة والفيديو الخاص بالمنصة ====================
+function buildVoicePlayer(src, msgId) {
+    const wrap = document.createElement("div");
+    wrap.className = "voice-player";
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "vp-play";
+    playBtn.innerText = "▶";
+
+    const body = document.createElement("div");
+    body.className = "vp-body";
+
+    const wave = document.createElement("div");
+    wave.className = "vp-wave";
+    const bars = [];
+    let seed = 0;
+    for (let i = 0; i < (msgId || "v").length; i++) seed += msgId.charCodeAt(i);
+    for (let i = 0; i < 24; i++) {
+        const b = document.createElement("div");
+        b.className = "vp-bar";
+        const h = 28 + ((seed * (i + 3) * 17) % 70);
+        b.style.height = h + "%";
+        wave.appendChild(b);
+        bars.push(b);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "vp-meta";
+    const timeEl = document.createElement("span");
+    timeEl.innerText = "00:00";
+    const speedBtn = document.createElement("button");
+    speedBtn.className = "vp-speed";
+    speedBtn.innerText = "1x";
+    meta.appendChild(timeEl); meta.appendChild(speedBtn);
+
+    body.appendChild(wave); body.appendChild(meta);
+    wrap.appendChild(playBtn); wrap.appendChild(body);
+
+    const aud = new Audio(src);
+    let rate = 1;
+    const fmt = sec => {
+        if (!isFinite(sec)) return "00:00";
+        const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+        return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    };
+
+    aud.addEventListener("loadedmetadata", () => { timeEl.innerText = fmt(aud.duration); });
+    aud.addEventListener("timeupdate", () => {
+        if (!aud.duration) return;
+        const ratio = aud.currentTime / aud.duration;
+        const lit = Math.floor(ratio * bars.length);
+        bars.forEach((b, idx) => b.classList.toggle("played", idx <= lit));
+        timeEl.innerText = fmt(aud.currentTime);
+    });
+    aud.addEventListener("ended", () => {
+        playBtn.innerText = "▶";
+        bars.forEach(b => b.classList.remove("played"));
+        timeEl.innerText = fmt(aud.duration);
+        if (currentPlayingAudio === aud) { currentPlayingAudio = null; currentPlayingBtn = null; }
+    });
+
+    playBtn.onclick = e => {
+        e.stopPropagation();
+        if (aud.paused) {
+            if (currentPlayingAudio && currentPlayingAudio !== aud) stopAnyVoicePlayback();
+            aud.playbackRate = rate;
+            aud.play().catch(() => {});
+            playBtn.innerText = "⏸";
+            currentPlayingAudio = aud;
+            currentPlayingBtn = playBtn;
+        } else {
+            aud.pause();
+            playBtn.innerText = "▶";
+        }
+    };
+
+    wave.onclick = e => {
+        e.stopPropagation();
+        if (!aud.duration) return;
+        const rect = wave.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        aud.currentTime = pct * aud.duration;
+    };
+
+    speedBtn.onclick = e => {
+        e.stopPropagation();
+        rate = rate === 1 ? 1.5 : (rate === 1.5 ? 2 : 1);
+        speedBtn.innerText = rate + "x";
+        aud.playbackRate = rate;
+    };
+
+    return wrap;
+}
+
+function buildCustomVideoCard(src) {
+    const box = document.createElement("div");
+    box.className = "custom-vid-box";
+    box.innerHTML = `
+        <video src="${src}" preload="metadata" muted playsinline></video>
+        <div class="cvp-overlay-play"><div class="cvp-play-circle">▶</div></div>
+        <span class="cvp-badge">🎬 فيديو</span>`;
+    box.onclick = e => { e.stopPropagation(); openFullVideoModal(src); };
+    return box;
+}
+
+function openFullVideoModal(src) {
+    stopAnyVoicePlayback();
+    const vid = document.getElementById("fullVidEl");
+    const playBtn = document.getElementById("fullVidPlayBtn");
+    const seek = document.getElementById("fullVidSeek");
+    const timeEl = document.getElementById("fullVidTime");
+    vid.src = src;
+    seek.value = 0;
+    timeEl.innerText = "00:00";
+    document.getElementById("videoFullModal").style.display = "flex";
+    vid.play().catch(() => {});
+    playBtn.innerText = "⏸";
+
+    vid.ontimeupdate = () => {
+        if (!vid.duration) return;
+        seek.value = Math.round((vid.currentTime / vid.duration) * 100);
+        const m = Math.floor(vid.currentTime / 60), s = Math.floor(vid.currentTime % 60);
+        timeEl.innerText = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    };
+    vid.onended = () => { playBtn.innerText = "▶"; };
+}
+
+function toggleFullVidPlay() {
+    const vid = document.getElementById("fullVidEl");
+    const btn = document.getElementById("fullVidPlayBtn");
+    if (vid.paused) { vid.play().catch(() => {}); btn.innerText = "⏸"; }
+    else { vid.pause(); btn.innerText = "▶"; }
+}
+
+function seekFullVid(val) {
+    const vid = document.getElementById("fullVidEl");
+    if (vid.duration) vid.currentTime = (val / 100) * vid.duration;
+}
+
+function closeFullVideoModal() {
+    const vid = document.getElementById("fullVidEl");
+    vid.pause();
+    vid.src = "";
+    document.getElementById("videoFullModal").style.display = "none";
+}
+
+// ==================== بناء وتحديث فقاعة الرسالة بمكانها ====================
+function buildReactChipHTML(em, usersList) {
+    const mine = usersList.includes(me.username);
+    const avHTML = usersList.slice(0, 2).map(u => {
+        const p = contactProfiles[u] || (u === me.username ? me : { name: u });
+        if (p.avatarImg) return `<span class="react-av" style="background-image:url(${p.avatarImg})"></span>`;
+        return `<span class="react-av" style="background:${p.avatarColor || GRADIENTS[0]}">${escapeHTML((p.name || u).charAt(0))}</span>`;
+    }).join("");
+    const cnt = usersList.length > 2 ? `<span>${usersList.length}</span>` : "";
+    return `<span class="react-chip ${mine ? 'mine' : ''}" data-em="${escapeHTML(em)}">${em}${avHTML}${cnt}</span>`;
+}
+
+function buildReactionsHTML(id, m, isChannel) {
+    if (isChannel) {
+        let pills = "";
+        CH_REACTIONS.forEach(r => {
+            const voters = m.chReactions?.[r.k] || {};
+            const cnt = Object.keys(voters).length;
+            const mine = !!voters[me.username];
+            if (cnt > 0) {
+                pills += `<button class="ch-pill ${mine ? 'mine' : ''}" onclick="event.stopPropagation(); toggleChannelReaction('${id}','${r.k}',${mine})">${r.em} <span>${cnt}</span></button>`;
+            }
+        });
+        // زر سريع لإضافة أي تفاعل بأسلوب تليگرام المرتب
+        pills += `<button class="ch-add-react" title="إضافة تفاعل" onclick="event.stopPropagation(); openMsgActions('${id}', activeMsgsMap['${id}'])">+</button>`;
+        return pills;
+    }
+    if (!m.reactions) return "";
+    const grouped = {};
+    Object.entries(m.reactions).forEach(([u, em]) => {
+        if (!grouped[em]) grouped[em] = [];
+        grouped[em].push(u);
+    });
+    return Object.entries(grouped).map(([em, uList]) => buildReactChipHTML(em, uList)).join("");
+}
+
+function buildFooterHTML(m, isMe, isChannel) {
+    if (isChannel) {
+        const vCount = Object.keys(m.views || {}).length;
+        return `<span>👁️ ${vCount}</span><span>${formatTime(m.ts)}</span>`;
+    }
+    const tick = isMe && activeChatType === "dm"
+        ? (m._pending ? `<span class="ticks pending">🕒</span>` : `<span class="ticks ${m.seen ? 'seen' : ''}">${m.seen ? '✓✓' : '✓'}</span>`)
+        : (m._pending ? `<span class="ticks pending">🕒</span>` : "");
+    return `${m.edited ? '<span>(معدّلة)</span>' : ''}<span>${formatTime(m.ts)}</span>${tick}`;
+}
+
+function buildPollInnerHTML(id, poll) {
+    const votes = poll.votes || {};
+    const totalVotes = Object.keys(votes).length;
+    const myVote = votes[me.username];
+    let html = `<div class="poll-q">📊 ${escapeHTML(poll.question)}</div>`;
+    (poll.options || []).forEach((optText, idx) => {
+        const optCount = Object.values(votes).filter(v => v === idx).length;
+        const pct = totalVotes > 0 ? Math.round((optCount / totalVotes) * 100) : 0;
+        html += `
+            <div class="poll-opt ${myVote === idx ? 'voted' : ''}" onclick="event.stopPropagation(); voteInPoll('${id}', ${idx})">
+                <div class="poll-bar" style="width:${pct}%"></div>
+                <span>${myVote === idx ? '✓ ' : ''}${escapeHTML(optText)}</span>
+                <span>${pct}%</span>
+            </div>`;
+    });
+    html += `<div class="poll-meta">إجمالي الأصوات: ${totalVotes}</div>`;
+    return html;
+}
+
+function buildMessageNode(id, m) {
+    const isMe = m.sender === me.username;
+    const isChannel = activeChatType === "channel";
+    const isStickerLike = m.type === "sticker" || m.type === "img_sticker";
+
+    const wrap = document.createElement("div");
+    wrap.className = "msg-wrap " + (isChannel ? "channel-post" : (isMe ? "me" : "other"));
+    wrap.setAttribute("data-mid", id);
+
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble" + (isStickerLike ? " sticker-bubble" : "");
+
+    if (!isChannel) {
+        let lastTap = 0;
+        bubble.addEventListener("click", ev => {
+            if (ev.target.closest("button") || ev.target.closest(".vo-card") || ev.target.closest(".poll-opt") || ev.target.closest(".spoiler-txt") || ev.target.closest(".voice-player") || ev.target.closest(".custom-vid-box") || ev.target.closest(".react-chip") || ev.target.tagName === "IMG" || ev.target.tagName === "A") return;
+            const t = Date.now();
+            if (t - lastTap < 300) { selectedMsg = { id, data: activeMsgsMap[id] || m }; reactToSelected("❤️", true); }
+            lastTap = t;
+        });
+    }
+
+    const topBar = document.createElement("div");
+    topBar.className = "msg-top-bar";
+    const lbl = document.createElement("span");
+    lbl.className = "msg-sender-lbl";
+    if (activeChatType === "group" && !isMe) lbl.innerText = m.senderName || m.sender;
+    else if (isChannel) lbl.innerHTML = `${escapeHTML(activeSpaceObj?.name || "")} ${getVerifiedBadgeHTML(activeSpaceObj?.verified)}`;
+    else if (m.type === "audio") lbl.innerText = "🎤 رسالة صوتية";
+
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "msg-menu-trigger";
+    menuBtn.innerText = "⋮";
+    menuBtn.onclick = e => { e.stopPropagation(); openMsgActions(id, activeMsgsMap[id] || m); };
+    topBar.appendChild(lbl); topBar.appendChild(menuBtn);
+    bubble.appendChild(topBar);
+
+    if (m.replyTo) {
+        const rq = document.createElement("div");
+        rq.className = "reply-quote";
+        rq.innerHTML = `<strong>${escapeHTML(m.replyTo.senderName)}</strong><span>${escapeHTML(m.replyTo.preview)}</span>`;
+        bubble.appendChild(rq);
+    }
+
+    const contentBox = document.createElement("div");
+    contentBox.className = "msg-content-slot";
+
+    if (m.type === "text") {
+        const txt = document.createElement("div");
+        txt.className = "msg-text";
+        txt.innerHTML = formatRichText(m.content);
+        contentBox.appendChild(txt);
+    } else if (m.type === "sticker") {
+        const st = findStickerById(m.content);
+        const box = document.createElement("div"); box.className = "sticker-render"; box.style.background = st.bg;
+        box.innerHTML = `<div style="font-size:54px;">${st.em}</div><div style="font-size:12px; font-weight:800; color:#fff;">${escapeHTML(st.cap)}</div>`;
+        contentBox.appendChild(box);
+    } else if (m.type === "img_sticker") {
+        const img = document.createElement("img"); img.className = "sticker-img-render"; img.src = m.content;
+        img.onclick = () => openLightbox(m.content);
+        contentBox.appendChild(img);
+    } else if (m.type === "gif_card") {
+        const gc = findGifById(m.content);
+        const box = document.createElement("div");
+        box.className = "sticker-render";
+        box.style.cssText = `background:${gc.bg}; width:175px; height:112px;`;
+        box.innerHTML = `<div style="font-size:44px;">${gc.em}</div><div style="font-size:13px; font-weight:800; color:#fff;">${escapeHTML(gc.cap)}</div>`;
+        contentBox.appendChild(box);
+    } else if (m.type === "image") {
+        const img = document.createElement("img"); img.className = "msg-img"; img.src = m.content;
+        img.onclick = () => openLightbox(m.content); contentBox.appendChild(img);
+    } else if (m.type === "view_once") {
+        const vo = document.createElement("div");
+        const opened = !!m.voOpened;
+        vo.className = "vo-card" + (opened ? " opened" : "");
+        if (opened) vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
+        else if (isMe) vo.innerHTML = `<span>💣</span><span>صورة عرض لمرة واحدة (بانتظار الفتح)</span>`;
+        else {
+            vo.innerHTML = `<span>💣</span><span>اضغط لفتح الصورة لمرة واحدة</span>`;
+            vo.onclick = () => openViewOnce(id, m.content);
+        }
+        contentBox.appendChild(vo);
+    } else if (m.type === "audio") {
+        contentBox.appendChild(buildVoicePlayer(m.content, id));
+    } else if (m.type === "video") {
+        contentBox.appendChild(buildCustomVideoCard(m.content));
+    } else if (m.type === "poll" && m.poll) {
+        const pb = document.createElement("div");
+        pb.className = "poll-box";
+        pb.innerHTML = buildPollInnerHTML(id, m.poll);
+        contentBox.appendChild(pb);
+    }
+    bubble.appendChild(contentBox);
+
+    if (isChannel) {
+        const chBar = document.createElement("div");
+        chBar.className = "ch-reactions";
+        chBar.innerHTML = buildReactionsHTML(id, m, true);
+        bubble.appendChild(chBar);
+
+        const footer = document.createElement("div");
+        footer.className = "msg-footer";
+        footer.style.marginTop = "6px";
+        footer.innerHTML = buildFooterHTML(m, isMe, true);
+        bubble.appendChild(footer);
+    } else {
+        const bottomRow = document.createElement("div");
+        bottomRow.className = "msg-bottom-row";
+
+        const reactSlot = document.createElement("div");
+        reactSlot.className = "in-bubble-reacts";
+        reactSlot.innerHTML = buildReactionsHTML(id, m, false);
+        reactSlot.onclick = ev => {
+            const chip = ev.target.closest(".react-chip");
+            if (!chip) return;
+            ev.stopPropagation();
+            selectedMsg = { id, data: activeMsgsMap[id] || m };
+            reactToSelected(chip.getAttribute("data-em"));
+        };
+
+        const footer = document.createElement("div");
+        footer.className = "msg-footer";
+        footer.innerHTML = buildFooterHTML(m, isMe, false);
+
+        bottomRow.appendChild(reactSlot);
+        bottomRow.appendChild(footer);
+        bubble.appendChild(bottomRow);
+    }
+
+    wrap.appendChild(bubble);
+    return wrap;
+}
+
+// التحديث الموضعي الذكي — يحدّث التفاعل والوقت والـ poll فقط بدون لمس الصوت أو الفيديو أو الشاشة!
+function updateMessageNodeInPlace(el, id, m) {
+    const isMe = m.sender === me.username;
+    const isChannel = activeChatType === "channel";
+
+    if (m.type === "text") {
+        const txt = el.querySelector(".msg-text");
+        if (txt) txt.innerHTML = formatRichText(m.content);
+    } else if (m.type === "poll" && m.poll) {
+        const pb = el.querySelector(".poll-box");
+        if (pb) pb.innerHTML = buildPollInnerHTML(id, m.poll);
+    } else if (m.type === "view_once" && m.voOpened) {
+        const vo = el.querySelector(".vo-card");
+        if (vo && !vo.classList.contains("opened")) {
+            vo.classList.add("opened");
+            vo.onclick = null;
+            vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
+        }
+    }
+
+    if (isChannel) {
+        const chBar = el.querySelector(".ch-reactions");
+        if (chBar) chBar.innerHTML = buildReactionsHTML(id, m, true);
+    } else {
+        const rSlot = el.querySelector(".in-bubble-reacts");
+        if (rSlot) rSlot.innerHTML = buildReactionsHTML(id, m, false);
+    }
+
+    const foot = el.querySelector(".msg-footer");
+    if (foot) foot.innerHTML = buildFooterHTML(m, isMe, isChannel);
 }
 
 function closeActiveChat() {
@@ -811,7 +1467,7 @@ function updateChatInputLockState() {
     }
     if (activeChatType === "channel" && activeSpaceObj && activeSpaceObj.owner !== me.username) {
         normal.style.display = "none"; notice.style.display = "block";
-        notice.innerText = "📢 قناة للعرض فقط — تفاعل وصوّت من الأزرار أسفل كل منشور";
+        notice.innerText = "📢 قناة للعرض فقط — اضغط + أو التفاعلات أسفل المنشور";
         return;
     }
     notice.style.display = "none";
@@ -868,197 +1524,13 @@ function getActiveRoomBasePath() {
     return `space_msgs/${activeRoomId}`;
 }
 
-function renderMessages(msgsObj, token) {
-    if (token !== activeRoomToken) return;
-    const area = document.getElementById("messagesList");
-    const frag = document.createDocumentFragment();
-    const entries = Object.entries(msgsObj)
-        .filter(([id, m]) => m && !(m.deletedFor && m.deletedFor[me.username]))
-        .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
-
-    if (entries.length === 0) {
-        area.innerHTML = `<div style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); backdrop-filter:blur(14px); padding:14px 20px; border-radius:18px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
-        return;
-    }
-
-    // تجميع تحديثات "تمت القراءة" خارج حلقة الرسم لمنع تكرار الرسائل نهائياً
-    const pendingSeenUpdates = {};
-    const roomIdSnap = activeRoomId;
-    const chatTypeSnap = activeChatType;
-
-    const renderedIds = new Set();
-    entries.forEach(([id, m]) => {
-        if (renderedIds.has(id)) return;
-        renderedIds.add(id);
-
-        const isMe = m.sender === me.username;
-        const isChannel = chatTypeSnap === "channel";
-
-        if (chatTypeSnap === "dm" && !isMe && !m.seen && !seenMarkedSet.has(id)) {
-            seenMarkedSet.add(id);
-            pendingSeenUpdates[`${id}/seen`] = true;
-        } else if (isChannel && (!m.views || !m.views[me.username]) && !seenMarkedSet.has(id)) {
-            seenMarkedSet.add(id);
-            pendingSeenUpdates[`${id}/views/${me.username}`] = true;
-        }
-
-        const wrap = document.createElement("div");
-        wrap.className = "msg-wrap " + (isChannel ? "channel-post" : (isMe ? "me" : "other"));
-
-        const bubble = document.createElement("div");
-        bubble.className = "msg-bubble" + (m.type === "sticker" ? " sticker-bubble" : "");
-
-        if (!isChannel) {
-            let lastTap = 0;
-            bubble.addEventListener("click", ev => {
-                if (ev.target.closest("button") || ev.target.closest(".vo-card") || ev.target.closest(".poll-opt") || ["AUDIO", "VIDEO", "IMG"].includes(ev.target.tagName)) return;
-                const t = Date.now();
-                if (t - lastTap < 300) { selectedMsg = { id, data: m }; reactToSelected("❤️", true); }
-                lastTap = t;
-            });
-        }
-
-        const topBar = document.createElement("div");
-        topBar.className = "msg-top-bar";
-        const lbl = document.createElement("span");
-        lbl.className = "msg-sender-lbl";
-        if (chatTypeSnap === "group" && !isMe) lbl.innerText = m.senderName || m.sender;
-        else if (isChannel) lbl.innerHTML = `${escapeHTML(activeSpaceObj?.name || "")} ${getVerifiedBadgeHTML(activeSpaceObj?.verified)}`;
-        else if (m.type === "audio") lbl.innerText = "🎤 بصمة صوتية";
-
-        const menuBtn = document.createElement("button");
-        menuBtn.className = "msg-menu-trigger";
-        menuBtn.innerText = "⋮";
-        menuBtn.onclick = e => { e.stopPropagation(); openMsgActions(id, m); };
-        topBar.appendChild(lbl); topBar.appendChild(menuBtn);
-        bubble.appendChild(topBar);
-
-        if (m.replyTo) {
-            const rq = document.createElement("div");
-            rq.className = "reply-quote";
-            rq.innerHTML = `<strong>${escapeHTML(m.replyTo.senderName)}</strong><span>${escapeHTML(m.replyTo.preview)}</span>`;
-            bubble.appendChild(rq);
-        }
-
-        if (m.type === "text") {
-            const txt = document.createElement("div"); txt.className = "msg-text"; txt.innerText = m.content;
-            bubble.appendChild(txt);
-        } else if (m.type === "sticker") {
-            const st = findStickerById(m.content);
-            const box = document.createElement("div"); box.className = "sticker-render"; box.style.background = st.bg;
-            box.innerHTML = `<div style="font-size:54px;">${st.em}</div><div style="font-size:12px; font-weight:800; color:#fff;">${escapeHTML(st.cap)}</div>`;
-            bubble.appendChild(box);
-        } else if (m.type === "image") {
-            const img = document.createElement("img"); img.className = "msg-img"; img.src = m.content;
-            img.onclick = () => openLightbox(m.content); bubble.appendChild(img);
-        } else if (m.type === "view_once") {
-            const vo = document.createElement("div");
-            const opened = !!m.voOpened;
-            vo.className = "vo-card" + (opened ? " opened" : "");
-            if (opened) {
-                vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
-            } else if (isMe) {
-                vo.innerHTML = `<span>💣</span><span>صورة عرض لمرة واحدة (بانتظار الفتح)</span>`;
-            } else {
-                vo.innerHTML = `<span>💣</span><span>اضغط لفتح الصورة لمرة واحدة</span>`;
-                vo.onclick = () => openViewOnce(id, m.content);
-            }
-            bubble.appendChild(vo);
-        } else if (m.type === "audio") {
-            const aw = document.createElement("div"); aw.className = "msg-audio-wrap";
-            const aud = document.createElement("audio"); aud.controls = true; aud.src = m.content;
-            aw.appendChild(aud); bubble.appendChild(aw);
-        } else if (m.type === "video") {
-            const vid = document.createElement("video"); vid.className = "msg-video"; vid.controls = true; vid.src = m.content;
-            bubble.appendChild(vid);
-        } else if (m.type === "poll" && m.poll) {
-            const pb = document.createElement("div"); pb.className = "poll-box";
-            const votes = m.poll.votes || {};
-            const totalVotes = Object.keys(votes).length;
-            const myVote = votes[me.username];
-            let optsHTML = `<div class="poll-q">📊 ${escapeHTML(m.poll.question)}</div>`;
-            (m.poll.options || []).forEach((optText, idx) => {
-                const optCount = Object.values(votes).filter(v => v === idx).length;
-                const pct = totalVotes > 0 ? Math.round((optCount / totalVotes) * 100) : 0;
-                optsHTML += `
-                    <div class="poll-opt ${myVote === idx ? 'voted' : ''}" onclick="voteInPoll('${id}', ${idx})">
-                        <div class="poll-bar" style="width:${pct}%"></div>
-                        <span>${myVote === idx ? '✓ ' : ''}${escapeHTML(optText)}</span>
-                        <span>${pct}%</span>
-                    </div>`;
-            });
-            optsHTML += `<div class="poll-meta">إجمالي الأصوات: ${totalVotes}</div>`;
-            pb.innerHTML = optsHTML;
-            bubble.appendChild(pb);
-        }
-
-        if (isChannel) {
-            const chBar = document.createElement("div");
-            chBar.className = "ch-reactions";
-            CH_REACTIONS.forEach(r => {
-                const voters = m.chReactions?.[r.k] || {};
-                const cnt = Object.keys(voters).length;
-                const mine = !!voters[me.username];
-                const pill = document.createElement("button");
-                pill.className = "ch-pill" + (mine ? " mine" : "");
-                pill.innerHTML = `${r.em} ${cnt > 0 ? `<span>${cnt}</span>` : ""}`;
-                pill.onclick = () => toggleChannelReaction(id, r.k, mine);
-                chBar.appendChild(pill);
-            });
-            bubble.appendChild(chBar);
-        }
-
-        const footer = document.createElement("div");
-        footer.className = "msg-footer";
-        if (isChannel) {
-            const vCount = Object.keys(m.views || {}).length;
-            footer.innerHTML = `<span>👁️ ${vCount}</span><span>${formatTime(m.ts)}</span>`;
-        } else {
-            footer.innerHTML = `${m.edited ? '<span>(معدّلة)</span>' : ''}<span>${formatTime(m.ts)}</span>` +
-                (isMe && chatTypeSnap === "dm" ? `<span class="ticks ${m.seen ? 'seen' : ''}">${m.seen ? '✓✓' : '✓'}</span>` : "");
-        }
-        bubble.appendChild(footer);
-        wrap.appendChild(bubble);
-
-        if (!isChannel && m.reactions) {
-            const rBar = document.createElement("div"); rBar.className = "reactions-bar";
-            const counts = {};
-            Object.values(m.reactions).forEach(em => counts[em] = (counts[em] || 0) + 1);
-            Object.entries(counts).forEach(([em, c]) => {
-                const pill = document.createElement("span"); pill.className = "react-pill";
-                pill.innerText = c > 1 ? `${em} ${c}` : em;
-                pill.onclick = () => { selectedMsg = { id, data: m }; reactToSelected(em); };
-                rBar.appendChild(pill);
-            });
-            wrap.appendChild(rBar);
-        }
-
-        frag.appendChild(wrap);
-    });
-
-    area.innerHTML = "";
-    area.appendChild(frag);
-    area.scrollTop = area.scrollHeight;
-
-    // تنفيذ تحديثات القراءة بشكل منفصل بعد انتهاء الرسم
-    if (Object.keys(pendingSeenUpdates).length > 0) {
-        setTimeout(() => {
-            if (token !== activeRoomToken) return;
-            const base = chatTypeSnap === "dm" ? `chats/${roomIdSnap}/messages` : `space_msgs/${roomIdSnap}`;
-            db.ref(base).update(pendingSeenUpdates).catch(() => {});
-        }, 160);
-    }
-}
-
-// ==================== مربع الكتابة المتمدد ====================
 function handleMsgInputResize(el) {
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 125) + "px";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
 }
 
 function handleMsgKeydown(e) {
-    // على الكمبيوتر: Enter يرسل و Shift+Enter ينزل سطر، وعلى الموبايل: Enter ينزل سطر مريح للكتابة الطويلة
     if (e.key === "Enter" && !e.shiftKey && !e.repeat && window.innerWidth >= 860) {
         e.preventDefault();
         sendTextMessage();
@@ -1066,7 +1538,7 @@ function handleMsgKeydown(e) {
 }
 
 function handleTyping() {
-    if (activeChatType !== "dm" || !activeRoomId) return;
+    if (activeChatType !== "dm" || !activeRoomId || !isDbConnected) return;
     db.ref(`chats/${activeRoomId}/typing/${me.username}`).set(true);
     clearTimeout(typingTimeout);
     typingTimeout = setTimeout(() => {
@@ -1074,35 +1546,71 @@ function handleTyping() {
     }, 1800);
 }
 
+// إرسال فوري + دعم النت الضعيف (تظهر الرسالة فوراً بـ 🕒 وتصل تلقائياً)
 async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     if (!activeRoomId) return;
     const now = Date.now();
     const sig = `${activeRoomId}|${type}|${String(content).slice(0, 60)}`;
-    if (sendLock || (sig === lastSentSig && now - lastSentTs < 1200)) return;
+    if (sendLock || (sig === lastSentSig && now - lastSentTs < 950)) return;
 
     sendLock = true;
     lastSentSig = sig;
     lastSentTs = now;
 
     const msgId = "m_" + now + "_" + Math.random().toString(36).slice(2, 8);
+    const dbPath = getActiveRoomBasePath();
+    const chatTypeCopy = activeChatType;
+    const partnerCopy = activePartner;
+    const roomIdCopy = activeRoomId;
+
     const payload = {
         id: msgId, sender: me.username, senderName: me.name,
         type, content, seen: false, ts: now, ...extra
     };
     if (replyTarget) { payload.replyTo = replyTarget; cancelReplyOrEdit(); }
 
+    // رسم فوري متفائل للشاشة حتى يشعر المستخدم بسرعة تليگرام حتى على نت ضعيف
+    const area = document.getElementById("messagesList");
+    const hint = area.querySelector(".empty-room-hint");
+    if (hint) hint.remove();
+    const pendingObj = { ...payload, _pending: true };
+    activeMsgsMap[msgId] = pendingObj;
+    appendMessageWithDateSep(area, msgId, pendingObj);
+    area.scrollTop = area.scrollHeight;
+    playSendSound();
+
+    // حفظ مؤقت في طابور النت الضعيف للرسائل النصية والملصقات
+    const isLight = type === "text" || type === "sticker" || type === "gif_card" || type === "poll";
+    if (isLight && (!navigator.onLine || !isDbConnected)) {
+        offlineQueue.push({ owner: me.username, dbPath, chatType: chatTypeCopy, partner: partnerCopy, roomId: roomIdCopy, previewLabel, payload });
+        saveOfflineQueue();
+        showToast("تم حفظ الرسالة وستُرسل تلقائياً عند توفر الشبكة 🕒");
+        setTimeout(() => { sendLock = false; }, 220);
+        return;
+    }
+
     try {
-        await db.ref(`${getActiveRoomBasePath()}/${msgId}`).set(payload);
-        if (activeChatType === "dm") {
-            await db.ref(`user_contacts/${activePartner}/${me.username}`).update({ addedAt: now });
-            await db.ref(`chat_meta/${activeRoomId}`).set({
-                lastMsg: previewLabel, lastSender: me.username, lastTs: now, unreadFor: activePartner
-            });
-            db.ref(`chats/${activeRoomId}/typing/${me.username}`).set(false);
+        await db.ref(`${dbPath}/${msgId}`).set(payload);
+        if (chatTypeCopy === "dm" && partnerCopy) {
+            db.ref(`user_contacts/${partnerCopy}/${me.username}`).update({ addedAt: now }).catch(() => {});
+            db.ref(`chat_meta/${roomIdCopy}`).set({
+                lastMsg: previewLabel, lastSender: me.username, lastTs: now, unreadFor: partnerCopy
+            }).catch(() => {});
+            db.ref(`chats/${roomIdCopy}/typing/${me.username}`).set(false).catch(() => {});
         }
-        playSendSound();
+        const el = area.querySelector(`.msg-wrap[data-mid="${msgId}"]`);
+        activeMsgsMap[msgId] = payload;
+        if (el) updateMessageNodeInPlace(el, msgId, payload);
+    } catch {
+        if (isLight) {
+            offlineQueue.push({ owner: me.username, dbPath, chatType: chatTypeCopy, partner: partnerCopy, roomId: roomIdCopy, previewLabel, payload });
+            saveOfflineQueue();
+            showToast("النت ضعيف — ستُرسل الرسالة تلقائياً 🕒");
+        } else {
+            showToast("النت ضعيف جداً لرفع الوسائط حالياً");
+        }
     } finally {
-        setTimeout(() => { sendLock = false; }, 350);
+        setTimeout(() => { sendLock = false; }, 240);
     }
 }
 
@@ -1111,7 +1619,7 @@ async function sendTextMessage() {
     const txt = inp.value.trim();
     if (!txt) return;
     inp.value = "";
-    inp.style.height = "41px";
+    inp.style.height = "40px";
 
     if (editingMsgId && activeRoomId) {
         const targetId = editingMsgId;
@@ -1125,6 +1633,7 @@ async function sendTextMessage() {
 
 // ==================== 5. خيارات الرسالة والحذف ====================
 function openMsgActions(id, data) {
+    if (!data) return;
     selectedMsg = { id, data };
     const isMine = data.sender === me.username;
     const isSpaceOwner = activeSpaceObj && activeSpaceObj.owner === me.username;
@@ -1141,7 +1650,16 @@ function closeMsgActions() { document.getElementById("msgActionModal").style.dis
 
 async function reactToSelected(emoji, forceSet = false) {
     if (!selectedMsg || !activeRoomId) return;
-    const cur = selectedMsg.data.reactions?.[me.username];
+    if (activeChatType === "channel") {
+        const found = CH_REACTIONS.find(r => r.em === emoji) || CH_REACTIONS[0];
+        const live = activeMsgsMap[selectedMsg.id] || selectedMsg.data;
+        const currentlyMine = !!(live.chReactions?.[found.k]?.[me.username]);
+        toggleChannelReaction(selectedMsg.id, found.k, currentlyMine);
+        closeMsgActions();
+        return;
+    }
+    const live = activeMsgsMap[selectedMsg.id] || selectedMsg.data;
+    const cur = live.reactions?.[me.username];
     await db.ref(`${getActiveRoomBasePath()}/${selectedMsg.id}/reactions/${me.username}`).set((!forceSet && cur === emoji) ? null : emoji);
     closeMsgActions();
 }
@@ -1227,7 +1745,7 @@ async function clearChatForMe() {
     showToast("تم التنظيف من عندك فقط");
 }
 
-// ==================== 6. محرّك المكالمات الاحترافي (TURN + STUN + إعادة ربط تلقائي) ====================
+// ==================== 6. محرّك المكالمات (TURN + STUN + إعادة ربط تلقائي) ====================
 const RTC_CONFIG = {
     iceCandidatePoolSize: 8,
     bundlePolicy: "max-bundle",
@@ -1265,22 +1783,11 @@ let callListeners = [], pendingIncoming = null, pendingRemoteIce = [], localIceQ
 let callNodeReady = false, isCaller = false, callConnectWatchdog = null;
 let callTimer = null, callSec = 0, micMuted = false, camOff = false, facingMode = "user";
 
-function setCallNetState(txt) {
-    const el = document.getElementById("callNetState");
-    if (el) el.innerText = txt || "";
-}
-
-function clearCallListeners() {
-    callListeners.forEach(r => r.off());
-    callListeners = [];
-    clearTimeout(callConnectWatchdog);
-    callConnectWatchdog = null;
-}
-
+function setCallNetState(txt) { const el = document.getElementById("callNetState"); if (el) el.innerText = txt || ""; }
+function clearCallListeners() { callListeners.forEach(r => r.off()); callListeners = []; clearTimeout(callConnectWatchdog); callConnectWatchdog = null; }
 function startCallTimer() {
     if (callTimer) return;
-    stopRingtone();
-    clearTimeout(callConnectWatchdog);
+    stopRingtone(); clearTimeout(callConnectWatchdog);
     document.getElementById("reconnectCallBtn").style.display = "none";
     setCallNetState("اتصال مشفّر ومستقر 🟢");
     callSec = 0;
@@ -1293,17 +1800,13 @@ function startCallTimer() {
 async function acquireMedia(withVideo) {
     const constraints = {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: withVideo ? { facingMode: facingMode, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } } : false
+        video: withVideo ? { facingMode, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } } : false
     };
-    try {
-        return await navigator.mediaDevices.getUserMedia(constraints);
-    } catch {
+    try { return await navigator.mediaDevices.getUserMedia(constraints); }
+    catch {
         if (withVideo) {
             try { return await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); }
-            catch {
-                showToast("تعذر فتح الكاميرا — تم التحويل لصوت فقط");
-                return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            }
+            catch { showToast("تعذر فتح الكاميرا — تم التحويل لصوت فقط"); return await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
         }
         throw new Error("no_media");
     }
@@ -1312,9 +1815,7 @@ async function acquireMedia(withVideo) {
 function attachLocalVideo(stream) {
     const lv = document.getElementById("localVideo");
     const hasVid = stream.getVideoTracks().length > 0;
-    lv.srcObject = stream;
-    lv.muted = true;
-    lv.style.display = hasVid ? "block" : "none";
+    lv.srcObject = stream; lv.muted = true; lv.style.display = hasVid ? "block" : "none";
     if (hasVid) lv.play().catch(() => {});
     document.getElementById("flipCamBtn").style.display = hasVid ? "flex" : "none";
     document.getElementById("camBtn").style.display = hasVid ? "flex" : "none";
@@ -1322,16 +1823,11 @@ function attachLocalVideo(stream) {
 
 function bindRemoteTrackHandler(peerConn) {
     remoteStream = new MediaStream();
-    const rv = document.getElementById("remoteVideo");
-    const ra = document.getElementById("remoteAudio");
-    rv.srcObject = remoteStream;
-    ra.srcObject = remoteStream;
-
+    const rv = document.getElementById("remoteVideo"), ra = document.getElementById("remoteAudio");
+    rv.srcObject = remoteStream; ra.srcObject = remoteStream;
     peerConn.ontrack = ev => {
         if (ev.streams && ev.streams[0]) {
-            ev.streams[0].getTracks().forEach(tr => {
-                if (!remoteStream.getTracks().some(t => t.id === tr.id)) remoteStream.addTrack(tr);
-            });
+            ev.streams[0].getTracks().forEach(tr => { if (!remoteStream.getTracks().some(t => t.id === tr.id)) remoteStream.addTrack(tr); });
         } else if (ev.track && !remoteStream.getTracks().some(t => t.id === ev.track.id)) {
             remoteStream.addTrack(ev.track);
         }
@@ -1356,15 +1852,11 @@ function setupCallBackdrop(partnerObj, label) {
 function attachCallStateWatchers(peerConn) {
     const onStateChange = () => {
         if (!pc || pc !== peerConn) return;
-        const st = pc.connectionState;
-        const ice = pc.iceConnectionState;
-
-        if (st === "connected" || ice === "connected" || ice === "completed") {
-            startCallTimer();
-        } else if (ice === "checking" || st === "connecting") {
-            setCallNetState("جاري فتح المسار الشبكي (TURN/STUN)...");
-        } else if (ice === "disconnected" || st === "disconnected") {
-            setCallNetState("ضعف مؤقت بالشبكة — جاري إعادة الربط...");
+        const st = pc.connectionState, ice = pc.iceConnectionState;
+        if (st === "connected" || ice === "connected" || ice === "completed") startCallTimer();
+        else if (ice === "checking" || st === "connecting") setCallNetState("جاري فتح المسار الشبكي...");
+        else if (ice === "disconnected" || st === "disconnected") {
+            setCallNetState("ضعف مؤقت — جاري إعادة الربط...");
             document.getElementById("reconnectCallBtn").style.display = "flex";
         } else if (ice === "failed" || st === "failed") {
             setCallNetState("تعثر المسار — اضغط 📡 لإعادة الربط");
@@ -1382,22 +1874,15 @@ async function flushPendingRemoteIce() {
         try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
     }
 }
-
 function flushLocalIceQueue(subPath) {
     if (!callNodeReady || !activeCallPath) return;
-    while (localIceQueue.length > 0) {
-        const c = localIceQueue.shift();
-        db.ref(`${activeCallPath}/${subPath}`).push(c).catch(() => {});
-    }
+    while (localIceQueue.length > 0) db.ref(`${activeCallPath}/${subPath}`).push(localIceQueue.shift()).catch(() => {});
 }
 
 function listenForIncomingCalls() {
     db.ref("calls/" + me.username).on("value", snap => {
         const data = snap.val();
-        if (!data) {
-            if (activeCallPath === "calls/" + me.username && (pc || pendingIncoming)) endCall(false);
-            return;
-        }
+        if (!data) { if (activeCallPath === "calls/" + me.username && (pc || pendingIncoming)) endCall(false); return; }
         if (myBlocked[data.from]) { db.ref("calls/" + me.username + "/status").set("rejected"); return; }
         if (data.ts && Date.now() - data.ts > 50000 && data.status === "ringing") { db.ref("calls/" + me.username).remove(); return; }
         if (data.status === "ended" || data.status === "rejected") {
@@ -1405,10 +1890,7 @@ function listenForIncomingCalls() {
             return;
         }
         if (data.status === "ringing" && data.offer && !pc && !pendingIncoming) {
-            pendingIncoming = data;
-            activeCallPath = "calls/" + me.username;
-            activeCallId = data.callId || "";
-            isCaller = false;
+            pendingIncoming = data; activeCallPath = "calls/" + me.username; activeCallId = data.callId || ""; isCaller = false;
             const caller = contactProfiles[data.from] || { name: data.fromName || data.from };
             document.getElementById("callName").innerHTML = `${escapeHTML(caller.name)} ${getVerifiedBadgeHTML(caller.verified)}`;
             document.getElementById("callStatus").innerText = data.video ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...";
@@ -1428,12 +1910,8 @@ async function startCall(withVideo) {
     if (activeChatType !== "dm" || !activePartner) return;
     if (myBlocked[activePartner] || blockedByPartner) { showToast("لا يمكن الاتصال بهذا الحساب"); return; }
     if (pc) return;
-
-    facingMode = "user";
-    pendingRemoteIce = [];
-    localIceQueue = [];
-    callNodeReady = false;
-    isCaller = true;
+    stopAnyVoicePlayback();
+    facingMode = "user"; pendingRemoteIce = []; localIceQueue = []; callNodeReady = false; isCaller = true;
     activeCallId = "c_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
 
     try { localStream = await acquireMedia(withVideo); }
@@ -1458,7 +1936,6 @@ async function startCall(withVideo) {
     bindRemoteTrackHandler(pc);
     attachCallStateWatchers(pc);
 
-    // حجز المسارات مؤقتاً حتى ينكتب الطلب بقاعدة البيانات (إصلاح مشكلة المسح التلقائي)
     pc.onicecandidate = ev => {
         if (!ev.candidate || !activeCallPath) return;
         const json = ev.candidate.toJSON();
@@ -1469,15 +1946,9 @@ async function startCall(withVideo) {
     const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
     await pc.setLocalDescription(offer);
 
-    // إنشاء عقدة المكالمة أولاً ثم دفع كل مسارات الشبكة
     await db.ref(activeCallPath).set({
-        callId: activeCallId,
-        from: me.username,
-        fromName: me.name,
-        video: hasVid,
-        status: "ringing",
-        offer: { type: offer.type, sdp: offer.sdp, rev: 1 },
-        ts: Date.now()
+        callId: activeCallId, from: me.username, fromName: me.name, video: hasVid, status: "ringing",
+        offer: { type: offer.type, sdp: offer.sdp, rev: 1 }, ts: Date.now()
     });
     callNodeReady = true;
     flushLocalIceQueue("offerCandidates");
@@ -1485,14 +1956,11 @@ async function startCall(withVideo) {
     let handledAnswerRev = 0;
     const ansRef = db.ref(activeCallPath + "/answer"); callListeners.push(ansRef);
     ansRef.on("value", async s => {
-        const ans = s.val();
-        if (!ans || !pc) return;
-        const rev = ans.rev || 1;
-        if (rev <= handledAnswerRev) return;
+        const ans = s.val(); if (!ans || !pc) return;
+        const rev = ans.rev || 1; if (rev <= handledAnswerRev) return;
         handledAnswerRev = rev;
         stopRingtone();
         document.getElementById("callStatus").innerText = "جاري ربط الصوت والصورة...";
-        setCallNetState("تم الرد — جاري توصيل المسار...");
         try {
             await pc.setRemoteDescription(new RTCSessionDescription({ type: ans.type, sdp: ans.sdp }));
             await flushPendingRemoteIce();
@@ -1515,28 +1983,20 @@ async function startCall(withVideo) {
     });
 
     const stRef = db.ref(activeCallPath + "/status"); callListeners.push(stRef);
-    stRef.on("value", s => {
-        if (s.val() === "ended" || s.val() === "rejected") { showToast("انتهت المكالمة"); endCall(false); }
-    });
+    stRef.on("value", s => { if (s.val() === "ended" || s.val() === "rejected") { showToast("انتهت المكالمة"); endCall(false); } });
 }
 
 async function answerIncomingCall() {
     if (!pendingIncoming) return;
-    stopRingtone();
-    const data = pendingIncoming;
-    pendingIncoming = null;
-    pendingRemoteIce = [];
-    localIceQueue = [];
-    callNodeReady = true;
-    isCaller = false;
-    facingMode = "user";
+    stopRingtone(); stopAnyVoicePlayback();
+    const data = pendingIncoming; pendingIncoming = null; pendingRemoteIce = []; localIceQueue = [];
+    callNodeReady = true; isCaller = false; facingMode = "user";
 
     try { localStream = await acquireMedia(!!data.video); }
     catch { showToast("تعذر فتح المايكروفون/الكاميرا"); endCall(true); return; }
 
     document.getElementById("acceptCallBtn").style.display = "none";
     document.getElementById("callStatus").innerText = "جاري الربط...";
-    setCallNetState("جاري فتح المسار الشبكي...");
     attachLocalVideo(localStream);
 
     pc = new RTCPeerConnection(RTC_CONFIG);
@@ -1545,9 +2005,7 @@ async function answerIncomingCall() {
     attachCallStateWatchers(pc);
 
     pc.onicecandidate = ev => {
-        if (ev.candidate && activeCallPath) {
-            db.ref(activeCallPath + "/answerCandidates").push(ev.candidate.toJSON()).catch(() => {});
-        }
+        if (ev.candidate && activeCallPath) db.ref(activeCallPath + "/answerCandidates").push(ev.candidate.toJSON()).catch(() => {});
     };
 
     const ocRef = db.ref(activeCallPath + "/offerCandidates"); callListeners.push(ocRef);
@@ -1561,90 +2019,57 @@ async function answerIncomingCall() {
     await flushPendingRemoteIce();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await db.ref(activeCallPath).update({
-        status: "connected",
-        answer: { type: answer.type, sdp: answer.sdp, rev: data.offer.rev || 1 }
-    });
+    await db.ref(activeCallPath).update({ status: "connected", answer: { type: answer.type, sdp: answer.sdp, rev: data.offer.rev || 1 } });
 
-    // الاستماع لأي إعادة تفاوض (ICE Restart) من المتصل في حال ضعف الشبكة
     let handledOfferRev = data.offer.rev || 1;
     const offRef = db.ref(activeCallPath + "/offer"); callListeners.push(offRef);
     offRef.on("value", async s => {
-        const newOff = s.val();
-        if (!newOff || !pc) return;
-        const rev = newOff.rev || 1;
-        if (rev <= handledOfferRev) return;
+        const newOff = s.val(); if (!newOff || !pc) return;
+        const rev = newOff.rev || 1; if (rev <= handledOfferRev) return;
         handledOfferRev = rev;
-        setCallNetState("جاري إعادة ربط الشبكة...");
         try {
             await pc.setRemoteDescription(new RTCSessionDescription({ type: newOff.type, sdp: newOff.sdp }));
             await flushPendingRemoteIce();
             const newAns = await pc.createAnswer();
             await pc.setLocalDescription(newAns);
-            await db.ref(activeCallPath).update({
-                answer: { type: newAns.type, sdp: newAns.sdp, rev }
-            });
+            await db.ref(activeCallPath).update({ answer: { type: newAns.type, sdp: newAns.sdp, rev } });
         } catch {}
     });
 }
 
 async function restartCallIce() {
     if (!pc || !activeCallPath) return;
-    if (!isCaller) {
-        showToast("جاري انتظار إعادة الربط من المتصل...");
-        return;
-    }
+    if (!isCaller) { showToast("جاري انتظار إعادة الربط من المتصل..."); return; }
     try {
         setCallNetState("جاري إعادة الربط عبر مسار بديل...");
         const newOffer = await pc.createOffer({ iceRestart: true });
         await pc.setLocalDescription(newOffer);
-        await db.ref(activeCallPath + "/offer").set({
-            type: newOffer.type,
-            sdp: newOffer.sdp,
-            rev: Date.now()
-        });
+        await db.ref(activeCallPath + "/offer").set({ type: newOffer.type, sdp: newOffer.sdp, rev: Date.now() });
     } catch {}
 }
 
-function toggleMicMute() {
-    if (!localStream) return;
-    micMuted = !micMuted;
-    localStream.getAudioTracks().forEach(t => t.enabled = !micMuted);
-    document.getElementById("muteBtn").classList.toggle("muted", micMuted);
-}
-
-function toggleCamVideo() {
-    if (!localStream) return;
-    camOff = !camOff;
-    localStream.getVideoTracks().forEach(t => t.enabled = !camOff);
-    document.getElementById("camBtn").classList.toggle("muted", camOff);
-}
-
+function toggleMicMute() { if (!localStream) return; micMuted = !micMuted; localStream.getAudioTracks().forEach(t => t.enabled = !micMuted); document.getElementById("muteBtn").classList.toggle("muted", micMuted); }
+function toggleCamVideo() { if (!localStream) return; camOff = !camOff; localStream.getVideoTracks().forEach(t => t.enabled = !camOff); document.getElementById("camBtn").classList.toggle("muted", camOff); }
 async function flipCamera() {
     if (!localStream || !pc) return;
     facingMode = facingMode === "user" ? "environment" : "user";
     try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
-        const newTrack = newStream.getVideoTracks()[0];
-        const oldTrack = localStream.getVideoTracks()[0];
+        const ns = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+        const nt = ns.getVideoTracks()[0], ot = localStream.getVideoTracks()[0];
         const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
-        if (sender) await sender.replaceTrack(newTrack);
-        if (oldTrack) { oldTrack.stop(); localStream.removeTrack(oldTrack); }
-        localStream.addTrack(newTrack);
+        if (sender) await sender.replaceTrack(nt);
+        if (ot) { ot.stop(); localStream.removeTrack(ot); }
+        localStream.addTrack(nt);
         const lv = document.getElementById("localVideo");
-        lv.srcObject = localStream;
-        lv.style.transform = facingMode === "user" ? "scaleX(-1)" : "none";
+        lv.srcObject = localStream; lv.style.transform = facingMode === "user" ? "scaleX(-1)" : "none";
     } catch { showToast("لا توجد كاميرا ثانية متاحة"); }
 }
 
 async function endCall(notify = true) {
     stopRingtone(); clearInterval(callTimer); callTimer = null; clearCallListeners();
-    const path = activeCallPath; const wasRing = !!pendingIncoming;
-    activeCallPath = null; activeCallId = null; pendingIncoming = null;
-    pendingRemoteIce = []; localIceQueue = []; callNodeReady = false;
-    if (notify && path) {
-        try { await db.ref(path + "/status").set(wasRing ? "rejected" : "ended"); setTimeout(() => db.ref(path).remove(), 1200); } catch {}
-    }
+    const path = activeCallPath, wasRing = !!pendingIncoming;
+    activeCallPath = null; activeCallId = null; pendingIncoming = null; pendingRemoteIce = []; localIceQueue = []; callNodeReady = false;
+    if (notify && path) { try { await db.ref(path + "/status").set(wasRing ? "rejected" : "ended"); setTimeout(() => db.ref(path).remove(), 1200); } catch {} }
     if (pc) { try { pc.close(); } catch {} pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     remoteStream = null; micMuted = false; camOff = false;
@@ -1658,54 +2083,27 @@ async function endCall(notify = true) {
     document.getElementById("callOverlay").style.display = "none";
 }
 
-// ==================== 7. مولّد أيقونات PNG الأصلية (حل التثبيت بكروم) ====================
+// ==================== 7. مولّد أيقونات PNG ولوحة تحكم المطور (9988) ====================
 function downloadOfficialPngIcon(size) {
     const c = document.createElement("canvas");
     c.width = size; c.height = size;
     const ctx = c.getContext("2d");
-
-    // خلفية متدرجة أصلية كاملة الإطار بدون حواف
     const grad = ctx.createLinearGradient(0, 0, size, size);
-    grad.addColorStop(0, "#0ea5e9");
-    grad.addColorStop(0.55, "#3b82f6");
-    grad.addColorStop(1, "#4f46e5");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-
-    // رمز المفكرة الزجاجي بالمنتصف
-    ctx.fillStyle = "rgba(255,255,255,0.16)";
-    ctx.beginPath();
-    ctx.arc(size * 0.22, size * 0.2, size * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-
-    const w = size * 0.44, h = size * 0.56;
-    const x = (size - w) / 2, y = (size - h) / 2;
-    const r = size * 0.06;
-
+    grad.addColorStop(0, "#0ea5e9"); grad.addColorStop(0.55, "#3b82f6"); grad.addColorStop(1, "#4f46e5");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, size, size);
+    const w = size * 0.44, h = size * 0.56, x = (size - w) / 2, y = (size - h) / 2, r = size * 0.06;
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h);
-    ctx.lineTo(x + w / 2, y + h - size * 0.12);
-    ctx.lineTo(x, y + h);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-    ctx.fill();
-
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h); ctx.lineTo(x + w / 2, y + h - size * 0.12); ctx.lineTo(x, y + h);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); ctx.fill();
     c.toBlob(blob => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `icon-${size}.png`;
-        a.click();
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `icon-${size}.png`; a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-        showToast(`تم تنزيل icon-${size}.png الأصلي ✅`);
+        showToast(`تم تنزيل icon-${size}.png ✅`);
     }, "image/png");
 }
 
-// ==================== 8. لوحة تحكم المطور (9988) ====================
 function openAdminDashboard() {
     document.getElementById("adminScreen").style.display = "block";
     updateAdminButtons();
@@ -1789,7 +2187,7 @@ function openAdminDashboard() {
             </div>`).join("");
     });
 
-    db.ref("sys_logs").limitToLast(45).on("value", s => {
+    db.ref("sys_logs").limitToLast(40).on("value", s => {
         const logs = s.val();
         document.getElementById("admLogsList").innerHTML = logs ? Object.values(logs).reverse().map(l => `<div>• ${escapeHTML(l.msg)}</div>`).join("") : "لا توجد سجلات...";
     });
