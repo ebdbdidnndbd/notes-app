@@ -1,7 +1,7 @@
 {
   "name": "مفكرة دراسية - السادس العلمي",
   "short_name": "مفكرة السادس",
-  "start_url": "./index.html",
+  "start_url": "./notes-app.html",
   "display": "standalone",
   "background_color": "#070b14",
   "theme_color": "#0d1526",
