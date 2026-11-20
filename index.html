@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>مفكرة دراسية - السادس العلمي</title>
-    <link rel="manifest" href="./manifest.json?v=6">
+    <link rel="manifest" href="./manifest.json?v=7">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -156,7 +156,6 @@
                     </div>
 
                     <div id="activeChatView">
-                        <!-- شريط علوي زجاجي عائم بتصميم تليگرام العصري -->
                         <div class="chat-header">
                             <button class="pill-btn back-mobile" onclick="closeActiveChat()" title="رجوع">
                                 <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
@@ -198,7 +197,6 @@
                             <button class="icon-btn" style="width:30px; height:30px;" onclick="cancelReplyOrEdit()">✕</button>
                         </div>
 
-                        <!-- شريط تنسيق النص الاحترافي (نفس تليگرام) -->
                         <div id="formatBar">
                             <button type="button" onclick="applyTextFormat('bold')" title="عريض"><b>عريض</b></button>
                             <button type="button" onclick="applyTextFormat('italic')" title="مائل"><i>مائل</i></button>
@@ -250,7 +248,6 @@
                             </div>
                         </div>
 
-                        <!-- لوحة تليگرام السفلية: رموز تعبيرية + صور متحركة + ملصقات وإنشاء ملصق -->
                         <div id="stickerDrawer">
                             <div id="drawerBody" class="drawer-body"></div>
                             <div class="drawer-bottom-tabs">
@@ -264,7 +261,7 @@
                 </main>
             </section>
 
-            <!-- ===== القسم 2: المنشورات (بتصميم إنستگرام الاحترافي) ===== -->
+            <!-- ===== القسم 2: المنشورات ===== -->
             <section class="tab-view" id="view-feed">
                 <div class="feed-wrap">
                     <div class="top-bar">
@@ -292,7 +289,7 @@
                 </div>
             </section>
 
-            <!-- ===== القسم 4: ساحة الألعاب والتحديات (XO + مبارزة الأسئلة) ===== -->
+            <!-- ===== القسم 4: ساحة الألعاب والتحديات ===== -->
             <section class="tab-view" id="view-games">
                 <div class="games-wrap">
                     <div class="top-bar">
@@ -346,7 +343,6 @@
 
     <!-- ==================== النوافذ المنبثقة ==================== -->
 
-    <!-- البحث الموحد -->
     <div class="modal-bg" id="unifiedSearchModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
             <h3>🔍 البحث الموحد باليوزر</h3>
@@ -360,7 +356,6 @@
         </div>
     </div>
 
-    <!-- مركز الإشعارات والتفاعلات -->
     <div class="modal-bg sheet-bg" id="notificationsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:78dvh; display:flex; flex-direction:column;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -371,7 +366,6 @@
         </div>
     </div>
 
-    <!-- إضافة ستوري (نص + صورة + فيديو) -->
     <div class="modal-bg" id="createStoryModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
             <h3>✨ إضافة قصة جديدة (24 ساعة)</h3>
@@ -397,7 +391,6 @@
         </div>
     </div>
 
-    <!-- قائمة مشاهدي ومتفاعلي الستوري (مرفوعة فوق عارض الستوري بـ z-index 850) -->
     <div class="modal-bg sheet-bg story-top-modal" id="storyViewersModal" onclick="if(event.target===this) closeStoryViewersModal()">
         <div class="bottom-sheet" style="max-height:74dvh; display:flex; flex-direction:column;">
             <h4 style="margin-bottom:10px; text-align:center;">👁️ المشاهدون والتفاعلات</h4>
@@ -406,7 +399,6 @@
         </div>
     </div>
 
-    <!-- إضافة هايلايت -->
     <div class="modal-bg" id="createHighlightModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:390px;">
             <h3>🌟 إضافة هايلايت دائم</h3>
@@ -430,7 +422,6 @@
         </div>
     </div>
 
-    <!-- إنشاء منشور -->
     <div class="modal-bg" id="createPostModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:420px;">
             <h3>📸 نشر منشور جديد</h3>
@@ -446,7 +437,6 @@
         </div>
     </div>
 
-    <!-- تعليقات المنشور -->
     <div class="modal-bg sheet-bg" id="commentsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:78dvh; display:flex; flex-direction:column;">
             <h4 style="margin-bottom:10px; text-align:center;">💬 التعليقات</h4>
@@ -458,7 +448,6 @@
         </div>
     </div>
 
-    <!-- قائمة المعجبين بالمنشور -->
     <div class="modal-bg sheet-bg" id="postLikesModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:65dvh; display:flex; flex-direction:column;">
             <h4 style="margin-bottom:10px; text-align:center;">❤️ الإعجابات</h4>
@@ -466,7 +455,6 @@
         </div>
     </div>
 
-    <!-- إنشاء قناة أو مجموعة -->
     <div class="modal-bg" id="createSpaceModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
             <h3>📢 إنشاء مساحة جديدة</h3>
@@ -490,7 +478,6 @@
         </div>
     </div>
 
-    <!-- إنشاء استطلاع رأي -->
     <div class="modal-bg" id="createPollModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:400px;">
             <h3>📊 إنشاء استطلاع رأي</h3>
@@ -506,7 +493,6 @@
         </div>
     </div>
 
-    <!-- معلومات القناة/المجموعة -->
     <div class="modal-bg" id="spaceInfoModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
             <div class="avatar lg" id="siAvatar" style="margin:0 auto 10px;">📢</div>
@@ -529,12 +515,10 @@
         </div>
     </div>
 
-    <!-- نافذة الألعاب الحية (XO + مبارزة الأسئلة) -->
     <div class="modal-bg" id="gameArenaModal" onclick="if(event.target===this) closeGameArena()">
         <div class="glass-card" id="gameArenaBody" style="max-width:430px;"></div>
     </div>
 
-    <!-- خيارات الرسالة -->
     <div class="modal-bg sheet-bg" id="msgActionModal" onclick="if(event.target===this) closeMsgActions()">
         <div class="bottom-sheet">
             <div class="react-picker">
@@ -556,7 +540,6 @@
         </div>
     </div>
 
-    <!-- إعدادات الحساب والتخصيص -->
     <div class="modal-bg" id="settingsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:440px;">
             <h3 style="margin-bottom:10px;">⚙️ الإعدادات والمظهر</h3>
@@ -628,7 +611,6 @@
         </div>
     </div>
 
-    <!-- تقديم طلب توثيق -->
     <div class="modal-bg" id="verifyReqModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:390px;">
             <h3>✓ تقديم طلب توثيق</h3>
@@ -648,7 +630,6 @@
         </div>
     </div>
 
-    <!-- بروفايل المستخدم الآخر -->
     <div class="modal-bg" id="userProfileModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:420px; padding:0; overflow:hidden; text-align:right;">
             <div style="height:88px; background:var(--primary-grad);"></div>
@@ -676,7 +657,6 @@
         </div>
     </div>
 
-    <!-- عارض الستوري بملء الشاشة (يدعم النص والصورة والفيديو) -->
     <div id="storyViewer">
         <div class="sv-bars" id="svBars"></div>
         <div class="sv-header">
@@ -697,7 +677,6 @@
         <div class="sv-footer" id="svFooter"></div>
     </div>
 
-    <!-- عارض صور العرض لمرة واحدة -->
     <div class="modal-bg" id="viewOnceModal" onclick="closeViewOnce()">
         <div style="text-align:center; max-width:95%;">
             <div style="color:#fbbf24; font-weight:800; margin-bottom:10px; font-size:13px;">💣 عرض لمرة واحدة — ستُحذف فور الإغلاق</div>
@@ -705,7 +684,6 @@
         </div>
     </div>
 
-    <!-- مشغّل الفيديو بملء الشاشة المخصص للمنصة -->
     <div class="modal-bg story-top-modal" id="videoFullModal" onclick="if(event.target===this) closeFullVideoModal()">
         <div class="custom-full-vid">
             <button class="icon-btn" style="position:absolute; top:12px; left:12px; z-index:5;" onclick="closeFullVideoModal()">✕</button>
@@ -718,12 +696,10 @@
         </div>
     </div>
 
-    <!-- عارض الصور -->
     <div class="modal-bg story-top-modal" id="lightboxModal" onclick="this.style.display='none'">
         <img id="lightboxImg" src="">
     </div>
 
-    <!-- شاشة المكالمات -->
     <div id="callOverlay">
         <div class="call-header">
             <h3 id="callName">مكالمة</h3>
@@ -825,5 +801,6 @@
     <script src="./core.js?v=6"></script>
     <script src="./features.js?v=6"></script>
     <script src="./games.js?v=6"></script>
+    <script src="./premium.js?v=7"></script>
 </body>
 </html>
