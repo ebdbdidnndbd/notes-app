@@ -1,9 +1,9 @@
-// ==================== 1. نظام التثبيت وفاحص الجاهزية (PWA V5) ====================
+// ==================== 1. نظام التثبيت وفاحص الجاهزية (PWA V6) ====================
 let deferredInstallPrompt = null;
 
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=5").then(reg => {
+        navigator.serviceWorker.register("./sw.js?v=6").then(reg => {
             reg.update().catch(() => {});
         }).catch(() => {});
     });
@@ -39,7 +39,6 @@ async function runPwaDiagnostics() {
     const swReady = ("serviceWorker" in navigator) && !!(await navigator.serviceWorker.getRegistration());
     checks.push(swReady ? "✅ الخدمة الخلفية (sw.js) تعمل" : "⚠️ انتظر لحظة لتفعيل sw.js");
 
-    // التحقق الفعلي من وجود أيقونتي PNG الأصلية على السيرفر
     let icon192Ok = false, icon512Ok = false;
     try {
         const r1 = await fetch("./icon-192.png", { cache: "no-store" });
@@ -51,17 +50,16 @@ async function runPwaDiagnostics() {
     } catch {}
 
     if (icon192Ok && icon512Ok) {
-        checks.push("✅ أيقونات التثبيت الأصلية (PNG) مرفوعة وجاهزة");
+        checks.push("✅ أيقونات PNG الأصلية مرفوعة وجاهزة");
     } else {
-        checks.push("❌ ناقص رفع icon-192.png و icon-512.png (حمّلهن من لوحة المطور 9988 وارفعهن على GitHub)");
+        checks.push("❌ ناقص رفع icon-192.png و icon-512.png (حمّلهن من لوحة المطور 9988)");
     }
 
     if (deferredInstallPrompt) {
-        checks.push("🚀 المتصفح جاهز للتثبيت المباشر بدون علامة كروم — اضغط الزر أدناه الآن!");
+        checks.push("🚀 جاهز للتثبيت المباشر بدون علامة كروم — اضغط الزر أدناه!");
     } else if (icon192Ok && icon512Ok) {
-        checks.push("ℹ️ إذا ما طلع التثبيت فوراً: امسح كاش الموقع من كروم وسوّ تحديث للصفحة.");
+        checks.push("ℹ️ امسح كاش الموقع من كروم وسوّ تحديث إذا ما ظهر التثبيت تلقائياً.");
     }
-
     box.innerHTML = checks.join("<br>");
 }
 
@@ -75,9 +73,9 @@ async function triggerPwaInstall() {
     } else {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isIOS) {
-            alert("لتثبيت التطبيق على الآيفون:\n1. اضغط على زر المشاركة (Share) أسفل المتصفح.\n2. اختر (إضافة إلى الشاشة الرئيسية / Add to Home Screen).");
+            alert("لتثبيت التطبيق على الآيفون:\n1. اضغط زر المشاركة (Share) أسفل المتصفح.\n2. اختر (إضافة إلى الشاشة الرئيسية).");
         } else {
-            alert("إذا ما ظهر التثبيت التلقائي بعد:\n1. تأكد من رفع icon-192.png و icon-512.png على GitHub (تكدر تحمّلهن من لوحة المطور 9988).\n2. امسح بيانات الموقع من كروم وسوّ تحديث.\n3. اضغط الثلاث نقاط (⋮) ← إضافة إلى الشاشة الرئيسية ← تثبيت.");
+            alert("للتثبيت المباشر على الأندرويد:\n1. تأكد من رفع icon-192.png و icon-512.png (من لوحة 9988).\n2. امسح بيانات الموقع من كروم وحدّث الصفحة.\n3. اضغط الثلاث نقاط (⋮) ← إضافة للشاشة الرئيسية ← تثبيت.");
         }
     }
 }
@@ -87,12 +85,8 @@ function openNotificationsModal() {
     document.getElementById("notificationsModal").style.display = "flex";
     renderNotifications();
     const updates = {};
-    Object.entries(myNotifications).forEach(([id, n]) => {
-        if (!n.read) updates[`${id}/read`] = true;
-    });
-    if (Object.keys(updates).length > 0) {
-        db.ref(`notifications/${me.username}`).update(updates);
-    }
+    Object.entries(myNotifications).forEach(([id, n]) => { if (!n.read) updates[`${id}/read`] = true; });
+    if (Object.keys(updates).length > 0) db.ref(`notifications/${me.username}`).update(updates);
 }
 
 function renderNotifications() {
@@ -116,63 +110,169 @@ async function clearAllNotifications() {
     showToast("تم تنظيف الإشعارات");
 }
 
-// ==================== 3. الملصقات والوسائط والعرض لمرة واحدة ====================
-const STICKER_PACKS = {
-    "❤️ مشاعر": [
-        { id: "love1", em: "❤️‍🔥", cap: "أحبك", bg: "linear-gradient(135deg,#be123c,#fb7185)" },
-        { id: "love2", em: "🥰", cap: "عمري", bg: "linear-gradient(135deg,#db2777,#f472b6)" },
-        { id: "love3", em: "🌹", cap: "وردة إلك", bg: "linear-gradient(135deg,#9f1239,#e11d48)" },
-        { id: "love4", em: "🥺", cap: "مشتاقلك", bg: "linear-gradient(135deg,#7c3aed,#c084fc)" },
-        { id: "love5", em: "🫂", cap: "حضن", bg: "linear-gradient(135deg,#2563eb,#60a5fa)" },
-        { id: "love6", em: "💍", cap: "للأبد", bg: "linear-gradient(135deg,#b45309,#fbbf24)" }
-    ],
-    "😂 ضحك": [
-        { id: "fun1", em: "🤣", cap: "متت ضحك", bg: "linear-gradient(135deg,#d97706,#facc15)" },
-        { id: "fun2", em: "😎", cap: "فخامة", bg: "linear-gradient(135deg,#1d4ed8,#38bdf8)" },
-        { id: "fun3", em: "🔥", cap: "نار وشرار", bg: "linear-gradient(135deg,#c2410c,#f97316)" },
-        { id: "fun4", em: "👑", cap: "ملك", bg: "linear-gradient(135deg,#a16207,#eab308)" },
-        { id: "fun5", em: "👀", cap: "شنو السالفة", bg: "linear-gradient(135deg,#0f766e,#2dd4bf)" },
-        { id: "fun6", em: "🤯", cap: "صددك؟", bg: "linear-gradient(135deg,#6d28d9,#a855f7)" }
-    ],
-    "📚 دراسة": [
-        { id: "std1", em: "📚", cap: "أدرس هسة", bg: "linear-gradient(135deg,#1e40af,#3b82f6)" },
-        { id: "std2", em: "☕", cap: "وقت القهوة", bg: "linear-gradient(135deg,#78350f,#b45309)" },
-        { id: "std3", em: "💯", cap: "عاشت إيدك", bg: "linear-gradient(135deg,#047857,#10b981)" },
-        { id: "std4", em: "🚀", cap: "للقمة", bg: "linear-gradient(135deg,#4338ca,#6366f1)" },
-        { id: "std5", em: "😴", cap: "نعست", bg: "linear-gradient(135deg,#334155,#64748b)" },
-        { id: "std6", em: "🤫", cap: "سري للغاية", bg: "linear-gradient(135deg,#18181b,#52525b)" }
-    ]
-};
+// ==================== 3. لوحة تليگرام السفلية (رموز + صور متحركة + ملصقات + إنشاء ملصق) ====================
+const EMOJI_LIST = [
+    { em: "😂", k: "ضحك" }, { em: "🤣", k: "ضحك" }, { em: "❤️", k: "حب قلب" }, { em: "😘", k: "بوسة حب" },
+    { em: "😍", k: "حب اعجاب" }, { em: "🥰", k: "حب عمري" }, { em: "👍", k: "تمام لايك" }, { em: "😊", k: "ابتسامة" },
+    { em: "😔", k: "حزن" }, { em: "😁", k: "ضحك" }, { em: "😭", k: "بجي بكاء" }, { em: "💋", k: "بوسة" },
+    { em: "😒", k: "زعل" }, { em: "😳", k: "صدمة" }, { em: "😉", k: "غمزة" }, { em: "😜", k: "مزح" },
+    { em: "😃", k: "فرح" }, { em: "🙈", k: "خجل" }, { em: "😢", k: "دموع" }, { em: "😝", k: "مزح" },
+    { em: "😱", k: "رعب صدمة" }, { em: "😡", k: "غضب" }, { em: "😏", k: "ثقة" }, { em: "😞", k: "ضوجة" },
+    { em: "🥺", k: "رجاء" }, { em: "🔥", k: "نار حماس" }, { em: "✨", k: "نجوم" }, { em: "🌹", k: "وردة" },
+    { em: "🫂", k: "حضن" }, { em: "👑", k: "ملك" }, { em: "💯", k: "مية" }, { em: "👏", k: "تصفيق" },
+    { em: "😎", k: "كشخة فخامة" }, { em: "🤔", k: "تفكير" }, { em: "😴", k: "نوم نعاس" }, { em: "🤯", k: "انصدام" },
+    { em: "💔", k: "قلب مكسور" }, { em: "🤍", k: "قلب ابيض" }, { em: "🖤", k: "قلب اسود" }, { em: "💜", k: "قلب بنفسجي" },
+    { em: "☕", k: "قهوة" }, { em: "📚", k: "دراسة سادس" }, { em: "🎮", k: "العاب" }, { em: "🏆", k: "فوز" },
+    { em: "👀", k: "عيون مراقبة" }, { em: "🤫", k: "سر" }, { em: "🙏", k: "دعاء شكرا" }, { em: "🎉", k: "احتفال" }
+];
 
-let activeStickerCat = Object.keys(STICKER_PACKS)[0];
+const BUILTIN_STICKERS = [
+    { id: "love1", em: "❤️‍🔥", cap: "أحبك", bg: "linear-gradient(135deg,#be123c,#fb7185)" },
+    { id: "love2", em: "🥰", cap: "عمري", bg: "linear-gradient(135deg,#db2777,#f472b6)" },
+    { id: "love3", em: "🌹", cap: "وردة إلك", bg: "linear-gradient(135deg,#9f1239,#e11d48)" },
+    { id: "love4", em: "🥺", cap: "مشتاقلك", bg: "linear-gradient(135deg,#7c3aed,#c084fc)" },
+    { id: "love5", em: "🫂", cap: "حضن", bg: "linear-gradient(135deg,#2563eb,#60a5fa)" },
+    { id: "fun1", em: "🤣", cap: "متت ضحك", bg: "linear-gradient(135deg,#d97706,#facc15)" },
+    { id: "fun2", em: "😎", cap: "فخامة", bg: "linear-gradient(135deg,#1d4ed8,#38bdf8)" },
+    { id: "fun3", em: "🔥", cap: "نار وشرار", bg: "linear-gradient(135deg,#c2410c,#f97316)" },
+    { id: "fun4", em: "👑", cap: "ملك", bg: "linear-gradient(135deg,#a16207,#eab308)" },
+    { id: "fun5", em: "👀", cap: "شنو السالفة", bg: "linear-gradient(135deg,#0f766e,#2dd4bf)" },
+    { id: "std1", em: "📚", cap: "أدرس هسة", bg: "linear-gradient(135deg,#1e40af,#3b82f6)" },
+    { id: "std2", em: "☕", cap: "وقت القهوة", bg: "linear-gradient(135deg,#78350f,#b45309)" },
+    { id: "std3", em: "💯", cap: "عاشت إيدك", bg: "linear-gradient(135deg,#047857,#10b981)" },
+    { id: "std4", em: "😴", cap: "نعست", bg: "linear-gradient(135deg,#334155,#64748b)" },
+    { id: "std5", em: "🤫", cap: "سري للغاية", bg: "linear-gradient(135deg,#18181b,#52525b)" }
+];
 
-function initStickerDrawer() {
-    const tabs = document.getElementById("stickerTabs");
-    tabs.innerHTML = "";
-    Object.keys(STICKER_PACKS).forEach(cat => {
-        const b = document.createElement("button");
-        b.className = "st-tab" + (cat === activeStickerCat ? " active" : "");
-        b.innerText = cat;
-        b.onclick = () => { activeStickerCat = cat; initStickerDrawer(); };
-        tabs.appendChild(b);
-    });
-    const grid = document.getElementById("stickerGrid");
-    grid.innerHTML = "";
-    (STICKER_PACKS[activeStickerCat] || []).forEach(st => {
-        const t = document.createElement("div");
-        t.className = "sticker-tile";
-        t.innerHTML = `<span class="st-em">${st.em}</span><span class="st-cap">${st.cap}</span>`;
-        t.onclick = () => { pushMessageSafe("sticker", st.id, `${st.em} ${st.cap}`); toggleStickerDrawer(false); };
-        grid.appendChild(t);
-    });
-}
+const GIF_CARDS = [
+    { id: "g1", em: "🎬🔥", cap: "دخول أسطوري", bg: "linear-gradient(135deg,#ef4444,#f97316)" },
+    { id: "g2", em: "🤣💀", cap: "متت من الضحك", bg: "linear-gradient(135deg,#eab308,#ca8a04)" },
+    { id: "g3", em: "💖✨", cap: "أحلى شخص بالكون", bg: "linear-gradient(135deg,#ec4899,#8b5cf6)" },
+    { id: "g4", em: "☕📖", cap: "جلسة سادس", bg: "linear-gradient(135deg,#0ea5e9,#2563eb)" },
+    { id: "g5", em: "👏🏆", cap: "إنجاز عالمي", bg: "linear-gradient(135deg,#10b981,#0d9488)" },
+    { id: "g6", em: "👀🍿", cap: "أتابع بصمت", bg: "linear-gradient(135deg,#4f46e5,#1e1b4b)" },
+    { id: "g7", em: "😤💢", cap: "لا تعصبني!", bg: "linear-gradient(135deg,#b91c1c,#7f1d1d)" },
+    { id: "g8", em: "🥺💐", cap: "آسف / آسفة", bg: "linear-gradient(135deg,#9333ea,#db2777)" },
+    { id: "g9", em: "🌙💤", cap: "تصبح على خير", bg: "linear-gradient(135deg,#0f172a,#334155)" }
+];
+
+let activeDrawerTab = "emojis";
+let emojiSearchQuery = "";
+let customStickers = [];
+let recentStickers = [];
+try { customStickers = JSON.parse(localStorage.getItem("custom_stickers_v6") || "[]"); } catch { customStickers = []; }
+try { recentStickers = JSON.parse(localStorage.getItem("recent_stickers_v6") || "[]"); } catch { recentStickers = []; }
 
 function findStickerById(id) {
-    for (const p of Object.values(STICKER_PACKS)) {
-        const f = p.find(s => s.id === id);
-        if (f) return f;
+    return BUILTIN_STICKERS.find(s => s.id === id) || { em: "✨", cap: "ملصق", bg: GRADIENTS[0] };
+}
+function findGifById(id) {
+    return GIF_CARDS.find(g => g.id === id) || { em: "✨", cap: "متحرك", bg: GRADIENTS[0] };
+}
+
+function initStickerDrawer() {
+    renderDrawerContent();
+}
+
+function switchDrawerTab(tab) {
+    activeDrawerTab = tab;
+    document.querySelectorAll(".dbt-btn").forEach(b => b.classList.toggle("active", b.getAttribute("data-dtab") === tab));
+    renderDrawerContent();
+}
+
+function insertEmojiToInput(em) {
+    const inp = document.getElementById("msgInput");
+    if (!inp) return;
+    const pos = inp.selectionStart || inp.value.length;
+    inp.value = inp.value.slice(0, pos) + em + inp.value.slice(pos);
+    handleMsgInputResize(inp);
+    inp.focus();
+}
+
+function sendBuiltinSticker(st) {
+    recentStickers = [st.id, ...recentStickers.filter(x => x !== st.id)].slice(0, 8);
+    try { localStorage.setItem("recent_stickers_v6", JSON.stringify(recentStickers)); } catch {}
+    pushMessageSafe("sticker", st.id, `${st.em} ${st.cap}`);
+    toggleStickerDrawer(false);
+}
+
+async function handleCreateCustomSticker(e) {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    showToast("جاري إنشاء الملصق...");
+    const dataUrl = await compressImageFile(f, 320, 0.76);
+    const id = "cs_" + Date.now();
+    customStickers.unshift({ id, src: dataUrl });
+    customStickers = customStickers.slice(0, 16);
+    try { localStorage.setItem("custom_stickers_v6", JSON.stringify(customStickers)); } catch {}
+    renderDrawerContent();
+    showToast("تم حفظ الملصق بالمفضلة ✨");
+}
+
+function deleteCustomSticker(id) {
+    customStickers = customStickers.filter(s => s.id !== id);
+    try { localStorage.setItem("custom_stickers_v6", JSON.stringify(customStickers)); } catch {}
+    renderDrawerContent();
+}
+
+function renderDrawerContent() {
+    const body = document.getElementById("drawerBody");
+    if (!body) return;
+
+    if (activeDrawerTab === "emojis") {
+        const q = emojiSearchQuery.trim();
+        const filtered = q ? EMOJI_LIST.filter(x => x.k.includes(q) || x.em.includes(q)) : EMOJI_LIST;
+        body.innerHTML = `
+            <input type="text" class="emoji-search" placeholder="🔍 بحث عن رمز (مثال: حب، ضحك، نار)..." value="${escapeHTML(emojiSearchQuery)}" oninput="emojiSearchQuery=this.value; renderDrawerContent();">
+            <div class="emoji-grid">
+                ${filtered.map(x => `<button type="button" class="emoji-cell" onclick="insertEmojiToInput('${x.em}')">${x.em}</button>`).join("")}
+            </div>`;
+        const inp = body.querySelector(".emoji-search");
+        if (q && inp) { inp.focus(); inp.setSelectionRange(q.length, q.length); }
+    } else if (activeDrawerTab === "gifs") {
+        body.innerHTML = `
+            <div class="st-sec-title">⚡ بطاقات تفاعلية خفيفة (تعمل حتى على أضعف نت)</div>
+            <div class="gif-grid">
+                ${GIF_CARDS.map(g => `
+                    <div class="gif-card" style="background:${g.bg}" onclick="pushMessageSafe('gif_card','${g.id}','🎬 ${escapeHTML(g.cap)}'); toggleStickerDrawer(false);">
+                        <span style="font-size:28px;">${g.em}</span>
+                        <span>${escapeHTML(g.cap)}</span>
+                    </div>`).join("")}
+            </div>`;
+    } else {
+        let html = `<div class="st-sec-title">⭐ ملصقاتي المفضلة (اضغط + لإنشاء ملصق من أي صورة)</div><div class="sticker-grid">
+            <div class="sticker-tile sticker-create-tile" onclick="document.getElementById('customStickerInput').click()">
+                <span style="font-size:24px;">＋</span><span>إنشاء</span>
+            </div>`;
+        customStickers.forEach(cs => {
+            html += `<div class="sticker-tile" style="position:relative;" onclick="pushMessageSafe('img_sticker','${cs.src}','🎭 ملصق'); toggleStickerDrawer(false);">
+                <img src="${cs.src}">
+                <button type="button" onclick="event.stopPropagation(); deleteCustomSticker('${cs.id}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.7); color:#fff; font-size:10px; cursor:pointer;">✕</button>
+            </div>`;
+        });
+        html += `</div>`;
+
+        if (recentStickers.length > 0) {
+            html += `<div class="st-sec-title">🕒 مستخدمة حديثاً</div><div class="sticker-grid">`;
+            recentStickers.forEach(id => {
+                const st = findStickerById(id);
+                html += `<div class="sticker-tile" onclick="sendBuiltinSticker(findStickerById('${st.id}'))">
+                    <span class="st-em">${st.em}</span><span class="st-cap">${escapeHTML(st.cap)}</span>
+                </div>`;
+            });
+            html += `</div>`;
+        }
+
+        html += `<div class="st-sec-title">🎭 ملصقات المنصة</div><div class="sticker-grid">`;
+        BUILTIN_STICKERS.forEach(st => {
+            html += `<div class="sticker-tile" onclick="sendBuiltinSticker(findStickerById('${st.id}'))">
+                <span class="st-em">${st.em}</span><span class="st-cap">${escapeHTML(st.cap)}</span>
+            </div>`;
+        });
+        html += `</div>`;
+        body.innerHTML = html;
     }
-    return { em: "✨", cap: "ملصق", bg: GRADIENTS[0] };
 }
 
 function toggleStickerDrawer(force) {
@@ -180,7 +280,7 @@ function toggleStickerDrawer(force) {
     const show = typeof force === "boolean" ? force : d.style.display !== "flex";
     d.style.display = show ? "flex" : "none";
     document.getElementById("stickerBtn").classList.toggle("accent", show);
-    if (show) toggleMediaMenu(false);
+    if (show) { toggleMediaMenu(false); renderDrawerContent(); }
 }
 
 function toggleMediaMenu(force) {
@@ -190,17 +290,15 @@ function toggleMediaMenu(force) {
     if (show) toggleStickerDrawer(false);
 }
 
+// ==================== 4. الوسائط والبصمة والعرض لمرة واحدة ====================
 async function handleSendImage(e, isViewOnce = false) {
     const f = e.target.files[0];
     e.target.value = "";
     if (!f) return;
-    showToast(isViewOnce ? "جاري تجهيز صورة العرض لمرة واحدة..." : "جاري إرسال الصورة...");
-    const dataUrl = await compressImageFile(f, 840, 0.72);
-    if (isViewOnce) {
-        await pushMessageSafe("view_once", dataUrl, "💣 صورة عرض لمرة واحدة", { voOpened: false });
-    } else {
-        await pushMessageSafe("image", dataUrl, "📷 صورة");
-    }
+    showToast(isViewOnce ? "جاري تجهيز العرض لمرة واحدة..." : "جاري ضغط وإرسال الصورة...");
+    const dataUrl = await compressImageFile(f, 820, 0.70);
+    if (isViewOnce) await pushMessageSafe("view_once", dataUrl, "💣 صورة عرض لمرة واحدة", { voOpened: false });
+    else await pushMessageSafe("image", dataUrl, "📷 صورة");
 }
 
 let activeViewOnceMsgId = null;
@@ -233,12 +331,13 @@ function handleSendVideo(e) {
     r.readAsDataURL(f);
 }
 
-// تسجيل البصمات الصوتية
+// تسجيل البصمات الصوتية بجودة خفيفة وسريعة على النت الضعيف
 let mediaRec = null, recChunks = [], recStream = null, recSec = 0, recTimer = null, cancelRec = false;
 async function startRecording() {
+    stopAnyVoicePlayback();
     try {
         recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        let opts = {};
+        let opts = { audioBitsPerSecond: 32000 };
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) opts.mimeType = "audio/webm;codecs=opus";
         else if (MediaRecorder.isTypeSupported("audio/mp4")) opts.mimeType = "audio/mp4";
         mediaRec = new MediaRecorder(recStream, opts);
@@ -246,7 +345,7 @@ async function startRecording() {
         mediaRec.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
         mediaRec.onstop = () => {
             recStream.getTracks().forEach(t => t.stop());
-            if (cancelRec) return;
+            if (cancelRec || recChunks.length === 0) return;
             const r = new FileReader();
             r.onloadend = () => pushMessageSafe("audio", r.result, "🎤 بصمة صوتية");
             r.readAsDataURL(new Blob(recChunks, { type: mediaRec.mimeType || "audio/webm" }));
@@ -274,11 +373,9 @@ function openLightbox(src) {
     document.getElementById("lightboxModal").style.display = "flex";
 }
 
-// ==================== 4. الاستطلاعات وتفاعلات القنوات ====================
+// ==================== 5. الاستطلاعات وتفاعلات القنوات ====================
 function openCreatePollModal() {
-    ["pollQuestion", "pollOpt1", "pollOpt2", "pollOpt3", "pollOpt4"].forEach(id => {
-        document.getElementById(id).value = "";
-    });
+    ["pollQuestion", "pollOpt1", "pollOpt2", "pollOpt3", "pollOpt4"].forEach(id => { document.getElementById(id).value = ""; });
     document.getElementById("createPollModal").style.display = "flex";
 }
 
@@ -291,14 +388,9 @@ async function publishPoll() {
         document.getElementById("pollOpt4").value.trim()
     ].filter(Boolean);
 
-    if (!q || opts.length < 2) {
-        showToast("اكتب السؤال وخيارين على الأقل");
-        return;
-    }
+    if (!q || opts.length < 2) { showToast("اكتب السؤال وخيارين على الأقل"); return; }
     document.getElementById("createPollModal").style.display = "none";
-    await pushMessageSafe("poll", q, `📊 استطلاع: ${q}`, {
-        poll: { question: q, options: opts, votes: {} }
-    });
+    await pushMessageSafe("poll", q, `📊 استطلاع: ${q}`, { poll: { question: q, options: opts, votes: {} } });
 }
 
 async function voteInPoll(msgId, optIndex) {
@@ -310,9 +402,10 @@ async function voteInPoll(msgId, optIndex) {
 async function toggleChannelReaction(msgId, rKey, currentlyMine) {
     if (!activeRoomId) return;
     await db.ref(`space_msgs/${activeRoomId}/${msgId}/chReactions/${rKey}/${me.username}`).set(currentlyMine ? null : true);
+    playSendSound();
 }
 
-// ==================== 5. الستوري المتكامل (مشاهدون + تفاعلات + اتجاه سليم) ====================
+// ==================== 6. الستوري (نص + صورة + فيديو + المشاهدون فوق الستوري مباشرة) ====================
 let createStoryType = "text";
 
 function getActiveStoriesFor(username) {
@@ -363,6 +456,9 @@ function openCreateStoryModal() {
     document.getElementById("storyTextContent").value = "";
     document.getElementById("storyImgFile").value = "";
     document.getElementById("storyImgCaption").value = "";
+    document.getElementById("storyVidFile").value = "";
+    document.getElementById("storyVidCaption").value = "";
+    switchStoryType("text");
     document.getElementById("createStoryModal").style.display = "flex";
 }
 
@@ -370,31 +466,46 @@ function switchStoryType(t) {
     createStoryType = t;
     document.getElementById("stTabText").classList.toggle("active", t === "text");
     document.getElementById("stTabImg").classList.toggle("active", t === "image");
+    document.getElementById("stTabVid").classList.toggle("active", t === "video");
     document.getElementById("stTextForm").style.display = t === "text" ? "block" : "none";
     document.getElementById("stImgForm").style.display = t === "image" ? "block" : "none";
+    document.getElementById("stVidForm").style.display = t === "video" ? "block" : "none";
 }
 
 async function publishStory() {
     const id = "st_" + Date.now();
     const payload = { id, ts: Date.now(), expiresAt: Date.now() + 86400000, bg: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)] };
+
     if (createStoryType === "text") {
         const txt = document.getElementById("storyTextContent").value.trim();
         if (!txt) { showToast("اكتب نص القصة أولاً"); return; }
         payload.type = "text"; payload.content = txt;
-    } else {
+    } else if (createStoryType === "image") {
         const f = document.getElementById("storyImgFile").files[0];
         if (!f) { showToast("اختر صورة للقصة"); return; }
-        showToast("جاري نشر القصة...");
+        showToast("جاري نشر قصة الصورة...");
         payload.type = "image";
         payload.content = await compressImageFile(f, 820, 0.72);
         payload.caption = document.getElementById("storyImgCaption").value.trim();
+    } else {
+        const f = document.getElementById("storyVidFile").files[0];
+        if (!f) { showToast("اختر فيديو للقصة"); return; }
+        if (f.size > 4.5 * 1024 * 1024) { showToast("الحد الأقصى لفيديو الستوري 4.5 ميجابايت"); return; }
+        showToast("جاري رفع فيديو القصة...");
+        const dataUrl = await new Promise((res, rej) => {
+            const r = new FileReader(); r.onload = ev => res(ev.target.result); r.onerror = rej; r.readAsDataURL(f);
+        });
+        payload.type = "video";
+        payload.content = dataUrl;
+        payload.caption = document.getElementById("storyVidCaption").value.trim();
     }
+
     await db.ref(`stories/${me.username}/${id}`).set(payload);
     document.getElementById("createStoryModal").style.display = "none";
     showToast("تم نشر قصتك بنجاح ✨");
 }
 
-let svOwner = null, svList = [], svIndex = 0, svTimer = null, svIsHighlight = false, svPaused = false;
+let svOwner = null, svList = [], svIndex = 0, svTimer = null, svIsHighlight = false, svPaused = false, svActiveVideo = null;
 
 function openUserStory(username) {
     const list = getActiveStoriesFor(username);
@@ -405,8 +516,7 @@ function openUserStory(username) {
 }
 
 function openHighlightViewer(ownerUsername, hlObj) {
-    svOwner = ownerUsername;
-    svList = hlObj.items || [hlObj];
+    svOwner = ownerUsername; svList = hlObj.items || [hlObj];
     svIndex = 0; svIsHighlight = true; svPaused = false;
     document.getElementById("storyViewer").style.display = "flex";
     renderCurrentStorySlide();
@@ -414,7 +524,9 @@ function openHighlightViewer(ownerUsername, hlObj) {
 
 function renderCurrentStorySlide() {
     clearInterval(svTimer);
+    if (svActiveVideo) { try { svActiveVideo.pause(); } catch {} svActiveVideo = null; }
     if (svIndex >= svList.length) { closeStoryViewer(); return; }
+
     const item = svList[svIndex];
     const liveItem = (!svIsHighlight && allStories[svOwner]?.[item.id]) ? allStories[svOwner][item.id] : item;
     const ownerObj = contactProfiles[svOwner] || (svOwner === me.username ? me : { name: svOwner });
@@ -437,7 +549,19 @@ function renderCurrentStorySlide() {
     bars.innerHTML = svList.map((_, i) => `<div class="sv-bar"><div class="sv-bar-fill" id="svFill_${i}" style="width:${i < svIndex ? 100 : 0}%"></div></div>`).join("");
 
     const stage = document.getElementById("svStage");
-    if (liveItem.type === "image") {
+    if (liveItem.type === "video") {
+        stage.style.background = "#000";
+        stage.innerHTML = `<video id="svVidPlayer" src="${liveItem.content}" playsinline autoplay></video>${liveItem.caption ? `<div class="sv-caption">${escapeHTML(liveItem.caption)}</div>` : ""}`;
+        const v = document.getElementById("svVidPlayer");
+        svActiveVideo = v;
+        v.ontimeupdate = () => {
+            if (svPaused || !v.duration) return;
+            const el = document.getElementById("svFill_" + svIndex);
+            if (el) el.style.width = Math.min(100, (v.currentTime / v.duration) * 100) + "%";
+        };
+        v.onended = () => { svIndex++; renderCurrentStorySlide(); };
+        v.play().catch(() => {});
+    } else if (liveItem.type === "image") {
         stage.style.background = "#000";
         stage.innerHTML = `<img src="${liveItem.content}">${liveItem.caption ? `<div class="sv-caption">${escapeHTML(liveItem.caption)}</div>` : ""}`;
     } else {
@@ -463,21 +587,31 @@ function renderCurrentStorySlide() {
                 <button class="sv-react-btn" onclick="event.stopPropagation(); reactToStory('👏')">👏</button>
             </div>
             <div style="display:flex; gap:8px;">
-                <input type="text" id="svReplyInp" class="input" placeholder="رد على القصة..." onfocus="svPaused=true" onblur="svPaused=false" onclick="event.stopPropagation()">
+                <input type="text" id="svReplyInp" class="input" placeholder="رد على القصة..." onfocus="pauseStoryMedia(true)" onblur="pauseStoryMedia(false)" onclick="event.stopPropagation()">
                 <button class="btn btn-sm" onclick="event.stopPropagation(); replyToStory()">إرسال</button>
             </div>`;
     } else {
         foot.innerHTML = "";
     }
 
-    let pct = 0;
-    svTimer = setInterval(() => {
-        if (svPaused) return;
-        pct += 1.8;
-        const el = document.getElementById("svFill_" + svIndex);
-        if (el) el.style.width = pct + "%";
-        if (pct >= 100) { svIndex++; renderCurrentStorySlide(); }
-    }, 110);
+    if (liveItem.type !== "video") {
+        let pct = 0;
+        svTimer = setInterval(() => {
+            if (svPaused) return;
+            pct += 1.8;
+            const el = document.getElementById("svFill_" + svIndex);
+            if (el) el.style.width = pct + "%";
+            if (pct >= 100) { svIndex++; renderCurrentStorySlide(); }
+        }, 110);
+    }
+}
+
+function pauseStoryMedia(paused) {
+    svPaused = paused;
+    if (svActiveVideo) {
+        if (paused) svActiveVideo.pause();
+        else svActiveVideo.play().catch(() => {});
+    }
 }
 
 function handleStoryTap(e) {
@@ -508,12 +642,12 @@ async function replyToStory() {
     });
     await db.ref(`chat_meta/${rId}`).set({ lastMsg: "رد على القصة: " + txt, lastSender: me.username, lastTs: Date.now(), unreadFor: svOwner });
     sendNotification(svOwner, `ردّ ${me.name} على قصتك: "${txt.slice(0, 30)}"`, "💬");
-    inp.value = ""; svPaused = false;
+    inp.value = ""; pauseStoryMedia(false);
     showToast("تم إرسال ردك للخاص ✅");
 }
 
 function openStoryViewersModal() {
-    svPaused = true;
+    pauseStoryMedia(true);
     const item = svList[svIndex];
     const liveItem = allStories[svOwner]?.[item?.id] || item || {};
     const viewers = liveItem.viewers || {};
@@ -546,7 +680,7 @@ function openStoryViewersModal() {
 
 function closeStoryViewersModal() {
     document.getElementById("storyViewersModal").style.display = "none";
-    svPaused = false;
+    pauseStoryMedia(false);
 }
 
 async function deleteCurrentStory() {
@@ -559,13 +693,13 @@ async function deleteCurrentStory() {
 async function saveCurrentStoryToHighlight() {
     const item = svList[svIndex];
     if (!item) return;
-    svPaused = true;
+    pauseStoryMedia(true);
     const title = prompt("عنوان الهايلايت:", "ذكرياتي");
-    svPaused = false;
+    pauseStoryMedia(false);
     if (!title) return;
     const hlId = "hl_" + Date.now();
     await db.ref(`highlights/${me.username}/${hlId}`).set({
-        id: hlId, title: title.trim(), icon: "🌟",
+        id: hlId, title: title.trim(), icon: item.type === "video" ? "🎬" : "🌟",
         coverImg: item.type === "image" ? item.content : "",
         items: [item], ts: Date.now()
     });
@@ -574,10 +708,12 @@ async function saveCurrentStoryToHighlight() {
 
 function closeStoryViewer() {
     clearInterval(svTimer);
+    if (svActiveVideo) { try { svActiveVideo.pause(); } catch {} svActiveVideo = null; }
+    document.getElementById("storyViewersModal").style.display = "none";
     document.getElementById("storyViewer").style.display = "none";
 }
 
-// ==================== 6. الهايلايت ====================
+// ==================== 7. الهايلايت ====================
 function openCreateHighlightModal() {
     document.getElementById("hlTitle").value = "";
     document.getElementById("hlImgFile").value = "";
@@ -604,7 +740,7 @@ async function publishHighlight() {
     showToast("تمت إضافة الهايلايت 🌟");
 }
 
-// ==================== 7. المنشورات والتفاعلات والتعليقات ====================
+// ==================== 8. المنشورات بتصميم إنستگرام الاحترافي (تحديث موضعي بدون رمش) ====================
 let activeCommentPostId = null;
 
 function openCreatePostModal() {
@@ -621,7 +757,7 @@ async function publishPost() {
     const id = "p_" + Date.now();
     const payload = { id, author: me.username, caption: cap, ts: Date.now(), bg: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)] };
     if (f) {
-        showToast("جاري رفع المنشور...");
+        showToast("جاري نشر الصورة...");
         payload.type = "image";
         payload.content = await compressImageFile(f, 880, 0.74);
     } else {
@@ -630,7 +766,101 @@ async function publishPost() {
     }
     await db.ref(`posts/${id}`).set(payload);
     document.getElementById("createPostModal").style.display = "none";
-    showToast("تم نشر منشورك 🚀");
+    showToast("تم نشر منشورك 📸");
+}
+
+function buildIgPostCard(p) {
+    const author = contactProfiles[p.author] || { username: p.author, name: p.author };
+    const card = document.createElement("article");
+    card.className = "ig-post";
+    card.setAttribute("data-pid", p.id);
+
+    const head = document.createElement("div");
+    head.className = "ig-head";
+    head.innerHTML = `
+        <div class="ig-author" onclick="openOtherProfile('${p.author}')">
+            <div class="avatar sm" id="pa_${p.id}"></div>
+            <div>
+                <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px; flex-wrap:wrap;">${escapeHTML(author.name)} ${getVerifiedBadgeHTML(author.verified)} ${getDevBadgeHTML(author)}</div>
+                <div class="handle-ltr" dir="ltr" style="font-size:11.5px; color:var(--text-dim);">${escapeHTML(getDisplayTag(author))}</div>
+            </div>
+        </div>
+        ${p.author === me.username ? `<button class="icon-btn danger" style="width:32px; height:32px;" onclick="deletePost('${p.id}')">🗑️</button>` : ""}`;
+    card.appendChild(head);
+    setAvatarStyle(head.querySelector(`#pa_${p.id}`), author, false);
+
+    const media = document.createElement("div");
+    media.className = "ig-media";
+    if (p.type === "image") {
+        media.innerHTML = `<img src="${p.content}" loading="lazy"><div class="ig-heart-pop">❤️</div>`;
+    } else {
+        media.innerHTML = `<div class="ig-text-canvas" style="background:${p.bg || GRADIENTS[0]}">${escapeHTML(p.content)}</div><div class="ig-heart-pop">❤️</div>`;
+    }
+    let lastTap = 0;
+    media.addEventListener("click", () => {
+        const t = Date.now();
+        if (t - lastTap < 300) {
+            const hp = media.querySelector(".ig-heart-pop");
+            if (hp) { hp.classList.remove("boom"); void hp.offsetWidth; hp.classList.add("boom"); }
+            const liveP = allPosts[p.id] || p;
+            if (!(liveP.likes && liveP.likes[me.username])) togglePostLike(p.id, false);
+        } else if (p.type === "image") {
+            setTimeout(() => { if (Date.now() - lastTap >= 300) openLightbox(p.content); }, 310);
+        }
+        lastTap = t;
+    });
+    card.appendChild(media);
+
+    const bodySlot = document.createElement("div");
+    bodySlot.className = "ig-dynamic-body";
+    card.appendChild(bodySlot);
+
+    fillIgDynamicBody(bodySlot, p, author);
+    return card;
+}
+
+function fillIgDynamicBody(slot, p, author) {
+    const likesObj = p.likes || {};
+    const likeCount = Object.keys(likesObj).length;
+    const likedByMe = !!likesObj[me.username];
+    const comms = Object.values(p.comments || {}).sort((a, b) => a.ts - b.ts);
+
+    slot.innerHTML = `
+        <div class="ig-actions">
+            <div class="ig-act-left">
+                <button class="ig-act-btn ${likedByMe ? 'liked' : ''}" onclick="togglePostLike('${p.id}', ${likedByMe})">${likedByMe ? '❤️' : '🤍'} <span>${likeCount}</span></button>
+                <button class="ig-act-btn" onclick="openCommentsModal('${p.id}')">💬 <span>${comms.length}</span></button>
+            </div>
+            <button class="ig-act-btn" title="حفظ بالمحفوظة" onclick="savePostToSaved('${p.id}')">🔖</button>
+        </div>
+        ${likeCount > 0 ? `<div class="ig-likes-line" onclick="openPostLikesModal('${p.id}')">${likeCount} إعجاب • عرض المتفاعلين</div>` : ""}
+        ${(p.type === "image" && p.caption) ? `<div class="ig-caption"><strong>${escapeHTML(author.name)}</strong> ${escapeHTML(p.caption)}</div>` : ""}
+        ${comms.length > 0 ? `
+            <div class="ig-comments-preview" onclick="openCommentsModal('${p.id}')">
+                ${comms.slice(-2).map(c => `<div><strong style="color:var(--text);">${escapeHTML(c.authorName || c.author)}</strong> ${escapeHTML(c.text)}</div>`).join("")}
+                ${comms.length > 2 ? `<div style="color:var(--accent); margin-top:3px; font-weight:700;">عرض جميع التعليقات (${comms.length})</div>` : ""}
+            </div>` : ""}
+        <div class="ig-time">${formatDateLabel(p.ts)} • ${formatTime(p.ts)}</div>`;
+}
+
+function syncFeedPostCard(pid, p) {
+    const cont = document.getElementById("feedContainer");
+    if (!cont || !me) return;
+    const allowedAuthors = new Set([me.username, ...Object.keys(myContacts)]);
+    if (!allowedAuthors.has(p.author) || myBlocked[p.author]) return;
+    if (cont.querySelector(`.ig-post[data-pid="${pid}"]`)) return;
+    const empty = cont.querySelector(".feed-empty");
+    if (empty) empty.remove();
+    const card = buildIgPostCard(p);
+    cont.insertBefore(card, cont.firstChild);
+}
+
+function updatePostCardInPlace(pid, p) {
+    const card = document.querySelector(`.ig-post[data-pid="${pid}"]`);
+    if (!card) return;
+    const slot = card.querySelector(".ig-dynamic-body");
+    const author = contactProfiles[p.author] || { username: p.author, name: p.author };
+    if (slot) fillIgDynamicBody(slot, p, author);
 }
 
 function renderFeed() {
@@ -643,77 +873,22 @@ function renderFeed() {
 
     cont.innerHTML = "";
     if (posts.length === 0) {
-        cont.innerHTML = `<div style="margin:auto; text-align:center; color:var(--text-dim); padding:40px;">لا توجد منشورات بعد.<br><br><button class="btn btn-sm" onclick="openCreatePostModal()">➕ انشر أول منشور</button></div>`;
+        cont.innerHTML = `<div class="feed-empty" style="margin:auto; text-align:center; color:var(--text-dim); padding:40px;">لا توجد منشورات بعد.<br><br><button class="btn btn-sm" onclick="openCreatePostModal()">➕ انشر أول منشور</button></div>`;
         return;
     }
+    posts.forEach(p => cont.appendChild(buildIgPostCard(p)));
+}
 
-    posts.forEach(p => {
-        const author = contactProfiles[p.author] || { username: p.author, name: p.author };
-        const likesObj = p.likes || {};
-        const likeCount = Object.keys(likesObj).length;
-        const likedByMe = !!likesObj[me.username];
-        const comms = Object.values(p.comments || {}).sort((a, b) => a.ts - b.ts);
-
-        const card = document.createElement("div");
-        card.className = "post-card";
-
-        const head = document.createElement("div");
-        head.className = "post-head";
-        head.innerHTML = `
-            <div class="post-author" onclick="openOtherProfile('${p.author}')">
-                <div class="avatar sm" id="pa_${p.id}"></div>
-                <div>
-                    <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px; flex-wrap:wrap;">${escapeHTML(author.name)} ${getVerifiedBadgeHTML(author.verified)} ${getDevBadgeHTML(author)}</div>
-                    <div style="font-size:11px; color:var(--text-dim);">${formatTime(p.ts)}</div>
-                </div>
-            </div>
-            ${p.author === me.username ? `<button class="icon-btn danger" style="width:32px; height:32px;" onclick="deletePost('${p.id}')">🗑️</button>` : ""}`;
-        card.appendChild(head);
-        setAvatarStyle(head.querySelector(`#pa_${p.id}`), author, false);
-
-        const media = document.createElement("div");
-        media.className = "post-media";
-        if (p.type === "image") {
-            media.innerHTML = `<img src="${p.content}" ondblclick="togglePostLike('${p.id}', false)" onclick="openLightbox('${p.content}')">`;
-        } else {
-            media.innerHTML = `<div class="post-text-card" style="background:${p.bg || GRADIENTS[0]}" ondblclick="togglePostLike('${p.id}', false)">${escapeHTML(p.content)}</div>`;
-        }
-        card.appendChild(media);
-
-        const acts = document.createElement("div");
-        acts.className = "post-actions";
-        acts.innerHTML = `
-            <button class="post-act-btn ${likedByMe ? 'liked' : ''}" onclick="togglePostLike('${p.id}', ${likedByMe})">${likedByMe ? '❤️' : '🤍'} <span>${likeCount}</span></button>
-            <button class="post-act-btn" onclick="openCommentsModal('${p.id}')">💬 <span>${comms.length}</span></button>`;
-        card.appendChild(acts);
-
-        if (likeCount > 0) {
-            const stRow = document.createElement("div");
-            stRow.className = "post-stats-row";
-            stRow.innerText = `عرض المتفاعلين (${likeCount}) 👁️`;
-            stRow.onclick = () => openPostLikesModal(p.id);
-            card.appendChild(stRow);
-        }
-
-        if (p.type === "image" && p.caption) {
-            const cap = document.createElement("div");
-            cap.className = "post-caption";
-            cap.innerHTML = `<strong>${escapeHTML(author.name)}</strong> ${escapeHTML(p.caption)}`;
-            card.appendChild(cap);
-        }
-
-        if (comms.length > 0) {
-            const previewBox = document.createElement("div");
-            previewBox.style.cssText = "padding:4px 16px 14px; font-size:12.5px; color:var(--text-dim); cursor:pointer; border-top:1px solid var(--border); margin-top:4px;";
-            previewBox.onclick = () => openCommentsModal(p.id);
-            const lastTwo = comms.slice(-2);
-            previewBox.innerHTML = lastTwo.map(c => `<div style="margin-top:4px;"><strong style="color:var(--text);">${escapeHTML(c.authorName || c.author)}:</strong> ${escapeHTML(c.text)}</div>`).join("") +
-                (comms.length > 2 ? `<div style="color:var(--accent); margin-top:5px; font-weight:700;">عرض كل التعليقات (${comms.length})</div>` : "");
-            card.appendChild(previewBox);
-        }
-
-        cont.appendChild(card);
+async function savePostToSaved(postId) {
+    const p = allPosts[postId];
+    if (!p) return;
+    const mId = "m_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+    await db.ref(`saved_msgs/${me.username}/${mId}`).set({
+        id: mId, sender: me.username, senderName: me.name,
+        type: p.type === "image" ? "image" : "text",
+        content: p.content, seen: true, ts: Date.now()
     });
+    showToast("تم حفظ المنشور في الرسائل المحفوظة 🔖");
 }
 
 async function togglePostLike(postId, currentlyLiked) {
@@ -792,7 +967,7 @@ async function submitComment() {
     renderCommentsList();
 }
 
-// ==================== 8. القنوات والمجموعات ====================
+// ==================== 9. القنوات والمجموعات ====================
 let createSpaceType = "channel";
 
 function openCreateSpaceModal() {
@@ -812,10 +987,7 @@ async function createSpace() {
     const name = document.getElementById("spName").value.trim();
     const handle = sanitizeKey(document.getElementById("spHandle").value.replace(/^@/, ""));
     const desc = document.getElementById("spDesc").value.trim() || "مساحة خاصة";
-    if (name.length < 2 || handle.length < 3) {
-        showToast("اكتب الاسم ويوزراً من 3 أحرف إنجليزية على الأقل");
-        return;
-    }
+    if (name.length < 2 || handle.length < 3) { showToast("اكتب الاسم ويوزراً من 3 أحرف إنجليزية على الأقل"); return; }
     const taken = await isHandleTakenAnywhere(handle);
     if (taken) { showToast("هذا اليوزر محجوز لحساب شخصي أو مساحة أخرى!"); return; }
 
@@ -823,9 +995,7 @@ async function createSpace() {
     const obj = {
         id, type: createSpaceType, name, handle, desc,
         avatarColor: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
-        owner: me.username,
-        verified: "",
-        createdAt: Date.now(),
+        owner: me.username, verified: "", createdAt: Date.now(),
         members: { [me.username]: "owner" }
     };
     await db.ref(`spaces/${id}`).set(obj);
@@ -907,13 +1077,9 @@ async function requestSpaceVerify() {
     const reason = prompt("ملاحظة طلب توثيق القناة/المجموعة:", "قناة رسمية نشطة");
     if (!reason) return;
     await db.ref(`verify_requests/sp_${activeSpaceObj.id}`).set({
-        targetType: "space",
-        targetId: activeSpaceObj.id,
-        name: activeSpaceObj.name,
-        displayTag: activeSpaceObj.handle,
-        requestedType: "blue",
-        reason: reason.trim(),
-        ts: Date.now()
+        targetType: "space", targetId: activeSpaceObj.id,
+        name: activeSpaceObj.name, displayTag: activeSpaceObj.handle,
+        requestedType: "blue", reason: reason.trim(), ts: Date.now()
     });
     showToast("تم إرسال طلب توثيق القناة للمطور 📨");
 }
@@ -934,7 +1100,7 @@ async function leaveActiveSpace() {
     showToast("تمت المغادرة");
 }
 
-// ==================== 9. الملف الشخصي، الإعدادات، التوثيق ====================
+// ==================== 10. الملف الشخصي، الإعدادات، التوثيق ====================
 let tempAvatarBase64 = null;
 
 function renderMyProfilePage() {
@@ -956,9 +1122,8 @@ function renderMyProfilePage() {
         const el = document.createElement("div"); el.className = "hl-item";
         el.onclick = () => openHighlightViewer(me.username, hl);
         const c = document.createElement("div"); c.className = "hl-circle";
-        if (hl.coverImg) { c.style.backgroundImage = `url(${hl.coverImg})`; } else { c.innerText = hl.icon || "✨"; }
-        el.appendChild(c);
-        const s = document.createElement("span"); s.innerText = hl.title; el.appendChild(s);
+        if (hl.coverImg) c.style.backgroundImage = `url(${hl.coverImg})`; else c.innerText = hl.icon || "✨";
+        el.appendChild(c); const s = document.createElement("span"); s.innerText = hl.title; el.appendChild(s);
         hlRow.appendChild(el);
     });
 
@@ -1041,7 +1206,7 @@ function openSettingsModal() {
     setAvatarStyle(document.getElementById("profAvatarPreview"), me, false);
     applyTheme(localStorage.getItem("app_theme") || "midnight", true);
     applyFont(localStorage.getItem("app_font") || "tajawal", true);
-    applyWallpaper(localStorage.getItem("app_wp") || "aurora", true);
+    applyWallpaper(localStorage.getItem("app_wp") || "pattern", true);
     document.getElementById("settingsModal").style.display = "flex";
     runPwaDiagnostics();
 }
@@ -1069,8 +1234,7 @@ async function saveProfile() {
             if (devCode !== ADMIN_PIN) { showToast("اليوزر (@H) محجوز حصرياً للمطور!"); return; }
             upd.isDev = true; upd.verified = "gold";
         } else if (newKey !== "h" && newKey.length < 3) {
-            showToast("اليوزر الجديد يجب أن يكون 3 أحرف على الأقل");
-            return;
+            showToast("اليوزر الجديد يجب أن يكون 3 أحرف على الأقل"); return;
         }
         const taken = await isHandleTakenAnywhere(newKey);
         if (taken) { showToast("هذا اليوزر محجوز مسبقاً لحساب أو قناة!"); return; }
@@ -1119,14 +1283,9 @@ async function submitVerifyRequest() {
     const type = document.getElementById("vrType").value;
     const reason = document.getElementById("vrReason").value.trim() || "طلب توثيق رسمي";
     await db.ref(`verify_requests/u_${me.username}`).set({
-        targetType: "user",
-        targetId: me.username,
-        username: me.username,
-        displayTag: me.displayTag || me.username,
-        name: me.name,
-        requestedType: type,
-        reason,
-        ts: Date.now()
+        targetType: "user", targetId: me.username, username: me.username,
+        displayTag: me.displayTag || me.username, name: me.name,
+        requestedType: type, reason, ts: Date.now()
     });
     document.getElementById("verifyReqModal").style.display = "none";
     showToast("تم إرسال طلب التوثيق للمطور 📨");
