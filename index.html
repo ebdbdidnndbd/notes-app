@@ -1,31 +1,41 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="midnight">
+<html lang="ar" dir="rtl" data-theme="midnight" data-font="tajawal" data-wp="aurora">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0e1624">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#0a1024">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>مفكرة دراسية - السادس العلمي</title>
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json?v=5">
+    <link rel="icon" type="image/png" href="./icon-192.png">
+    <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css?v=5">
 </head>
 <body>
+
+    <!-- خلفية ضوئية متحركة لإبراز التأثير الزجاجي -->
+    <div class="ambient-bg" aria-hidden="true">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
 
     <div id="toastBox"></div>
     <audio id="remoteAudio" autoplay playsinline style="display:none;"></audio>
 
     <!-- ==================== 1. بوابة الدخول المموهة ==================== -->
     <div class="center-screen" id="gateScreen">
-        <div class="glass-card">
+        <div class="glass-card hero-glass">
             <div class="brand-icon">
                 <svg viewBox="0 0 24 24"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
             </div>
             <h2>مفكرة السادس العلمي</h2>
             <p class="sub">أدخل رمز الجلسة الخاص لفتح المساحة الدراسية</p>
-            <input type="password" id="gatePin" class="input pin-field" placeholder="•••••" onkeydown="if(event.key==='Enter'){event.preventDefault(); verifyGate();}">
+            <input type="password" id="gatePin" class="input pin-field" placeholder="•••••" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault(); verifyGate();}">
             <button class="btn" onclick="verifyGate()">دخول للمنصة</button>
             <div class="err-text" id="gateErr"></div>
         </div>
@@ -33,7 +43,7 @@
 
     <!-- ==================== 2. بوابة الحسابات ==================== -->
     <div class="center-screen" id="authScreen" style="display:none;">
-        <div class="glass-card">
+        <div class="glass-card hero-glass">
             <div class="brand-icon">
                 <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
             </div>
@@ -47,7 +57,7 @@
             <div id="loginForm">
                 <div class="form-group">
                     <label>اسم المستخدم (اليوزر)</label>
-                    <input type="text" id="loginUser" class="input" placeholder="مثال: H أو اسمك" dir="ltr">
+                    <input type="text" id="loginUser" class="input" placeholder="مثال: H أو يوزرك" dir="auto">
                 </div>
                 <div class="form-group">
                     <label>كلمة السر</label>
@@ -63,7 +73,7 @@
                 </div>
                 <div class="form-group">
                     <label>اليوزر (إنجليزي وأرقام — حرف H محجوز للمطور فقط)</label>
-                    <input type="text" id="regUser" class="input" placeholder="مثال: hoor_07" dir="ltr">
+                    <input type="text" id="regUser" class="input" placeholder="مثال: hoor_07" dir="auto">
                 </div>
                 <div class="form-group">
                     <label>كلمة السر</label>
@@ -81,7 +91,7 @@
         </div>
     </div>
 
-    <!-- ==================== 3. التطبيق الرئيسي ==================== -->
+    <!-- ==================== 3. التطبيق الرئيسي الزجاجي ==================== -->
     <div id="appShell">
         <nav class="nav-bar">
             <button class="nav-item active" data-nav="chats" onclick="switchMainTab('chats')">
@@ -211,7 +221,7 @@
                                 <button class="icon-btn" onclick="toggleMediaMenu()" title="إرفاق وسائط">
                                     <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
                                 </button>
-                                <input type="text" id="msgInput" placeholder="اكتب رسالة..." oninput="handleTyping()" onkeydown="if(event.key==='Enter' && !event.shiftKey && !event.repeat){event.preventDefault(); sendTextMessage();}">
+                                <textarea id="msgInput" rows="1" placeholder="اكتب رسالة..." oninput="handleMsgInputResize(this); handleTyping();" onkeydown="handleMsgKeydown(event)"></textarea>
                                 <button class="icon-btn" id="micBtn" onclick="startRecording()" title="بصمة صوتية">
                                     <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 0 0-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
                                 </button>
@@ -269,14 +279,14 @@
                             <div class="prof-av-row">
                                 <div class="avatar lg" id="myProfAvatar" onclick="openUserStory(me.username)">ح</div>
                                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                    <button class="btn btn-sm btn-outline" onclick="openSettingsModal()">⚙️ إعدادات وثيمات</button>
+                                    <button class="btn btn-sm btn-outline" onclick="openSettingsModal()">⚙️ إعدادات ومظهر</button>
                                     <button class="btn btn-sm" onclick="openVerifyReqModal()">✓ توثيق</button>
                                 </div>
                             </div>
 
-                            <h2 id="myProfName" style="font-size:21px; font-weight:800; display:flex; align-items:center; gap:4px;">الاسم</h2>
-                            <div id="myProfTag" style="font-size:13.5px; color:var(--accent); font-weight:700; margin-bottom:6px;">@H</div>
-                            <p id="myProfBio" style="font-size:13.5px; color:var(--text-dim); margin-bottom:10px;"></p>
+                            <h2 id="myProfName" style="font-size:21px; font-weight:800; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">الاسم</h2>
+                            <div id="myProfTag" class="handle-ltr" dir="ltr">@H</div>
+                            <p id="myProfBio" style="font-size:13.5px; color:var(--text-dim); margin:6px 0 10px;"></p>
 
                             <div class="prof-stats">
                                 <div><strong id="stMyPosts">0</strong><span>منشور</span></div>
@@ -303,13 +313,13 @@
 
     <!-- ==================== النوافذ المنبثقة ==================== -->
 
-    <!-- البحث الموحد (حسابات + قنوات + مجموعات بخانة واحدة) -->
+    <!-- البحث الموحد -->
     <div class="modal-bg" id="unifiedSearchModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
             <h3>🔍 البحث الموحد باليوزر</h3>
             <p class="sub">ابحث عن أي حساب شخصي أو قناة أو مجموعة بنفس الخانة</p>
             <div style="display:flex; gap:8px; margin-bottom:14px;">
-                <input type="text" id="unifiedSearchInput" class="input" placeholder="اكتب اليوزر مثل H أو اسم القناة..." dir="ltr" onkeydown="if(event.key==='Enter'){event.preventDefault(); runUnifiedSearch();}">
+                <input type="text" id="unifiedSearchInput" class="input" placeholder="اكتب اليوزر مثل H أو يوزر القناة..." dir="auto" onkeydown="if(event.key==='Enter'){event.preventDefault(); runUnifiedSearch();}">
                 <button class="btn" style="width:90px;" onclick="runUnifiedSearch()">بحث</button>
             </div>
             <div id="unifiedSearchResult" style="min-height:48px; text-align:right;"></div>
@@ -431,7 +441,7 @@
             </div>
             <div class="form-group">
                 <label>اليوزر الموحد للبحث والانضمام (@handle)</label>
-                <input type="text" id="spHandle" class="input" placeholder="مثال: study_iq" dir="ltr">
+                <input type="text" id="spHandle" class="input" placeholder="مثال: study_iq" dir="auto">
             </div>
             <div class="form-group">
                 <label>الوصف</label>
@@ -461,18 +471,18 @@
     <div class="modal-bg" id="spaceInfoModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
             <div class="avatar lg" id="siAvatar" style="margin:0 auto 10px;">📢</div>
-            <h3 id="siName" style="display:flex; align-items:center; justify-content:center;">الاسم</h3>
-            <div id="siHandle" style="color:var(--accent); font-size:13px; font-weight:700; margin-bottom:6px;">@handle</div>
+            <h3 id="siName" style="display:flex; align-items:center; justify-content:center; gap:4px;">الاسم</h3>
+            <div id="siHandle" class="handle-ltr" dir="ltr" style="margin-bottom:6px;">@handle</div>
             <p id="siDesc" style="font-size:13px; color:var(--text-dim); margin-bottom:12px;"></p>
             <div id="siOwnerControls" style="display:none; margin-bottom:12px;">
                 <div style="display:flex; gap:6px; margin-bottom:8px;">
-                    <input type="text" id="siAddUser" class="input" placeholder="إضافة عضو باليوزر..." dir="ltr">
+                    <input type="text" id="siAddUser" class="input" placeholder="إضافة عضو باليوزر..." dir="auto">
                     <button class="btn btn-sm" onclick="addMemberToActiveSpace()">إضافة</button>
                 </div>
                 <button class="btn btn-sm btn-outline" id="siReqVerifyBtn" style="width:100%;" onclick="requestSpaceVerify()">✓ طلب توثيق القناة من الإدارة</button>
             </div>
             <div style="text-align:right; font-size:12px; color:var(--text-dim); margin-bottom:6px;">الأعضاء (<span id="siCount">0</span>):</div>
-            <div id="siMembersList" style="max-height:130px; overflow-y:auto; text-align:right; background:var(--bg-main); padding:8px; border-radius:12px; margin-bottom:14px;"></div>
+            <div id="siMembersList" style="max-height:130px; overflow-y:auto; text-align:right; background:var(--glass-inner); padding:8px; border-radius:12px; margin-bottom:14px;"></div>
             <div style="display:flex; gap:8px;">
                 <button class="btn btn-danger btn-sm" style="flex:1;" onclick="leaveActiveSpace()">مغادرة</button>
                 <button class="btn btn-outline btn-sm" style="flex:1;" onclick="document.getElementById('spaceInfoModal').style.display='none'">إغلاق</button>
@@ -501,17 +511,18 @@
         </div>
     </div>
 
-    <!-- إعدادات الحساب وتغيير اليوزر والثيمات وتثبيت التطبيق -->
+    <!-- إعدادات الحساب، الثيمات، الخطوط، خلفية المحادثة، وتثبيت التطبيق -->
     <div class="modal-bg" id="settingsModal" onclick="if(event.target===this) this.style.display='none'">
-        <div class="glass-card" style="max-width:420px;">
-            <h3 style="margin-bottom:10px;">⚙️ الإعدادات والتخصيص</h3>
+        <div class="glass-card" style="max-width:440px;">
+            <h3 style="margin-bottom:10px;">⚙️ الإعدادات والتخصيص الزجاجي</h3>
             <div style="display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:12px;">
                 <div class="avatar lg" id="profAvatarPreview">ح</div>
                 <input type="file" id="profAvatarInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
                 <button class="btn btn-outline btn-sm" onclick="document.getElementById('profAvatarInput').click()">📷 تغيير الصورة الشخصية</button>
             </div>
+
             <div class="form-group">
-                <label>ثيم الواجهة:</label>
+                <label>ثيم الواجهة الزجاجي:</label>
                 <div class="theme-grid">
                     <div class="theme-swatch" data-t="midnight" style="background:linear-gradient(135deg,#0d1726,#0ea5e9);" onclick="applyTheme('midnight')">كحلي</div>
                     <div class="theme-swatch" data-t="obsidian" style="background:linear-gradient(135deg,#050508,#7c3aed);" onclick="applyTheme('obsidian')">فحمي</div>
@@ -520,6 +531,28 @@
                     <div class="theme-swatch" data-t="amber" style="background:linear-gradient(135deg,#151109,#eab308);" onclick="applyTheme('amber')">ذهبي</div>
                 </div>
             </div>
+
+            <div class="form-group">
+                <label>نوع الخط:</label>
+                <div class="chip-grid" id="fontGrid">
+                    <button type="button" class="chip-btn" data-f="tajawal" onclick="applyFont('tajawal')">تجوّل</button>
+                    <button type="button" class="chip-btn" data-f="ibm" onclick="applyFont('ibm')">IBM أنيق</button>
+                    <button type="button" class="chip-btn" data-f="readex" onclick="applyFont('readex')">عصري</button>
+                    <button type="button" class="chip-btn" data-f="cairo" onclick="applyFont('cairo')">كايرو</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>خلفية المحادثة:</label>
+                <div class="chip-grid" id="wpGrid">
+                    <button type="button" class="chip-btn" data-w="aurora" onclick="applyWallpaper('aurora')">شفق زجاجي</button>
+                    <button type="button" class="chip-btn" data-w="dots" onclick="applyWallpaper('dots')">نقاط هادئة</button>
+                    <button type="button" class="chip-btn" data-w="clean" onclick="applyWallpaper('clean')">سادة صافي</button>
+                    <button type="button" class="chip-btn" data-w="custom" onclick="document.getElementById('chatBgFileInput').click()">🖼️ صورة</button>
+                </div>
+                <input type="file" id="chatBgFileInput" accept="image/*" style="display:none" onchange="handleChatWallpaperUpload(event)">
+            </div>
+
             <div class="form-group">
                 <label>الاسم الظاهر</label>
                 <input type="text" id="profName" class="input">
@@ -532,12 +565,18 @@
                 <label>النبذة / البايو</label>
                 <input type="text" id="profBio" class="input">
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:9px 13px; border-radius:12px; margin-bottom:10px; border:1px solid var(--border);">
+
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-inner); padding:9px 13px; border-radius:12px; margin-bottom:10px; border:1px solid var(--border);">
                 <span style="font-size:13px; font-weight:700;">🔊 أصوات التنبيهات</span>
                 <button class="btn btn-sm btn-outline" id="soundToggleBtn" onclick="toggleSoundPref()">مفعلة</button>
             </div>
-            <button class="btn btn-outline" id="pwaModalInstallBtn" style="margin-bottom:10px;" onclick="triggerPwaInstall()">📲 تثبيت كتطبيق على الهاتف</button>
-            <div style="display:flex; gap:8px;">
+
+            <div class="pwa-box">
+                <div id="pwaDiagBox" style="font-size:11.5px; color:var(--text-dim); margin-bottom:8px; text-align:right;">جاري فحص جاهزية التثبيت...</div>
+                <button class="btn btn-outline" id="pwaModalInstallBtn" onclick="triggerPwaInstall()">📲 تثبيت التطبيق على الهاتف</button>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:10px;">
                 <button class="btn" onclick="saveProfile()">حفظ التغييرات</button>
                 <button class="btn btn-danger" onclick="logoutAccount()">خروج</button>
             </div>
@@ -567,7 +606,7 @@
     <!-- بروفايل المستخدم الآخر -->
     <div class="modal-bg" id="userProfileModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:420px; padding:0; overflow:hidden; text-align:right;">
-            <div style="height:85px; background:var(--primary-grad);"></div>
+            <div style="height:88px; background:var(--primary-grad);"></div>
             <div style="padding:0 18px 18px;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:-38px; margin-bottom:10px;">
                     <div class="avatar lg" id="upAvatar" style="width:74px; height:74px;">؟</div>
@@ -577,8 +616,8 @@
                         <button class="btn btn-sm btn-outline" id="upReportBtn">⚠️ إبلاغ</button>
                     </div>
                 </div>
-                <h3 id="upName" style="display:flex; align-items:center;">الاسم</h3>
-                <div id="upTag" style="font-size:13px; color:var(--accent); font-weight:700; margin-bottom:4px;">@user</div>
+                <h3 id="upName" style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">الاسم</h3>
+                <div id="upTag" class="handle-ltr" dir="ltr" style="margin-bottom:4px;">@user</div>
                 <p id="upBio" style="font-size:13px; color:var(--text-dim); margin-bottom:12px;"></p>
 
                 <div style="font-size:12px; color:var(--text-dim); font-weight:700;">✨ الهايلايت:</div>
@@ -599,7 +638,7 @@
             <div style="display:flex; align-items:center; gap:10px;">
                 <div class="avatar sm" id="svAvatar">؟</div>
                 <div>
-                    <div id="svName" style="font-weight:800; font-size:14px; display:flex; align-items:center;">الاسم</div>
+                    <div id="svName" style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px;">الاسم</div>
                     <div id="svTime" style="font-size:11px; color:rgba(255,255,255,0.7);">الآن</div>
                 </div>
             </div>
@@ -626,11 +665,12 @@
         <img id="lightboxImg" src="">
     </div>
 
-    <!-- شاشة المكالمات السريعة -->
+    <!-- شاشة المكالمات الاحترافية -->
     <div id="callOverlay">
         <div class="call-header">
             <h3 id="callName">مكالمة</h3>
             <span id="callStatus">جاري الاتصال...</span>
+            <div id="callNetState" style="font-size:11.5px; color:var(--text-dim); margin-top:3px;"></div>
         </div>
         <div class="video-stage">
             <video id="remoteVideo" autoplay playsinline></video>
@@ -645,6 +685,7 @@
             <button class="c-btn" id="muteBtn" title="كتم الصوت" onclick="toggleMicMute()">🎤</button>
             <button class="c-btn" id="camBtn" title="الكاميرا" onclick="toggleCamVideo()">📹</button>
             <button class="c-btn" id="flipCamBtn" title="قلب الكاميرا" onclick="flipCamera()">🔄</button>
+            <button class="c-btn" id="reconnectCallBtn" style="display:none;" title="إعادة ربط الشبكة" onclick="restartCallIce()">📡</button>
             <button class="c-btn hangup" title="إنهاء" onclick="endCall(true)">📵</button>
         </div>
     </div>
@@ -664,6 +705,18 @@
                 <div class="stat-card"><h3 id="admStatUsers">0</h3><span>الحسابات</span></div>
                 <div class="stat-card"><h3 id="admStatOnline" style="color:var(--success);">0</h3><span>متصل الآن</span></div>
                 <div class="stat-card"><h3 id="admStatSpaces">0</h3><span>القنوات/المجموعات</span></div>
+            </div>
+
+            <!-- أداة توليد أيقونات التثبيت PNG الأصلية لحل مشكلة كروم نهائياً -->
+            <div class="adm-section">
+                <h4>📲 حل مشكلة تثبيت التطبيق (أيقونات PNG أصلية لكروم)</h4>
+                <p style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px; line-height:1.6;">
+                    حمّل الأيقونتين أدناه (بصيغة PNG أصلية مطابقة لشروط كروم 100%) ثم ارفعهن مباشرة لمستودع GitHub حتى ينزل التطبيق بدون علامة كروم نهائياً:
+                </p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn btn-sm" onclick="downloadOfficialPngIcon(192)">⬇️ تحميل icon-192.png</button>
+                    <button class="btn btn-sm btn-success" onclick="downloadOfficialPngIcon(512)">⬇️ تحميل icon-512.png</button>
+                </div>
             </div>
 
             <div class="adm-section">
@@ -715,7 +768,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="core.js"></script>
-    <script src="features.js"></script>
+    <script src="./core.js?v=5"></script>
+    <script src="./features.js?v=5"></script>
 </body>
 </html>
