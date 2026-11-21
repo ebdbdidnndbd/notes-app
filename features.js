@@ -1,9 +1,9 @@
-// ==================== 1. نظام التثبيت الآمن وفاحص الجاهزية (PWA V11) ====================
+// ==================== 1. نظام التثبيت الآمن وفاحص الجاهزية (PWA V12 Signature) ====================
 let deferredInstallPrompt = null;
 
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=11").then(reg => {
+        navigator.serviceWorker.register("./sw.js?v=12").then(reg => {
             reg.update().catch(() => {});
         }).catch(() => {});
     });
@@ -21,7 +21,7 @@ window.addEventListener("appinstalled", () => {
     deferredInstallPrompt = null;
     const topBtn = document.getElementById("installTopBtn");
     if (topBtn) topBtn.style.display = "none";
-    showToast("تم تثبيت التطبيق على شاشة هاتفك بنجاح 📲");
+    showToast("تم تثبيت التطبيق على شاشة هاتفك بنجاح");
     runPwaDiagnostics();
 });
 
@@ -31,13 +31,13 @@ async function runPwaDiagnostics() {
 
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     if (isStandalone) {
-        box.innerHTML = `<span style="color:var(--success); font-weight:800;">✅ التطبيق مثبّت ويعمل كبرنامج مستقل بالكامل.</span>`;
+        box.innerHTML = `<span style="color:var(--success); font-weight:800;">التطبيق مثبّت ويعمل كبرنامج مستقل بالكامل.</span>`;
         return;
     }
 
     const checks = [];
     const swReady = ("serviceWorker" in navigator) && !!(await navigator.serviceWorker.getRegistration());
-    checks.push(swReady ? "✅ الخدمة الخلفية للتطبيق تعمل" : "⚠️ انتظر لحظة لتفعيل الخدمة الخلفية");
+    checks.push(swReady ? "✓ الخدمة الخلفية للتطبيق تعمل" : "• جاري تفعيل الخدمة الخلفية");
 
     let icon192Ok = false, icon512Ok = false;
     try {
@@ -49,8 +49,8 @@ async function runPwaDiagnostics() {
         icon512Ok = r2.ok && (r2.headers.get("content-type") || "").includes("png");
     } catch {}
 
-    checks.push((icon192Ok && icon512Ok) ? "✅ أيقونات التطبيق جاهزة" : "⚠️ ملفات الأيقونات قيد التجهيز");
-    checks.push(deferredInstallPrompt ? "🚀 جاهز للتثبيت المباشر — اضغط الزر أدناه!" : "ℹ️ افتح الرابط بمتصفح Chrome أو Safari مباشرة للتثبيت.");
+    checks.push((icon192Ok && icon512Ok) ? "✓ أيقونات التطبيق جاهزة" : "• ملفات الأيقونات قيد التجهيز");
+    checks.push(deferredInstallPrompt ? "✓ جاهز للتثبيت المباشر — اضغط الزر أدناه" : "• افتح الرابط بمتصفح Chrome أو Safari مباشرة للتثبيت");
     box.innerHTML = checks.join("<br>");
 }
 
@@ -66,7 +66,7 @@ async function triggerPwaInstall() {
         if (isIOS) {
             alert("لتثبيت التطبيق على الآيفون:\n1. افتح الرابط في متصفح Safari مباشرة.\n2. اضغط زر المشاركة (Share) أسفل المتصفح.\n3. اختر (إضافة إلى الشاشة الرئيسية).");
         } else {
-            alert("لتثبيت التطبيق على الأندرويد:\n1. افتح الرابط بمتصفح Chrome مباشرة (وليس من داخل إنستگرام أو تليگرام).\n2. اضغط الثلاث نقاط (⋮) بأعلى المتصفح.\n3. اختر (إضافة إلى الشاشة الرئيسية) ← (تثبيت).");
+            alert("لتثبيت التطبيق على الأندرويد:\n1. افتح الرابط بمتصفح Chrome مباشرة.\n2. اضغط الثلاث نقاط (⋮) بأعلى المتصفح.\n3. اختر (إضافة إلى الشاشة الرئيسية) ← (تثبيت).");
         }
     }
 }
@@ -90,7 +90,7 @@ function renderNotifications() {
     box.innerHTML = list.map(n => `
         <div class="notif-item ${n.read ? '' : 'unread'}">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                <span>${n.icon || "🔔"} &nbsp; ${escapeHTML(n.text)}</span>
+                <span>${n.icon || "•"} &nbsp; ${escapeHTML(n.text)}</span>
                 <span style="font-size:11px; color:var(--text-dim); flex-shrink:0;">${formatTime(n.ts)}</span>
             </div>
         </div>`).join("");
@@ -101,7 +101,7 @@ async function clearAllNotifications() {
     showToast("تم تنظيف الإشعارات");
 }
 
-// ==================== 3. لوحة تليگرام السفلية ====================
+// ==================== 3. لوحة الرموز والملصقات السفلية ====================
 const EMOJI_LIST = [
     { em: "😂", k: "ضحك" }, { em: "🤣", k: "ضحك" }, { em: "❤️", k: "حب قلب" }, { em: "😘", k: "بوسة حب" },
     { em: "😍", k: "حب اعجاب" }, { em: "🥰", k: "حب عمري" }, { em: "👍", k: "تمام لايك" }, { em: "😊", k: "ابتسامة" },
@@ -185,7 +185,7 @@ async function handleCreateCustomSticker(e) {
     customStickers.unshift({ id: "cs_" + Date.now(), src: dataUrl });
     customStickers = customStickers.slice(0, 16);
     try { localStorage.setItem("custom_stickers_v6", JSON.stringify(customStickers)); } catch {}
-    renderDrawerContent(); showToast("تم حفظ الملصق بالمفضلة ✨");
+    renderDrawerContent(); showToast("تم حفظ الملصق بالمفضلة");
 }
 
 function deleteCustomSticker(id) {
@@ -201,26 +201,26 @@ function renderDrawerContent() {
         const q = emojiSearchQuery.trim();
         const filtered = q ? EMOJI_LIST.filter(x => x.k.includes(q) || x.em.includes(q)) : EMOJI_LIST;
         body.innerHTML = `
-            <input type="text" class="emoji-search" placeholder="🔍 بحث عن رمز (مثال: حب، ضحك، نار)..." value="${escapeHTML(emojiSearchQuery)}" oninput="emojiSearchQuery=this.value; renderDrawerContent();">
+            <input type="text" class="emoji-search" placeholder="بحث عن رمز (مثال: حب، ضحك، نار)..." value="${escapeHTML(emojiSearchQuery)}" oninput="emojiSearchQuery=this.value; renderDrawerContent();">
             <div class="emoji-grid">${filtered.map(x => `<button type="button" class="emoji-cell" onclick="insertEmojiToInput('${x.em}')">${x.em}</button>`).join("")}</div>`;
         const inp = body.querySelector(".emoji-search");
         if (q && inp) { inp.focus(); inp.setSelectionRange(q.length, q.length); }
     } else if (activeDrawerTab === "gifs") {
         body.innerHTML = `
-            <div class="st-sec-title">⚡ بطاقات تفاعلية خفيفة (تعمل حتى على أضعف نت)</div>
-            <div class="gif-grid">${GIF_CARDS.map(g => `<div class="gif-card" style="background:${g.bg}" onclick="pushMessageSafe('gif_card','${g.id}','🎬 ${escapeHTML(g.cap)}'); toggleStickerDrawer(false);"><span style="font-size:28px;">${g.em}</span><span>${escapeHTML(g.cap)}</span></div>`).join("")}</div>`;
+            <div class="st-sec-title">بطاقات تفاعلية خفيفة (تعمل حتى على أضعف نت)</div>
+            <div class="gif-grid">${GIF_CARDS.map(g => `<div class="gif-card" style="background:${g.bg}" onclick="pushMessageSafe('gif_card','${g.id}','${escapeHTML(g.cap)}'); toggleStickerDrawer(false);"><span style="font-size:28px;">${g.em}</span><span>${escapeHTML(g.cap)}</span></div>`).join("")}</div>`;
     } else {
-        let html = `<div class="st-sec-title">⭐ ملصقاتي المفضلة (اضغط + لإنشاء ملصق من أي صورة)</div><div class="sticker-grid">
+        let html = `<div class="st-sec-title">ملصقاتي المفضلة (اضغط + لإنشاء ملصق من أي صورة)</div><div class="sticker-grid">
             <div class="sticker-tile sticker-create-tile" onclick="document.getElementById('customStickerInput').click()"><span style="font-size:24px;">＋</span><span>إنشاء</span></div>`;
         customStickers.forEach(cs => {
-            html += `<div class="sticker-tile" style="position:relative;" onclick="pushMessageSafe('img_sticker','${cs.src}','🎭 ملصق'); toggleStickerDrawer(false);"><img src="${cs.src}" loading="lazy"><button type="button" onclick="event.stopPropagation(); deleteCustomSticker('${cs.id}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.7); color:#fff; font-size:10px; cursor:pointer;">✕</button></div>`;
+            html += `<div class="sticker-tile" style="position:relative;" onclick="pushMessageSafe('img_sticker','${cs.src}','ملصق'); toggleStickerDrawer(false);"><img src="${cs.src}" loading="lazy"><button type="button" onclick="event.stopPropagation(); deleteCustomSticker('${cs.id}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.7); color:#fff; font-size:10px; cursor:pointer;">✕</button></div>`;
         });
         html += `</div>`;
         if (recentStickers.length > 0) {
-            html += `<div class="st-sec-title">🕒 مستخدمة حديثاً</div><div class="sticker-grid">` +
+            html += `<div class="st-sec-title">مستخدمة حديثاً</div><div class="sticker-grid">` +
                 recentStickers.map(id => { const st = findStickerById(id); return `<div class="sticker-tile" onclick="sendBuiltinSticker(findStickerById('${st.id}'))"><span class="st-em">${st.em}</span><span class="st-cap">${escapeHTML(st.cap)}</span></div>`; }).join("") + `</div>`;
         }
-        html += `<div class="st-sec-title">🎭 ملصقات المنصة</div><div class="sticker-grid">` +
+        html += `<div class="st-sec-title">ملصقات المنصة</div><div class="sticker-grid">` +
             BUILTIN_STICKERS.map(st => `<div class="sticker-tile" onclick="sendBuiltinSticker(findStickerById('${st.id}'))"><span class="st-em">${st.em}</span><span class="st-cap">${escapeHTML(st.cap)}</span></div>`).join("") + `</div>`;
         body.innerHTML = html;
     }
@@ -230,24 +230,31 @@ function toggleStickerDrawer(force) {
     const d = document.getElementById("stickerDrawer");
     const show = typeof force === "boolean" ? force : d.style.display !== "flex";
     d.style.display = show ? "flex" : "none";
-    document.getElementById("stickerBtn").classList.toggle("accent", show);
+    const btn = document.getElementById("stickerBtn");
+    if (btn) btn.classList.toggle("accent", show);
     if (show) { toggleMediaMenu(false); if (typeof toggleChatExtras === "function") toggleChatExtras(false); renderDrawerContent(); }
 }
 
+// لوحة المرفقات السفلية V12 (Native Bottom Sheet)
 function toggleMediaMenu(force) {
     const m = document.getElementById("mediaMenu");
-    const show = typeof force === "boolean" ? force : m.style.display !== "block";
-    m.style.display = show ? "block" : "none";
-    if (show) { toggleStickerDrawer(false); if (typeof toggleChatExtras === "function") toggleChatExtras(false); }
+    if (!m) return;
+    const show = typeof force === "boolean" ? force : !m.classList.contains("open");
+    m.classList.toggle("open", show);
+    if (show) {
+        toggleStickerDrawer(false);
+        if (typeof toggleChatExtras === "function") toggleChatExtras(false);
+        if (typeof toggleChatToolsMenu === "function") toggleChatToolsMenu(false);
+    }
 }
 
-// ==================== 4. الوسائط والبصمة (بفلاتر الصوت) والعرض لمرة واحدة ====================
+// ==================== 4. الوسائط والبصمة والعرض لمرة واحدة ====================
 async function handleSendImage(e, isViewOnce = false) {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     showToast(isViewOnce ? "جاري تجهيز العرض لمرة واحدة..." : "جاري ضغط وإرسال الصورة...");
     const dataUrl = await compressImageFile(f, 820, 0.70);
-    if (isViewOnce) await pushMessageSafe("view_once", dataUrl, "💣 صورة عرض لمرة واحدة", { voOpened: false });
-    else await pushMessageSafe("image", dataUrl, "📷 صورة");
+    if (isViewOnce) await pushMessageSafe("view_once", dataUrl, "صورة عرض لمرة واحدة", { voOpened: false });
+    else await pushMessageSafe("image", dataUrl, "صورة");
 }
 
 let activeViewOnceMsgId = null;
@@ -264,7 +271,7 @@ async function closeViewOnce() {
     if (activeViewOnceMsgId && activeRoomId) {
         const targetId = activeViewOnceMsgId; activeViewOnceMsgId = null;
         await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ voOpened: true, content: "" });
-        showToast("تم حذف الصورة بعد العرض 💨");
+        showToast("تم حذف الصورة بعد العرض");
     }
 }
 
@@ -273,7 +280,7 @@ function handleSendVideo(e) {
     if (f.size > 4.5 * 1024 * 1024) { showToast("الحد الأقصى للفيديو السريع 4.5 ميجابايت"); return; }
     showToast("جاري رفع الفيديو...");
     const r = new FileReader();
-    r.onload = ev => pushMessageSafe("video", ev.target.result, "🎬 فيديو");
+    r.onload = ev => pushMessageSafe("video", ev.target.result, "فيديو");
     r.readAsDataURL(f);
 }
 
@@ -293,7 +300,7 @@ async function startRecording() {
             if (cancelRec || recChunks.length === 0) return;
             const voiceFilter = document.getElementById("voiceFilterSel")?.value || "normal";
             const r = new FileReader();
-            r.onloadend = () => pushMessageSafe("audio", r.result, "🎤 بصمة صوتية", { voiceFilter });
+            r.onloadend = () => pushMessageSafe("audio", r.result, "بصمة صوتية", { voiceFilter });
             r.readAsDataURL(new Blob(recChunks, { type: mediaRec.mimeType || "audio/webm" }));
         };
         mediaRec.start(); recSec = 0;
@@ -335,7 +342,7 @@ async function publishPoll() {
     ].filter(Boolean);
     if (!q || opts.length < 2) { showToast("اكتب السؤال وخيارين على الأقل"); return; }
     document.getElementById("createPollModal").style.display = "none";
-    await pushMessageSafe("poll", q, `📊 استطلاع: ${q}`, { poll: { question: q, options: opts, votes: {} } });
+    await pushMessageSafe("poll", q, `استطلاع: ${q}`, { poll: { question: q, options: opts, votes: {} } });
 }
 
 async function voteInPoll(msgId, optIndex) {
@@ -350,7 +357,7 @@ async function toggleChannelReaction(msgId, rKey, currentlyMine) {
     playSendSound();
 }
 
-// ==================== 6. الستوري (مع تأكيد الحذف + دعم مدة الأغنية الكاملة) ====================
+// ==================== 6. الستوري ====================
 let createStoryType = "text";
 
 function getActiveStoriesFor(username) {
@@ -441,7 +448,7 @@ async function publishStory() {
     await db.ref(`stories/${me.username}/${id}`).set(payload);
     if (typeof window.__clearDraftStorySong === "function") window.__clearDraftStorySong();
     document.getElementById("createStoryModal").style.display = "none";
-    showToast("تم نشر قصتك بنجاح ✨");
+    showToast("تم نشر قصتك بنجاح");
 }
 
 let svOwner = null, svList = [], svIndex = 0, svTimer = null, svIsHighlight = false, svPaused = false, svActiveVideo = null;
@@ -470,7 +477,7 @@ function renderCurrentStorySlide() {
 
     setAvatarStyle(document.getElementById("svAvatar"), ownerObj, false);
     document.getElementById("svName").innerHTML = `${renderStyledUserName(ownerObj)} ${getVerifiedBadgeHTML(ownerObj.verified)} ${getDevBadgeHTML(ownerObj)}`;
-    document.getElementById("svTime").innerText = svIsHighlight ? "🌟 هايلايت" : formatTime(liveItem.ts);
+    document.getElementById("svTime").innerText = svIsHighlight ? "هايلايت" : formatTime(liveItem.ts);
 
     const isMine = svOwner === me.username && !svIsHighlight;
     document.getElementById("svDelBtn").style.display = isMine ? "inline-flex" : "none";
@@ -506,7 +513,7 @@ function renderCurrentStorySlide() {
     const foot = document.getElementById("svFooter");
     if (isMine) {
         const vCnt = Object.keys(liveItem.viewers || {}).length, rCnt = Object.keys(liveItem.reactions || {}).length;
-        foot.innerHTML = `<button class="btn btn-outline" style="max-width:280px; margin:0 auto;" onclick="event.stopPropagation(); openStoryViewersModal()">👁️ المشاهدات (${vCnt}) &nbsp;•&nbsp; ❤️ التفاعلات (${rCnt})</button>`;
+        foot.innerHTML = `<button class="btn btn-outline" style="max-width:280px; margin:0 auto;" onclick="event.stopPropagation(); openStoryViewersModal()">المشاهدات (${vCnt}) &nbsp;•&nbsp; التفاعلات (${rCnt})</button>`;
     } else if (!svIsHighlight) {
         foot.innerHTML = `
             <div class="sv-react-row">
@@ -523,23 +530,17 @@ function renderCurrentStorySlide() {
     } else { foot.innerHTML = ""; }
 
     if (liveItem.type !== "video") {
-        // حساب مدة الستوري بدقة حسب إعدادات الأغنية (تشغيل للنهاية أو مدة مقصوصة)
         const m = liveItem.music;
         let durationSec = 7;
         if (m && (m.url || m.ytId)) {
-            if (m.playFull) {
-                durationSec = m.durationSec || (m.ytId ? 45 : 29.5);
-            } else if (typeof m.startSec === "number" && typeof m.endSec === "number" && m.endSec > m.startSec) {
-                durationSec = Math.max(4, m.endSec - m.startSec);
-            } else {
-                durationSec = 15;
-            }
+            if (m.playFull) durationSec = m.durationSec || (m.ytId ? 45 : 29.5);
+            else if (typeof m.startSec === "number" && typeof m.endSec === "number" && m.endSec > m.startSec) durationSec = Math.max(4, m.endSec - m.startSec);
+            else durationSec = 15;
         }
         const totalTicks = Math.max(20, Math.round((durationSec * 1000) / 100));
         let tick = 0;
         svTimer = setInterval(() => {
             if (svPaused) return;
-            // إذا مفعّل «تشغيل للنهاية» وصوت المقطع شغال، يتبع التقدم الفعلي للملف الصوتي
             if (m?.playFull && window.__storyAudioProgress && typeof window.__storyAudioProgress === "function") {
                 const realPct = window.__storyAudioProgress();
                 if (realPct !== null) {
@@ -580,7 +581,7 @@ async function replyToStory() {
     const inp = document.getElementById("svReplyInp"), txt = (inp?.value || "").trim();
     if (!txt || !svOwner) return;
     const rId = getRoomId(me.username, svOwner), mId = "m_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-    const fullTxt = `رد على قصتك ✨:\n${txt}`;
+    const fullTxt = `رد على قصتك:\n${txt}`;
     const enc = await e2eEncrypt(rId, fullTxt);
     const encPrev = await e2eEncrypt(rId, "رد على القصة: " + txt);
     await db.ref(`chats/${rId}/messages/${mId}`).set({
@@ -592,7 +593,7 @@ async function replyToStory() {
         lastMsgEnc: encPrev.e2e ? encPrev.data : "", lastSender: me.username, lastTs: Date.now(), unreadFor: svOwner
     });
     sendNotification(svOwner, `ردّ ${me.name} على قصتك: "${txt.slice(0, 30)}"`, "💬");
-    inp.value = ""; pauseStoryMedia(false); showToast("تم إرسال ردك للخاص ✅");
+    inp.value = ""; pauseStoryMedia(false); showToast("تم إرسال ردك للخاص");
 }
 
 function openStoryViewersModal() {
@@ -606,7 +607,7 @@ function openStoryViewersModal() {
         box.innerHTML = Array.from(allKeys).map(u => {
             const v = typeof viewers[u] === "object" ? viewers[u] : { name: contactProfiles[u]?.name || u, tag: "@" + u, ts: viewers[u] };
             const r = reacts[u], cleanTag = v.tag || r?.tag || ("@" + u);
-            return `<div class="adm-row"><div><div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><span>${escapeHTML(v.name || r?.name || u)}</span><span class="handle-ltr" dir="ltr" style="font-size:12px;">${escapeHTML(cleanTag)}</span></div><div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${v.ts ? "شاهدها الساعة " + formatTime(v.ts) : ""}</div></div><div style="font-size:22px;">${r?.emoji || "👁️"}</div></div>`;
+            return `<div class="adm-row"><div><div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><span>${escapeHTML(v.name || r?.name || u)}</span><span class="handle-ltr" dir="ltr" style="font-size:12px;">${escapeHTML(cleanTag)}</span></div><div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${v.ts ? "شاهدها الساعة " + formatTime(v.ts) : ""}</div></div><div style="font-size:20px;">${r?.emoji || "👁️"}</div></div>`;
         }).join("");
     }
     document.getElementById("storyViewersModal").style.display = "flex";
@@ -630,10 +631,10 @@ async function saveCurrentStoryToHighlight() {
     if (!title) return;
     const hlId = "hl_" + Date.now();
     await db.ref(`highlights/${me.username}/${hlId}`).set({
-        id: hlId, title: title.trim(), icon: item.type === "video" ? "🎬" : "🌟",
+        id: hlId, title: title.trim(), icon: item.type === "video" ? "🎬" : "✨",
         coverImg: item.type === "image" ? item.content : "", items: [item], ts: Date.now()
     });
-    showToast("تم الحفظ بالهايلايت 🌟");
+    showToast("تم الحفظ بالهايلايت");
 }
 
 function closeStoryViewer() {
@@ -657,10 +658,10 @@ async function publishHighlight() {
     if (f) { coverImg = await compressImageFile(f, 800, 0.72); item = { type: "image", content: coverImg, caption: cap, ts: Date.now() }; }
     const id = "hl_" + Date.now();
     await db.ref(`highlights/${me.username}/${id}`).set({ id, title, icon, coverImg, items: [item], ts: Date.now() });
-    document.getElementById("createHighlightModal").style.display = "none"; showToast("تمت إضافة الهايلايت 🌟");
+    document.getElementById("createHighlightModal").style.display = "none"; showToast("تمت إضافة الهايلايت");
 }
 
-// ==================== 8. المنشورات بتصميم إنستگرام (مع شرارات الإعجاب) ====================
+// ==================== 8. المنشورات بأيقونات SVG نظيفة (V12 Signature) ====================
 let activeCommentPostId = null;
 
 function openCreatePostModal() {
@@ -676,7 +677,7 @@ async function publishPost() {
     if (f) { showToast("جاري نشر الصورة..."); payload.type = "image"; payload.content = await compressImageFile(f, 880, 0.74); }
     else { payload.type = "text"; payload.content = cap; }
     await db.ref(`posts/${id}`).set(payload);
-    document.getElementById("createPostModal").style.display = "none"; showToast("تم نشر منشورك 📸");
+    document.getElementById("createPostModal").style.display = "none"; showToast("تم نشر منشورك");
 }
 
 function buildIgPostCard(p) {
@@ -692,7 +693,7 @@ function buildIgPostCard(p) {
                 <div class="handle-ltr" dir="ltr" style="font-size:11.5px; color:var(--text-dim);">${escapeHTML(getDisplayTag(author))}</div>
             </div>
         </div>
-        ${p.author === me.username ? `<button class="icon-btn danger" style="width:32px; height:32px;" onclick="deletePost('${p.id}')">🗑️</button>` : ""}`;
+        ${p.author === me.username ? `<button class="icon-btn danger" style="width:32px; height:32px;" title="حذف المنشور" onclick="deletePost('${p.id}')"><svg class="ic-xs" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>` : ""}`;
     card.appendChild(head); setAvatarStyle(head.querySelector(`#pa_${p.id}`), author, false);
 
     const media = document.createElement("div"); media.className = "ig-media";
@@ -723,13 +724,19 @@ function buildIgPostCard(p) {
 function fillIgDynamicBody(slot, p, author) {
     const likesObj = p.likes || {}, likeCount = Object.keys(likesObj).length, likedByMe = !!likesObj[me.username];
     const comms = Object.values(p.comments || {}).sort((a, b) => a.ts - b.ts);
+    const heartSvg = likedByMe
+        ? `<svg width="21" height="21" viewBox="0 0 24 24" fill="#f43f5e" stroke="#f43f5e" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`
+        : `<svg class="ic" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+    const commSvg = `<svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+    const saveSvg = `<svg class="ic" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+
     slot.innerHTML = `
         <div class="ig-actions">
             <div class="ig-act-left">
-                <button class="ig-act-btn ${likedByMe ? 'liked' : ''}" onclick="togglePostLike('${p.id}', ${likedByMe}, event)">${likedByMe ? '❤️' : '🤍'} <span>${likeCount}</span></button>
-                <button class="ig-act-btn" onclick="openCommentsModal('${p.id}')">💬 <span>${comms.length}</span></button>
+                <button class="ig-act-btn ${likedByMe ? 'liked' : ''}" onclick="togglePostLike('${p.id}', ${likedByMe}, event)">${heartSvg} <span>${likeCount}</span></button>
+                <button class="ig-act-btn" onclick="openCommentsModal('${p.id}')">${commSvg} <span>${comms.length}</span></button>
             </div>
-            <button class="ig-act-btn" title="حفظ بالمحفوظة" onclick="savePostToSaved('${p.id}')">🔖</button>
+            <button class="ig-act-btn" title="حفظ بالمحفوظة" onclick="savePostToSaved('${p.id}')">${saveSvg}</button>
         </div>
         ${likeCount > 0 ? `<div class="ig-likes-line" onclick="openPostLikesModal('${p.id}')">${likeCount} إعجاب • عرض المتفاعلين</div>` : ""}
         ${(p.type === "image" && p.caption) ? `<div class="ig-caption"><strong>${escapeHTML(author.name)}</strong> ${escapeHTML(p.caption)}</div>` : ""}
@@ -758,7 +765,7 @@ function renderFeed() {
     const posts = Object.values(allPosts).filter(p => allowedAuthors.has(p.author) && !myBlocked[p.author]).sort((a, b) => b.ts - a.ts);
     cont.innerHTML = "";
     if (posts.length === 0) {
-        cont.innerHTML = `<div class="feed-empty" style="margin:auto; text-align:center; color:var(--text-dim); padding:40px;">لا توجد منشورات بعد.<br><br><button class="btn btn-sm" onclick="openCreatePostModal()">➕ انشر أول منشور</button></div>`;
+        cont.innerHTML = `<div class="feed-empty" style="margin:auto; text-align:center; color:var(--text-dim); padding:40px;">لا توجد منشورات بعد.<br><br><button class="btn btn-sm" onclick="openCreatePostModal()">+ انشر أول منشور</button></div>`;
         return;
     }
     posts.forEach(p => cont.appendChild(buildIgPostCard(p)));
@@ -770,7 +777,7 @@ async function savePostToSaved(postId) {
     await db.ref(`saved_msgs/${me.username}/${mId}`).set({
         id: mId, sender: me.username, senderName: me.name, type: p.type === "image" ? "image" : "text", content: p.content, seen: true, ts: Date.now()
     });
-    showToast("تم حفظ المنشور في الرسائل المحفوظة 🔖");
+    showToast("تم حفظ المنشور في الرسائل المحفوظة");
 }
 
 async function togglePostLike(postId, currentlyLiked, ev) {
@@ -854,13 +861,13 @@ async function createSpace() {
     };
     await db.ref(`spaces/${id}`).set(obj);
     document.getElementById("createSpaceModal").style.display = "none";
-    showToast(createSpaceType === "channel" ? "تم إنشاء القناة 📢" : "تم إنشاء المجموعة 👥");
+    showToast(createSpaceType === "channel" ? "تم إنشاء القناة" : "تم إنشاء المجموعة");
     openSpaceRoom(id);
 }
 
 async function joinAndOpenSpace(spaceId) {
     await db.ref(`spaces/${spaceId}/members/${me.username}`).set("member");
-    showToast("تم الانضمام بنجاح ✅"); openSpaceRoom(spaceId);
+    showToast("تم الانضمام بنجاح"); openSpaceRoom(spaceId);
 }
 
 function renderSpacesList() {
@@ -868,7 +875,7 @@ function renderSpacesList() {
     const mySpaces = Object.values(allSpaces).filter(s => s && s.members && s.members[me.username]).sort((a, b) => (b.lastTs || b.createdAt || 0) - (a.lastTs || a.createdAt || 0));
     box.innerHTML = "";
     if (mySpaces.length === 0) {
-        box.innerHTML = `<div style="text-align:center; padding:28px 16px; color:var(--text-dim); font-size:13px;">لم تنضم لأي قناة أو مجموعة بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button></div>`;
+        box.innerHTML = `<div style="text-align:center; padding:28px 16px; color:var(--text-dim); font-size:13px;">لم تنضم لأي قناة أو مجموعة بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">+ إنشاء قناة أو مجموعة</button></div>`;
         return;
     }
     mySpaces.forEach(s => {
@@ -900,14 +907,14 @@ async function addMemberToActiveSpace() {
     const snap = await db.ref("users/" + u).once("value");
     if (!snap.exists()) { showToast("الحساب غير موجود"); return; }
     await db.ref(`spaces/${activeSpaceObj.id}/members/${u}`).set("member");
-    document.getElementById("siAddUser").value = ""; showToast(`تمت إضافة @${u} ✅`); openSpaceInfoModal();
+    document.getElementById("siAddUser").value = ""; showToast(`تمت إضافة @${u}`); openSpaceInfoModal();
 }
 
 async function requestSpaceVerify() {
     if (!activeSpaceObj || activeSpaceObj.owner !== me.username) return;
     const reason = prompt("ملاحظة طلب توثيق القناة/المجموعة:", "قناة رسمية نشطة"); if (!reason) return;
     await db.ref(`verify_requests/sp_${activeSpaceObj.id}`).set({ targetType: "space", targetId: activeSpaceObj.id, name: activeSpaceObj.name, displayTag: activeSpaceObj.handle, requestedType: "blue", reason: reason.trim(), ts: Date.now() });
-    showToast("تم إرسال طلب توثيق القناة للمطور 📨");
+    showToast("تم إرسال طلب توثيق القناة للمطور");
 }
 
 async function kickFromSpace(u) { if (!activeSpaceObj) return; await db.ref(`spaces/${activeSpaceObj.id}/members/${u}`).remove(); showToast(`تم طرد @${u}`); openSpaceInfoModal(); }
@@ -918,7 +925,7 @@ async function leaveActiveSpace() {
     document.getElementById("spaceInfoModal").style.display = "none"; closeActiveChat(); showToast("تمت المغادرة");
 }
 
-// ==================== 10. الهدايا التذكارية + البروفايل الكامل بملء الشاشة (V11) ====================
+// ==================== 10. الهدايا التذكارية + البروفايل الكامل بملء الشاشة ====================
 const GIFT_CATALOG = [
     { id: "rose",    em: "🌹", label: "وردة جوري" },
     { id: "crown",   em: "👑", label: "تاج ملكي" },
@@ -965,7 +972,7 @@ async function confirmSendGift() {
     document.getElementById("sendGiftModal").style.display = "none";
     if (window.playScreenEffect) window.playScreenEffect("confetti");
     playSendSound();
-    showToast(`تم إرسال ${gObj.em} ${gObj.label} بنجاح 🎁✨`);
+    showToast(`تم إرسال ${gObj.em} ${gObj.label} بنجاح`);
     if (activeOtherProfileUser === giftTargetUsername) {
         otherProfileDataCache.gifts[gId] = payload;
         renderOtherProfileStatsAndTab();
@@ -983,7 +990,6 @@ function buildGiftsHTML(giftsObj, emptyMsg) {
         </div>`).join("");
 }
 
-// ----- صفحتي الشخصية الكاملة -----
 let tempAvatarBase64 = null;
 
 async function handleCoverUpload(e) {
@@ -993,7 +999,7 @@ async function handleCoverUpload(e) {
     await db.ref(`users/${me.username}/coverImg`).set(dataUrl);
     me.coverImg = dataUrl;
     renderMyProfilePage();
-    showToast("تم تحديث غلاف البروفايل 🖼️✨");
+    showToast("تم تحديث غلاف البروفايل");
 }
 
 function renderMyProfilePage() {
@@ -1024,7 +1030,7 @@ function renderMyProfilePage() {
     });
 
     const gRow = document.getElementById("myGiftsRow");
-    if (gRow) gRow.innerHTML = buildGiftsHTML(myGifts, "لم تصلك هدايا بعد — الهدايا التذكارية من أصدقائك تظهر هنا 🎁");
+    if (gRow) gRow.innerHTML = buildGiftsHTML(myGifts, "لم تصلك هدايا بعد — الهدايا التذكارية من أصدقائك تظهر هنا");
 
     const grid = document.getElementById("myPostsGrid"); grid.innerHTML = "";
     if (myPosts.length === 0) {
@@ -1039,7 +1045,6 @@ function renderMyProfilePage() {
     }
 }
 
-// ----- البروفايل الكامل للأصدقاء (Full-Screen Parallax + 4 Tabs + Instant Cache) -----
 let activeOtherProfileUser = "";
 let activeOtherProfileTab = "posts";
 let prevTabBeforeOtherProfile = "chats";
@@ -1106,13 +1111,13 @@ function paintOtherProfileHeader(u) {
             await db.ref(`heartbeats/${u.username}`).set({ from: me.username, fromName: me.name, ts: Date.now() });
             triggerHaptic([60, 50, 90]);
             if (window.playScreenEffect) window.playScreenEffect("hearts");
-            showToast(`💓 أرسلت نبضة حية إلى ${u.name}`);
+            showToast(`أرسلت نبضة حية إلى ${u.name}`);
         }
     };
     document.getElementById("opGiftBtn").onclick = () => { openSendGiftModal(u.username); };
 
     const bBtn = document.getElementById("opBlockBtn");
-    bBtn.innerHTML = myBlocked[u.username] ? "🔓 &nbsp; فك الحظر" : "🚫 &nbsp; حظر المستخدم";
+    bBtn.innerText = myBlocked[u.username] ? "إلغاء الحظر" : "حظر المستخدم";
     bBtn.onclick = () => { toggleOpMoreMenu(false); toggleBlockUser(u.username, false); paintOtherProfileHeader(u); };
     document.getElementById("opReportBtn").onclick = () => { toggleOpMoreMenu(false); reportUser(u.username); };
 }
@@ -1157,7 +1162,7 @@ function switchOtherProfileTab(tab) {
         });
     } else if (tab === "shared") {
         const list = otherProfileDataCache.sharedMedia || [];
-        if (!list.length) { box.innerHTML = `<div style="text-align:center; padding:28px; color:var(--text-dim); font-size:13px;">لا توجد صور أو فيديوهات مشتركة بينكما بعد 📂</div>`; return; }
+        if (!list.length) { box.innerHTML = `<div style="text-align:center; padding:28px; color:var(--text-dim); font-size:13px;">لا توجد صور أو فيديوهات مشتركة بينكما بعد</div>`; return; }
         const visual = list.filter(m => m.type === "image" || m.type === "video");
         const auds = list.filter(m => m.type === "audio");
         let html = "";
@@ -1176,9 +1181,9 @@ function switchOtherProfileTab(tab) {
             box.appendChild(row);
         });
     } else if (tab === "gifts") {
-        const giftsHTML = buildGiftsHTML(otherProfileDataCache.gifts, "لا توجد هدايا بعد — كن أول من يهديه هدية لطيفة 🎁");
+        const giftsHTML = buildGiftsHTML(otherProfileDataCache.gifts, "لا توجد هدايا بعد — كن أول من يهديه هدية لطيفة");
         box.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center;">${giftsHTML}</div>
-            <button class="btn btn-gold btn-sm" style="width:100%; margin-top:12px;" onclick="openSendGiftModal('${u.username}')">🎁 أرسل هدية تذكارية لـ ${escapeHTML(u.name)}</button>`;
+            <button class="btn btn-gold btn-sm" style="width:100%; margin-top:12px;" onclick="openSendGiftModal('${u.username}')">إرسال هدية تذكارية لـ ${escapeHTML(u.name)}</button>`;
     }
 }
 
@@ -1205,6 +1210,7 @@ function openSinglePostPreview(postId) {
 async function openOtherProfile(username) {
     if (!username) return;
     if (username === me.username) { switchMainTab("profile"); return; }
+    if (typeof ensurePostsLoaded === "function") ensurePostsLoaded();
 
     bindOtherProfileParallax();
     const curActive = document.querySelector(".tab-view.active");
@@ -1215,7 +1221,6 @@ async function openOtherProfile(username) {
     activeOtherProfileUser = username;
     activeOtherProfileTab = "posts";
 
-    // 1. فتح فوري من الكاش بدون أي انتظار!
     const cachedUser = contactProfiles[username] || { username, name: username, bio: "" };
     const rId = getRoomId(me.username, username);
     const cachedMsgs = Object.values(roomMsgsCache[`chats/${rId}/messages`] || {})
@@ -1233,7 +1238,6 @@ async function openOtherProfile(username) {
 
     document.querySelectorAll(".tab-view").forEach(v => v.classList.toggle("active", v.id === "view-other-profile"));
 
-    // 2. جلب البيانات الحديثة بالتوازي بالخلفية
     const [uSnap, hlSnap, giftSnap, msgSnap] = await Promise.all([
         db.ref("users/" + username).once("value"),
         db.ref("highlights/" + username).once("value"),
@@ -1260,7 +1264,7 @@ async function openOtherProfile(username) {
 async function toggleBlockUser(targetUsername, closeModal = false) {
     const currently = !!myBlocked[targetUsername];
     await db.ref(`user_blocks/${me.username}/${targetUsername}`).set(currently ? null : true);
-    showToast(currently ? "تم إلغاء الحظر 🔓" : "تم حظر المستخدم بنجاح 🚫");
+    showToast(currently ? "تم إلغاء الحظر" : "تم حظر المستخدم بنجاح");
     if (closeModal) closeOtherProfilePage();
 }
 
@@ -1268,7 +1272,7 @@ async function reportUser(targetUsername) {
     const reason = prompt(`سبب الإبلاغ عن (@${targetUsername}):`, "إزعاج أو محتوى غير لائق");
     if (!reason || !reason.trim()) return;
     await db.ref("reports").push({ reporter: me.username, target: targetUsername, reason: reason.trim(), ts: Date.now() });
-    showToast("تم إرسال البلاغ للإدارة بنجاح ⚠️");
+    showToast("تم إرسال البلاغ للإدارة بنجاح");
 }
 
 // ==================== 11. الإعدادات والمظهر وتغيير اليوزر ====================
@@ -1331,18 +1335,18 @@ async function saveProfile() {
         }
         await db.ref(`users/${oldKey}`).remove();
         localStorage.setItem("saved_account_u", newKey);
-        showToast(`تم تغيير يوزرك إلى @${migratedUser.displayTag} ✅`);
+        showToast(`تم تغيير يوزرك إلى @${migratedUser.displayTag}`);
         setTimeout(() => location.reload(), 900);
         return;
     }
 
     await db.ref("users/" + me.username).update(upd);
     document.getElementById("settingsModal").style.display = "none";
-    showToast("تم حفظ إعدادات حسابك ✅");
+    showToast("تم حفظ إعدادات حسابك");
 }
 
 function openVerifyReqModal() {
-    if (me.verified) { showToast("حسابك موثق بالفعل ✨"); return; }
+    if (me.verified) { showToast("حسابك موثق بالفعل"); return; }
     document.getElementById("vrReason").value = "";
     document.getElementById("verifyReqModal").style.display = "flex";
 }
@@ -1355,5 +1359,5 @@ async function submitVerifyRequest() {
         displayTag: me.displayTag || me.username, name: me.name, requestedType: type, reason, ts: Date.now()
     });
     document.getElementById("verifyReqModal").style.display = "none";
-    showToast("تم إرسال طلب التوثيق للمطور 📨");
+    showToast("تم إرسال طلب التوثيق للمطور");
 }
