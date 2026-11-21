@@ -1,4 +1,4 @@
-const CACHE_NAME = "study-notes-v11-shield";
+const CACHE_NAME = "study-notes-v12-signature";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -33,7 +33,6 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Stale-While-Revalidate للملفات الأساسية لفتح فوري حتى على أضعف نت
   e.respondWith(
     caches.match(e.request).then(cached => {
       const networkFetch = fetch(e.request).then(res => {
