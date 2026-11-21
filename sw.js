@@ -1,4 +1,4 @@
-const CACHE_NAME = "study-notes-v10-ultra";
+const CACHE_NAME = "study-notes-v11-shield";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -33,16 +33,17 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Stale-While-Revalidate للملفات الأساسية لفتح فوري حتى على أضعف نت
   e.respondWith(
-    Promise.race([
-      fetch(e.request).then(res => {
+    caches.match(e.request).then(cached => {
+      const networkFetch = fetch(e.request).then(res => {
         if (res && res.status === 200) {
           const clone = res.clone();
           caches.open(CACHE_NAME).then(c => c.put(e.request, clone)).catch(() => {});
         }
         return res;
-      }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
-    ]).catch(() => caches.match(e.request).then(c => c || fetch(e.request)))
+      }).catch(() => cached);
+      return cached || networkFetch;
+    })
   );
 });
