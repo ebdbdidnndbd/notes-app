@@ -1,0 +1,584 @@
+// ==================== المساعد الذكي وتوليد الصور (ai.js — V10 Ultra — آمن ومستقل) ====================
+(function () {
+    if (window.__AI_V10_LOADED__) return;
+    window.__AI_V10_LOADED__ = true;
+
+    const PERSONAS = {
+        tutor: {
+            id: "tutor",
+            label: "📚 أستاذ السادس",
+            badge: "شرح مبسط للسادس العلمي",
+            placeholder: "اسأل عن مسألة فيزياء، كيمياء، رياضيات، أحياء، عربي، أو إنجليزي...",
+            system: "أنت أستاذ عراقي خبير بمنهج السادس العلمي (فيزياء، كيمياء، رياضيات، أحياء، عربي، إنجليزي). اشرح بخطوات مرتبة وواضحة ومختصرة وبأسلوب مشجّع وسهل الفهم.",
+            quick: [
+                "اشرحلي قانون المتسعات باختصار ⚡",
+                "لخّصلي قاعدة لو شاتيليه بالكيمياء 🧪",
+                "شنو الفرق بين الانقسام الخيطي والاختزالي؟ 🧬",
+                "انطيني جدول مراجعة مركّز لليوم 📅"
+            ]
+        },
+        iraqi: {
+            id: "iraqi",
+            label: "💬 صديق عراقي",
+            badge: "سوالف، أفكار، برمجة وحلول",
+            placeholder: "سولف وياي أو اطلب أي شي ببالك...",
+            system: "أنت مساعد ذكي ودود تحچي باللهجة العراقية الراقية والمرتبة. إجاباتك مباشرة، ذكية، وخفيفة ظل بدون تطويل ممل.",
+            quick: [
+                "انطيني فكرة مفاجأة حلوة ولطيفة 🎁",
+                "اكتبلي نكتة عراقية جديدة تضحّك 😂",
+                "شلون أنظم وقتي بين الدراسة والشغل؟ ⏱️",
+                "ساعدني بكتابة بايو فخم للحساب ✨"
+            ]
+        },
+        poet: {
+            id: "poet",
+            label: "✍️ شاعر وكاتب",
+            badge: "شعر عراقي، رسائل ومعايدات",
+            placeholder: "اطلب بيت شعر، رسالة حلوة، أو عبارة مرتبة...",
+            system: "أنت شاعر وكاتب عراقي مبدع، تتقن الشعر الشعبي العراقي والفصيح والرسائل الراقية القصيرة المؤثرة. اكتب بإحساس صادق وألفاظ أنيقة بدون مبالغة مبتذلة.",
+            quick: [
+                "اكتبلي بيتين شعر عراقي شعبي حلوين 🌙",
+                "اكتبلي رسالة صباحية لطيفة وقصيرة ☀️",
+                "عبارة فخمة لملاحظة إنستگرام (أقل من 50 حرف) 💭",
+                "رسالة تشجيع قبل الامتحان 💌"
+            ]
+        }
+    };
+
+    let aiMounted = false;
+    let activePersona = localStorage.getItem("ai_persona_v10") || "tutor";
+    let aiHistory = [];
+    let aiBusy = false;
+    let imgSendToChatMode = false;
+    let lastGeneratedImgUrl = "";
+
+    // إضافة خيارات نموذجك الخاص داخل لوحة المطور 9988 تلقائياً بدون تعديل index.html
+    function extendAdminAiOptions() {
+        const sel = document.getElementById("admAiProvider");
+        if (!sel || sel.querySelector('option[value="worker"]')) return;
+        const opt1 = document.createElement("option");
+        opt1.value = "worker";
+        opt1.textContent = "نموذجك الخاص (رابط Cloudflare Worker الآمن ⚡)";
+        const opt2 = document.createElement("option");
+        opt2.value = "bridge";
+        opt2.textContent = "نموذجك الخاص (جسر بايثون محمي عبر Firebase)";
+        sel.insertBefore(opt1, sel.firstChild);
+        sel.appendChild(opt2);
+    }
+
+    function loadAiHistory() {
+        if (!me) return [];
+        try {
+            const raw = JSON.parse(localStorage.getItem("ai_hist_v10_" + me.username) || "[]");
+            return Array.isArray(raw) ? raw.slice(-30) : [];
+        } catch { return []; }
+    }
+
+    function saveAiHistory() {
+        if (!me) return;
+        try { localStorage.setItem("ai_hist_v10_" + me.username, JSON.stringify(aiHistory.slice(-30))); } catch {}
+    }
+
+    function formatAiMarkdown(raw) {
+        let s = escapeHTML(raw || "");
+        s = s.replace(/```([\s\S]*?)```/g, (_, code) => `<pre class="ai-code-block">${code.trim()}</pre>`);
+        s = s.replace(/`([^`]+)`/g, `<code class="msg-code-inline">$1</code>`);
+        s = s.replace(/\*\*([^*]+)\*\*/g, `<strong>$1</strong>`);
+        s = s.replace(/\n/g, "<br>");
+        return s;
+    }
+
+    // ==================== محرّك الاتصال الذكي متعدد المزوّدات (مع Fallback تلقائي) ====================
+    async function callWorkerProvider(workerUrl, prompt, historyMsgs, systemPrompt) {
+        const cleanUrl = (workerUrl || "").trim();
+        if (!cleanUrl.startsWith("http")) throw new Error("no_worker_url");
+        const res = await fetch(cleanUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                prompt,
+                systemPrompt,
+                history: historyMsgs.slice(-8)
+            })
+        });
+        if (!res.ok) throw new Error("worker_http_" + res.status);
+        const data = await res.json();
+        const txt = (data.reply || data.text || data.content || "").trim();
+        if (!txt) throw new Error("worker_empty");
+        return txt;
+    }
+
+    async function callGeminiProvider(apiKey, prompt, historyMsgs, systemPrompt) {
+        if (!apiKey) throw new Error("no_gemini_key");
+        const contents = [];
+        historyMsgs.slice(-8).forEach(m => {
+            contents.push({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] });
+        });
+        contents.push({ role: "user", parts: [{ text: prompt }] });
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                system_instruction: { parts: [{ text: systemPrompt }] },
+                contents
+            })
+        });
+        if (!res.ok) throw new Error("gemini_http_" + res.status);
+        const data = await res.json();
+        const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (!txt) throw new Error("gemini_empty");
+        return txt;
+    }
+
+    async function callGroqProvider(apiKey, prompt, historyMsgs, systemPrompt) {
+        if (!apiKey) throw new Error("no_groq_key");
+        const messages = [{ role: "system", content: systemPrompt }];
+        historyMsgs.slice(-8).forEach(m => {
+            messages.push({ role: m.role === "user" ? "user" : "assistant", content: m.text });
+        });
+        messages.push({ role: "user", content: prompt });
+
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+            body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.7 })
+        });
+        if (!res.ok) throw new Error("groq_http_" + res.status);
+        const data = await res.json();
+        const txt = data?.choices?.[0]?.message?.content?.trim();
+        if (!txt) throw new Error("groq_empty");
+        return txt;
+    }
+
+    async function callFirebaseBridgeProvider(prompt, historyMsgs, systemPrompt) {
+        const reqId = "air_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+        const reqRef = db.ref(`ai_bridge/requests/${reqId}`);
+        const repRef = db.ref(`ai_bridge/replies/${reqId}`);
+        await reqRef.set({
+            id: reqId, user: me?.username || "guest", prompt, systemPrompt,
+            history: historyMsgs.slice(-6), ts: Date.now()
+        });
+
+        return new Promise((resolve, reject) => {
+            const tm = setTimeout(() => {
+                repRef.off(); reqRef.remove().catch(() => {});
+                reject(new Error("bridge_timeout"));
+            }, 16000);
+            repRef.on("value", s => {
+                const v = s.val();
+                if (!v || !v.reply) return;
+                clearTimeout(tm);
+                repRef.off();
+                reqRef.remove().catch(() => {});
+                repRef.remove().catch(() => {});
+                resolve(String(v.reply).trim());
+            });
+        });
+    }
+
+    async function callFreePollinations(prompt, historyMsgs, systemPrompt) {
+        const messages = [{ role: "system", content: systemPrompt }];
+        historyMsgs.slice(-6).forEach(m => {
+            messages.push({ role: m.role === "user" ? "user" : "assistant", content: m.text });
+        });
+        messages.push({ role: "user", content: prompt });
+
+        try {
+            const res = await fetch("https://text.pollinations.ai/openai", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: "openai", messages, seed: Math.floor(Math.random() * 9999) })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const txt = data?.choices?.[0]?.message?.content?.trim();
+                if (txt) return txt;
+            }
+        } catch {}
+
+        // احتياط ثانٍ مباشر وخفيف
+        const compact = `${systemPrompt}\nالسؤال: ${prompt}`;
+        const r2 = await fetch(`https://text.pollinations.ai/${encodeURIComponent(compact)}?model=openai`);
+        if (!r2.ok) throw new Error("free_failed");
+        const t2 = (await r2.text()).trim();
+        if (!t2) throw new Error("free_empty");
+        return t2;
+    }
+
+    async function askAiEngine(prompt, historyMsgs, systemPrompt) {
+        const cfg = (typeof sysConfig !== "undefined" && sysConfig.ai) ? sysConfig.ai : { provider: "free", apiKey: "" };
+        const prov = cfg.provider || "free";
+        const key = (cfg.apiKey || "").trim();
+
+        try {
+            if (prov === "worker" && key) return await callWorkerProvider(key, prompt, historyMsgs, systemPrompt);
+            if (prov === "gemini" && key) return await callGeminiProvider(key, prompt, historyMsgs, systemPrompt);
+            if (prov === "groq" && key) return await callGroqProvider(key, prompt, historyMsgs, systemPrompt);
+            if (prov === "bridge") return await callFirebaseBridgeProvider(prompt, historyMsgs, systemPrompt);
+        } catch (err) {
+            console.warn("Primary AI provider failed, falling back to free:", err?.message || err);
+        }
+
+        // الاحتياط المجاني يعمل تلقائياً حتى ما ينقطع الرد أبداً
+        return await callFreePollinations(prompt, historyMsgs, systemPrompt);
+    }
+
+    // ==================== 1. حقن ستايلات الذكاء الاصطناعي ====================
+    function injectAiStyles() {
+        if (document.getElementById("aiStylesV10")) return;
+        const s = document.createElement("style");
+        s.id = "aiStylesV10";
+        s.textContent = `
+            .ai-wrap {
+                width: 100%; height: 100%; display: flex; flex-direction: column;
+                background: radial-gradient(circle at top, rgba(139,92,246,0.14), var(--bg-main) 58%);
+                overflow: hidden;
+            }
+            .ai-persona-bar {
+                display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px;
+                border-bottom: 1px solid var(--border); background: var(--bg-panel); flex-shrink: 0;
+            }
+            .ai-p-pill {
+                padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border);
+                background: var(--glass-inner); color: var(--text-dim); font-size: 12px; font-weight: 700;
+                cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: 0.15s;
+            }
+            .ai-p-pill.active { background: var(--primary-grad); border-color: transparent; color: #fff; }
+            .ai-messages {
+                flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 10px;
+                max-width: 760px; width: 100%; margin: 0 auto;
+            }
+            .ai-bubble-row { display: flex; flex-direction: column; max-width: 88%; animation: msgIn 0.16s ease; }
+            .ai-bubble-row.user { align-self: flex-start; }
+            .ai-bubble-row.bot { align-self: flex-end; }
+            .ai-bubble {
+                padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.65;
+                word-break: break-word; position: relative;
+            }
+            .ai-bubble-row.user .ai-bubble { background: var(--bubble-me); color: #fff; border-bottom-right-radius: 4px; }
+            .ai-bubble-row.bot .ai-bubble {
+                background: var(--bg-card); border: 1px solid var(--border-bright); color: var(--text);
+                border-bottom-left-radius: 4px;
+            }
+            .ai-bubble-foot {
+                display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                margin-top: 6px; font-size: 10.5px; color: var(--text-dim);
+            }
+            .ai-copy-btn {
+                border: 1px solid var(--border); background: var(--glass-inner); color: var(--accent);
+                font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 8px; cursor: pointer;
+            }
+            .ai-code-block {
+                background: #04070f; border: 1px solid var(--border); border-radius: 12px;
+                padding: 10px; margin: 6px 0; overflow-x: auto; font-family: monospace;
+                font-size: 12.5px; direction: ltr; text-align: left; color: #93c5fd;
+            }
+            .ai-welcome {
+                margin: auto; text-align: center; max-width: 420px; padding: 14px;
+            }
+            .ai-quick-grid { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+            .ai-quick-btn {
+                width: 100%; padding: 10px 13px; border-radius: 14px; border: 1px solid var(--border);
+                background: var(--bg-panel); color: var(--text); font-size: 13px; font-weight: 700;
+                text-align: right; cursor: pointer; transition: 0.14s;
+            }
+            .ai-quick-btn:active { transform: scale(0.98); border-color: var(--accent); }
+            .ai-input-bar {
+                display: flex; align-items: flex-end; gap: 7px; padding: 9px 10px calc(9px + env(safe-area-inset-bottom, 0px));
+                background: var(--bg-panel); border-top: 1px solid var(--border); flex-shrink: 0;
+            }
+            .ai-input-bar textarea {
+                flex: 1; background: var(--glass-inner); border: 1px solid var(--border); color: var(--text);
+                padding: 9px 14px; border-radius: 20px; font-size: 14px; outline: none;
+                min-height: 40px; max-height: 110px; resize: none;
+            }
+            .ai-input-bar textarea:focus { border-color: var(--accent); }
+            .ai-img-preview-box {
+                width: 100%; aspect-ratio: 1 / 1; max-height: 310px; border-radius: 18px;
+                background: var(--glass-inner); border: 1px solid var(--border-bright);
+                display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 10px 0;
+            }
+            .ai-img-preview-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    // ==================== 2. بناء واجهة المساعد الذكي + نافذة توليد الصور ====================
+    function injectImageModal() {
+        if (document.getElementById("aiImageModal")) return;
+        const m = document.createElement("div");
+        m.id = "aiImageModal"; m.className = "modal-bg";
+        m.onclick = e => { if (e.target === m) m.style.display = "none"; };
+        m.innerHTML = `
+            <div class="glass-card" style="max-width:420px; padding:18px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <h3 style="font-size:17px;">🎨 تخيّل صورة بالذكاء الاصطناعي</h3>
+                    <button class="icon-btn" style="width:32px; height:32px;" onclick="document.getElementById('aiImageModal').style.display='none'">✕</button>
+                </div>
+                <p class="sub" style="margin-bottom:10px;">اكتب وصف الصورة (عربي أو إنجليزي) وتجهز خلال ثواني</p>
+                <div style="display:flex; gap:7px;">
+                    <input type="text" id="aiImgPromptInp" class="input" placeholder="مثال: قمر بنفسجي فوق البحر بأسلوب سينمائي..." onkeydown="if(event.key==='Enter'){event.preventDefault(); window.generateAiImageNow();}">
+                    <button class="btn" style="width:82px;" onclick="window.generateAiImageNow()">رسم ✨</button>
+                </div>
+                <div class="ai-img-preview-box" id="aiImgPreviewBox">
+                    <span style="color:var(--text-dim); font-size:13px;">اكتب الوصف واضغط رسم 🎨</span>
+                </div>
+                <div id="aiImgActionBtns" style="display:none; gap:8px;">
+                    <button class="btn btn-sm" id="aiImgSendChatBtn" style="flex:1;" onclick="window.sendGeneratedImgToActiveChat()">📤 إرسال بالمحادثة</button>
+                    <button class="btn btn-sm btn-outline" style="flex:1;" onclick="window.saveGeneratedImgToSaved()">🔖 حفظ بالمحفوظة</button>
+                </div>
+            </div>`;
+        document.body.appendChild(m);
+    }
+
+    function mountAiUI() {
+        if (aiMounted) return;
+        const container = document.getElementById("view-ai");
+        if (!container) return;
+        aiMounted = true;
+
+        container.innerHTML = `
+            <div class="ai-wrap">
+                <div class="top-bar">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button class="icon-btn" style="width:34px; height:34px;" onclick="switchMainTab('chats')">➔</button>
+                        <div>
+                            <h3 style="font-size:15.5px;">🤖 مساعد المنصة AI</h3>
+                            <div id="aiEngineSub" style="font-size:10.5px; color:var(--accent); font-weight:700;">جاهز للمساعدة</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-sm" onclick="window.openAiImageGenerator(false)">🎨 رسم صورة</button>
+                        <button class="icon-btn danger" style="width:34px; height:34px;" title="مسح المحادثة" onclick="window.clearAiChatHistory()">🗑️</button>
+                    </div>
+                </div>
+
+                <div class="ai-persona-bar" id="aiPersonaBar">
+                    ${Object.values(PERSONAS).map(p => `<button type="button" class="ai-p-pill ${p.id === activePersona ? 'active' : ''}" data-ap="${p.id}" onclick="window.setAiPersona('${p.id}')">${p.label}</button>`).join("")}
+                </div>
+
+                <div class="ai-messages" id="aiMessagesList"></div>
+
+                <div class="ai-input-bar">
+                    <textarea id="aiMsgInput" rows="1" placeholder="${PERSONAS[activePersona]?.placeholder || 'اسأل أي شيء...'}" oninput="this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,110)+'px';" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); window.sendAiChatMessage();}"></textarea>
+                    <button class="send-circle" id="aiSendBtn" onclick="window.sendAiChatMessage()" title="إرسال">
+                        <svg viewBox="0 0 24 24" style="transform:rotate(180deg);"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </div>
+            </div>`;
+    }
+
+    function updateEngineLabel() {
+        const el = document.getElementById("aiEngineSub");
+        if (!el) return;
+        const p = sysConfig?.ai?.provider || "free";
+        const names = {
+            worker: "⚡ متصل بنموذجك (Gemini 2.5)",
+            gemini: "⚡ متصل بـ Google Gemini",
+            groq: "⚡ متصل بـ Groq Llama 3",
+            bridge: "⚡ متصل بجسر بايثون المحمي",
+            free: "✨ الوضع المجاني السريع"
+        };
+        el.innerText = names[p] || names.free;
+    }
+
+    function renderAiMessages() {
+        const box = document.getElementById("aiMessagesList");
+        if (!box) return;
+        const p = PERSONAS[activePersona] || PERSONAS.tutor;
+
+        if (!aiHistory.length) {
+            box.innerHTML = `
+                <div class="ai-welcome">
+                    <div style="font-size:48px; margin-bottom:6px;">🤖✨</div>
+                    <h3 style="font-size:18px; margin-bottom:4px;">أهلاً ${escapeHTML(me?.name || "")}!</h3>
+                    <p style="font-size:12.5px; color:var(--text-dim);">${p.badge} — وتگدر تناديني بأي شات بكتابة <b>@ai</b></p>
+                    <div class="ai-quick-grid">
+                        ${p.quick.map(q => `<button type="button" class="ai-quick-btn" onclick="window.sendAiQuickPrompt('${escapeHTML(q)}')">${escapeHTML(q)}</button>`).join("")}
+                    </div>
+                </div>`;
+            return;
+        }
+
+        box.innerHTML = aiHistory.map((m, idx) => `
+            <div class="ai-bubble-row ${m.role === 'user' ? 'user' : 'bot'}">
+                <div class="ai-bubble">
+                    ${m.imgUrl ? `<img src="${escapeHTML(m.imgUrl)}" class="msg-img" style="margin-bottom:6px;" onclick="openLightbox('${escapeHTML(m.imgUrl)}')">` : ""}
+                    <div>${formatAiMarkdown(m.text)}</div>
+                    <div class="ai-bubble-foot">
+                        <span>${formatTime(m.ts)}</span>
+                        ${m.role === "bot" ? `<button type="button" class="ai-copy-btn" onclick="window.copyAiReply(${idx})">📋 نسخ</button>` : ""}
+                    </div>
+                </div>
+            </div>`).join("");
+
+        if (aiBusy) {
+            box.innerHTML += `
+                <div class="ai-bubble-row bot">
+                    <div class="typing-bubble"><span>🤖 يفكر الآن</span><div class="typing-dots"><i></i><i></i><i></i></div></div>
+                </div>`;
+        }
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // ==================== 3. أوامر المحادثة مع الـ AI + مناداة @ai داخل الشات ====================
+    window.setAiPersona = function (id) {
+        if (!PERSONAS[id]) return;
+        activePersona = id;
+        localStorage.setItem("ai_persona_v10", id);
+        document.querySelectorAll("#aiPersonaBar .ai-p-pill").forEach(b => b.classList.toggle("active", b.getAttribute("data-ap") === id));
+        const inp = document.getElementById("aiMsgInput");
+        if (inp) inp.placeholder = PERSONAS[id].placeholder;
+        renderAiMessages();
+    };
+
+    window.sendAiQuickPrompt = function (txt) {
+        const inp = document.getElementById("aiMsgInput");
+        if (inp) inp.value = txt;
+        window.sendAiChatMessage();
+    };
+
+    window.copyAiReply = function (idx) {
+        const m = aiHistory[idx];
+        if (m?.text) { navigator.clipboard.writeText(m.text); showToast("تم نسخ الرد 📋"); }
+    };
+
+    window.clearAiChatHistory = function () {
+        if (!confirm("مسح سجل محادثتك مع المساعد الذكي؟")) return;
+        aiHistory = [];
+        saveAiHistory();
+        renderAiMessages();
+    };
+
+    window.sendAiChatMessage = async function () {
+        if (aiBusy) return;
+        const inp = document.getElementById("aiMsgInput");
+        const txt = (inp?.value || "").trim();
+        if (!txt) return;
+
+        inp.value = ""; inp.style.height = "40px";
+        aiHistory.push({ role: "user", text: txt, ts: Date.now() });
+        saveAiHistory();
+        aiBusy = true;
+        renderAiMessages();
+        playSendSound();
+
+        try {
+            const p = PERSONAS[activePersona] || PERSONAS.tutor;
+            const reply = await askAiEngine(txt, aiHistory.slice(0, -1), p.system);
+            aiHistory.push({ role: "bot", text: reply, ts: Date.now() });
+            saveAiHistory();
+            playRecvSound();
+        } catch {
+            aiHistory.push({ role: "bot", text: "عذراً، صار ضعف مؤقت بالاتصال. جرّب تدز سؤالك مرة ثانية بعد لحظة 🙏", ts: Date.now() });
+        } finally {
+            aiBusy = false;
+            renderAiMessages();
+        }
+    };
+
+    // مناداة @ai داخل أي محادثة خاصة أو مجموعة أو محفوظة
+    window.handleInChatAiCommand = async function (question) {
+        if (!question || !activeRoomId) return;
+        const targetRoomSnapshot = activeRoomId;
+
+        // إذا طلب رسم صورة مباشرة بالأمر: @ai ارسم ...
+        if (/^(ارسم|صورة|تخيل|رسم|draw|imagine)\s+/i.test(question)) {
+            const imgDesc = question.replace(/^(ارسم|صورة|تخيل|رسم|draw|imagine)\s+/i, "").trim();
+            showToast("🎨 جاري رسم الصورة بالذكاء الاصطناعي...");
+            const seed = Math.floor(Math.random() * 999999);
+            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(imgDesc)}?width=768&height=768&nologo=true&seed=${seed}`;
+            if (activeRoomId === targetRoomSnapshot) {
+                await pushMessageSafe("image", url, `🎨 صورة AI: ${imgDesc.slice(0, 30)}`, { isAi: true });
+            }
+            return;
+        }
+
+        showToast("🤖 مساعد AI جاي يكتب الرد...");
+        try {
+            const sys = "أنت مساعد ذكي داخل دردشة خاصة بين أصدقاء وطلاب سادس علمي في العراق. رد بذكاء ولباقة واختصار مفيد باللهجة العراقية الراقية أو العربية الفصحى حسب طبيعة السؤال.";
+            const reply = await askAiEngine(question, [], sys);
+            if (activeRoomId === targetRoomSnapshot) {
+                await pushMessageSafe("text", reply, "🤖 رد الذكاء الاصطناعي", { isAi: true });
+            }
+        } catch {
+            showToast("تعذر رد الذكاء الاصطناعي حالياً — تأكد من النت");
+        }
+    };
+
+    // ==================== 4. توليد الصور بالذكاء الاصطناعي ====================
+    window.openAiImageGenerator = function (sendToChat = false) {
+        injectImageModal();
+        imgSendToChatMode = !!sendToChat;
+        lastGeneratedImgUrl = "";
+        document.getElementById("aiImgPromptInp").value = "";
+        document.getElementById("aiImgPreviewBox").innerHTML = `<span style="color:var(--text-dim); font-size:13px;">اكتب الوصف واضغط رسم 🎨</span>`;
+        document.getElementById("aiImgActionBtns").style.display = "none";
+        document.getElementById("aiImgSendChatBtn").style.display = (activeRoomId && imgSendToChatMode) ? "inline-flex" : "none";
+        document.getElementById("aiImageModal").style.display = "flex";
+        setTimeout(() => document.getElementById("aiImgPromptInp").focus(), 80);
+    };
+
+    window.generateAiImageNow = function () {
+        const prompt = (document.getElementById("aiImgPromptInp").value || "").trim();
+        if (!prompt) { showToast("اكتب وصف الصورة أولاً 🎨"); return; }
+
+        const box = document.getElementById("aiImgPreviewBox");
+        const acts = document.getElementById("aiImgActionBtns");
+        acts.style.display = "none";
+        box.innerHTML = `<div class="skel-bubble tall" style="width:86%; height:86%; border-radius:16px;"></div>`;
+
+        const seed = Math.floor(Math.random() * 999999);
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&nologo=true&seed=${seed}`;
+
+        const img = new Image();
+        img.onload = () => {
+            lastGeneratedImgUrl = url;
+            box.innerHTML = "";
+            img.onclick = () => openLightbox(url);
+            box.appendChild(img);
+            acts.style.display = "flex";
+            document.getElementById("aiImgSendChatBtn").style.display = activeRoomId ? "inline-flex" : "none";
+            playSendSound();
+        };
+        img.onerror = () => {
+            box.innerHTML = `<span style="color:#fb7185; font-size:13px;">تعذر توليد الصورة حالياً — جرّب وصفاً آخر</span>`;
+        };
+        img.src = url;
+    };
+
+    window.sendGeneratedImgToActiveChat = async function () {
+        if (!lastGeneratedImgUrl || !activeRoomId) return;
+        document.getElementById("aiImageModal").style.display = "none";
+        await pushMessageSafe("image", lastGeneratedImgUrl, "🎨 صورة مولدة بالـ AI");
+        showToast("تم إرسال الصورة بالمحادثة 🎨✨");
+    };
+
+    window.saveGeneratedImgToSaved = async function () {
+        if (!lastGeneratedImgUrl || !me) return;
+        const mId = "m_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+        await db.ref(`saved_msgs/${me.username}/${mId}`).set({
+            id: mId, sender: me.username, senderName: me.name, type: "image",
+            content: lastGeneratedImgUrl, seen: true, ts: Date.now()
+        });
+        document.getElementById("aiImageModal").style.display = "none";
+        showToast("تم حفظ الصورة في الرسائل المحفوظة 🔖");
+    };
+
+    // ==================== 5. تسجيل القسم داخل AppModules ====================
+    injectAiStyles();
+    injectImageModal();
+    extendAdminAiOptions();
+
+    window.AppModules = window.AppModules || {};
+    window.AppModules.ai = function () {
+        if (!me) return;
+        mountAiUI();
+        aiHistory = loadAiHistory();
+        updateEngineLabel();
+        switchMainTab("ai");
+        renderAiMessages();
+    };
+})();
