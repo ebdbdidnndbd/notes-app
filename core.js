@@ -1,4 +1,4 @@
-// ==================== المحرّك الرئيسي الفائق (V11 Ultra Shield — SHA-256 + AES-GCM + Instant Cache + Vault + Self-Destruct) ====================
+// ==================== المحرّك الرئيسي الفائق (V11 Turbo Shield — SHA-256 + AES-GCM + Targeted Listeners + Lazy Posts) ====================
 const DB_URL = "https://notes-app-c738e-default-rtdb.firebaseio.com";
 
 firebase.initializeApp({ databaseURL: DB_URL });
@@ -36,7 +36,6 @@ async function sha256Hex(text) {
     return "fb_" + simpleHash("v11_shield::" + raw);
 }
 
-// قفل محمي لدوال لوحة المطور يمنع تشغيلها من Console المتصفح
 const AdminGuard = (() => {
     let granted = false;
     let grantStamp = 0;
@@ -66,8 +65,10 @@ async function verifyAdminPinInput(inputPin) {
     return verifyPinAgainstHashOrLegacy(inputPin, sysConfig.adminPinHash, null, _BOOT_ADM);
 }
 
-// تشفير AES-GCM للرسائل الخاصة (من طرف لطرف)
+// تشفير AES-GCM للرسائل الخاصة مع كاش لفك التشفير لمنع تكرار المعالجة
 const e2eKeyCache = new Map();
+const metaCipherCache = new Map();
+
 async function getRoomCryptoKey(roomId) {
     if (!roomId || !window.crypto || !window.crypto.subtle) return null;
     if (e2eKeyCache.has(roomId)) return e2eKeyCache.get(roomId);
@@ -98,6 +99,8 @@ async function e2eEncrypt(roomId, plainText) {
 
 async function e2eDecrypt(roomId, cipherStr) {
     if (!cipherStr || typeof cipherStr !== "string" || !cipherStr.startsWith("e2e1:")) return cipherStr || "";
+    const cacheKey = roomId + "|" + cipherStr;
+    if (metaCipherCache.has(cacheKey)) return metaCipherCache.get(cacheKey);
     const key = await getRoomCryptoKey(roomId);
     if (!key) return "🔒 [رسالة مشفّرة]";
     try {
@@ -107,16 +110,18 @@ async function e2eDecrypt(roomId, cipherStr) {
         const iv = bytes.slice(0, 12);
         const data = bytes.slice(12);
         const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-        return new TextDecoder().decode(dec);
+        const plain = new TextDecoder().decode(dec);
+        if (metaCipherCache.size > 300) metaCipherCache.clear();
+        metaCipherCache.set(cacheKey, plain);
+        return plain;
     } catch { return "🔒 [رسالة مشفّرة]"; }
 }
 
 async function hydrateMessageDecryption(m, roomId) {
     if (!m || !roomId) return m;
+    if (!m.e2e && !(m.replyTo && m.replyTo.encPreview)) return m;
     const copy = { ...m };
-    if (copy.e2e && copy.encContent) {
-        copy.content = await e2eDecrypt(roomId, copy.encContent);
-    }
+    if (copy.e2e && copy.encContent) copy.content = await e2eDecrypt(roomId, copy.encContent);
     if (copy.replyTo && copy.replyTo.encPreview) {
         copy.replyTo = { ...copy.replyTo, preview: await e2eDecrypt(roomId, copy.replyTo.encPreview) };
     }
@@ -140,19 +145,19 @@ let allMeta = {};
 let decryptedMetaPreviews = {};
 let allStories = {};
 let allPosts = {};
+let postsLoaded = false;
 let allSpaces = {};
 let myHighlights = {};
 let myGifts = {};
 let myNotifications = {};
 let sidebarFilter = "all";
 
-// خزنة المحادثات المخفية (Hidden Vault)
 let vaultConfig = { pinHash: "", hidden: {} };
 let vaultUnlocked = false;
 
-// المحادثة النشطة + الكاش الفوري
 let activeChatType = null;
 let activePartner = null;
+let activePartnerTyping = false;
 let activeRoomId = null;
 let activeSpaceObj = null;
 let activeRoomToken = 0;
@@ -162,18 +167,19 @@ const roomMsgsCache = {};
 let roomQueryRef = null;
 let typingRef = null, pinnedRef = null, blockCheckRef = null;
 let contactListeners = {};
+let metaListeners = {};
+let storyListeners = {};
 let typingTimeout = null;
 let seenFlushTimer = null;
 let pendingSeenBatch = {};
 let sidebarDebounceTimer = null;
+let storiesDebounceTimer = null;
 let bootCacheSaveTimer = null;
 let unreadWhileScrolled = 0;
 
-// التدمير الذاتي بمؤقت
 let selectedSelfDestructSec = 0;
 let selfDestructInterval = null;
 
-// طابور الإرسال الذكي ومنع التكرار
 let sendLock = false;
 let lastSentSig = "";
 let lastSentTs = 0;
@@ -185,7 +191,6 @@ let replyTarget = null;
 let editingMsgId = null;
 let selectedMsg = null;
 
-// مشغّل الصوت الواحد النشط
 let currentPlayingAudio = null;
 let currentPlayingBtn = null;
 
@@ -194,13 +199,13 @@ function dismissSplashScreen() {
     const sp = document.getElementById("splashScreen");
     if (!sp || sp.classList.contains("hide")) return;
     sp.classList.add("hide");
-    setTimeout(() => { if (sp.parentNode) sp.remove(); }, 340);
+    setTimeout(() => { if (sp.parentNode) sp.remove(); }, 260);
 }
 window.addEventListener("DOMContentLoaded", () => {
-    setTimeout(dismissSplashScreen, 420);
+    setTimeout(dismissSplashScreen, 320);
     updateDynamicGreeting();
 });
-setTimeout(dismissSplashScreen, 1100);
+setTimeout(dismissSplashScreen, 950);
 
 function updateDynamicGreeting() {
     const el = document.getElementById("greetingLine");
@@ -219,22 +224,21 @@ function triggerHaptic(pattern = 12) {
 
 function spawnSparks(x, y) {
     const colors = ["#38bdf8", "#f472b6", "#fbbf24", "#a78bfa", "#34d399"];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 6; i++) {
         const dot = document.createElement("span");
         dot.className = "spark-dot";
-        const angle = (Math.PI * 2 * i) / 8 + Math.random() * 0.4;
-        const dist = 24 + Math.random() * 28;
+        const angle = (Math.PI * 2 * i) / 6 + Math.random() * 0.4;
+        const dist = 22 + Math.random() * 24;
         dot.style.left = x + "px";
         dot.style.top = y + "px";
         dot.style.background = colors[i % colors.length];
         dot.style.setProperty("--sx", Math.round(Math.cos(angle) * dist) + "px");
         dot.style.setProperty("--sy", Math.round(Math.sin(angle) * dist) + "px");
         document.body.appendChild(dot);
-        setTimeout(() => dot.remove(), 580);
+        setTimeout(() => dot.remove(), 520);
     }
 }
 
-// تطبيق التخصيصات المحفوظة فوراً قبل أي رسم
 applyTheme(localStorage.getItem("app_theme") || "midnight", true);
 applyFont(localStorage.getItem("app_font") || "tajawal", true);
 applyFontSize(localStorage.getItem("app_fsize") || "md", true);
@@ -262,7 +266,6 @@ db.ref("sys_config").on("value", snap => {
     if (document.getElementById("adminScreen").style.display === "block" && AdminGuard.check()) updateAdminButtons();
 });
 
-// مراقبة الشبكة وإرسال الطابور تلقائياً
 function updateNetBanner(connected) {
     isDbConnected = connected;
     const b = document.getElementById("netBanner");
@@ -272,7 +275,6 @@ function updateNetBanner(connected) {
 window.addEventListener("offline", () => updateNetBanner(false));
 window.addEventListener("online", () => flushOfflineQueue());
 
-// إغلاق القوائم المنسدلة عند الضغط خارجها + سحب القوائم السفلية للأسفل
 document.addEventListener("click", ev => {
     const dd = document.getElementById("chatToolsDropdown");
     if (dd && dd.classList.contains("open") && !ev.target.closest("#chatToolsDropdown") && !ev.target.closest("#btnChatToolsMenu")) dd.classList.remove("open");
@@ -299,7 +301,7 @@ document.addEventListener("click", ev => {
     document.addEventListener("touchend", () => {
         if (!tracking || !sheetEl) return;
         tracking = false;
-        sheetEl.style.transition = "transform 0.2s cubic-bezier(0.22,1,0.36,1)";
+        sheetEl.style.transition = "transform 0.18s ease";
         if (dy > 85 && bgEl) {
             triggerHaptic(10); sheetEl.style.transform = "";
             if (bgEl.id === "msgActionModal") closeMsgActions();
@@ -310,13 +312,13 @@ document.addEventListener("click", ev => {
             else bgEl.style.display = "none";
         } else {
             sheetEl.style.transform = "translateY(0)";
-            setTimeout(() => { if (sheetEl) sheetEl.style.transform = ""; }, 210);
+            setTimeout(() => { if (sheetEl) sheetEl.style.transform = ""; }, 190);
         }
         sheetEl = null; bgEl = null; dy = 0;
     }, { passive: true });
 })();
 
-// ==================== الكاش المحلي الفوري لتسريع القنوات والحسابات ====================
+// ==================== الكاش المحلي الفوري وتجميع الرسم ====================
 function loadInstantBootCache(username) {
     try {
         const raw = localStorage.getItem("boot_cache_v11_" + username);
@@ -341,7 +343,7 @@ function scheduleSaveBootCache() {
                 slimProfiles[k] = {
                     username: u.username, displayTag: u.displayTag, name: u.name, bio: u.bio,
                     avatarColor: u.avatarColor, avatarFrame: u.avatarFrame || "",
-                    avatarImg: (u.avatarImg && u.avatarImg.length < 48000) ? u.avatarImg : "",
+                    avatarImg: (u.avatarImg && u.avatarImg.length < 40000) ? u.avatarImg : "",
                     verified: u.verified || "", isDev: !!u.isDev, statusEmoji: u.statusEmoji || "",
                     moodText: u.moodText || "", accentColor: u.accentColor || "", online: !!u.online, lastSeen: u.lastSeen || 0
                 };
@@ -359,14 +361,28 @@ function scheduleSaveBootCache() {
                 contacts: myContacts, profiles: slimProfiles, spaces: slimSpaces, meta: allMeta, previews: decryptedMetaPreviews
             }));
         } catch {}
-    }, 600);
+    }, 900);
 }
 
 function scheduleSidebarRender() {
     clearTimeout(sidebarDebounceTimer);
-    sidebarDebounceTimer = setTimeout(() => {
-        renderChatsSidebarNow();
-    }, 70);
+    sidebarDebounceTimer = setTimeout(() => { renderChatsSidebarNow(); }, 80);
+}
+
+function scheduleStoriesRender() {
+    clearTimeout(storiesDebounceTimer);
+    storiesDebounceTimer = setTimeout(() => {
+        if (typeof renderStoriesStrip === "function") renderStoriesStrip();
+    }, 95);
+}
+
+function trimRoomCache(dbPath) {
+    const cache = roomMsgsCache[dbPath];
+    if (!cache) return;
+    const keys = Object.keys(cache);
+    if (keys.length <= 28) return;
+    keys.sort((a, b) => (cache[a]?.ts || 0) - (cache[b]?.ts || 0));
+    keys.slice(0, keys.length - 25).forEach(k => { delete cache[k]; });
 }
 
 function saveOfflineQueue() {
@@ -425,7 +441,7 @@ function startRingtone(incoming) {
 }
 function stopRingtone() { if (ringtoneInterval) { clearInterval(ringtoneInterval); ringtoneInterval = null; } }
 
-// ==================== التخصيصات (ثيمات + فقاعات + خطوط + أحجام + خلفيات) ====================
+// ==================== التخصيصات ====================
 function applyTheme(t, silent = false) {
     const valid = ["midnight", "obsidian", "emerald", "amethyst", "amber"];
     const theme = valid.includes(t) ? t : "midnight";
@@ -523,7 +539,7 @@ function escapeHTML(s) {
 function showToast(txt) {
     const t = document.getElementById("toastBox"); if (!t) return;
     t.innerText = txt; t.classList.add("show");
-    clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove("show"), 2500);
+    clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove("show"), 2400);
 }
 
 function simpleHash(str) {
@@ -572,9 +588,7 @@ function compressImageFile(file, maxW = 820, quality = 0.70) {
 function setAvatarStyle(el, obj, showOnline = true) {
     if (!el || !obj) return;
     el.classList.remove("av-frame-gold", "av-frame-neon", "av-frame-galaxy", "av-frame-rose");
-    if (obj.avatarFrame && ["gold", "neon", "galaxy", "rose"].includes(obj.avatarFrame)) {
-        el.classList.add("av-frame-" + obj.avatarFrame);
-    }
+    if (obj.avatarFrame && ["gold", "neon", "galaxy", "rose"].includes(obj.avatarFrame)) el.classList.add("av-frame-" + obj.avatarFrame);
     const onlineHTML = showOnline ? `<span class="online-badge ${obj.online ? 'on' : ''}"></span>` : "";
     if (obj.avatarImg) { el.style.backgroundImage = `url(${obj.avatarImg})`; el.innerHTML = onlineHTML; }
     else { el.style.backgroundImage = obj.avatarColor || GRADIENTS[0]; el.innerHTML = `${escapeHTML((obj.name || "؟").charAt(0))}${onlineHTML}`; }
@@ -585,7 +599,6 @@ function sendNotification(targetUsername, text, icon = "🔔") {
     db.ref(`notifications/${targetUsername}`).push({ icon, text, from: me.username, read: false, ts: Date.now() }).catch(() => {});
 }
 
-// حظر جهاز المخترِق فقط (بدل مسح الشاتات عن الجميع!)
 function renderDeviceLockoutScreen(untilTs) {
     const mins = Math.max(1, Math.ceil((untilTs - Date.now()) / 60000));
     document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8; max-width:400px; margin:auto;">
@@ -595,7 +608,7 @@ function renderDeviceLockoutScreen(untilTs) {
     </div>`;
 }
 
-// ==================== شاشة مفكرة السادس العلمي الوهمية ====================
+// ==================== شاشة التمويه + بوابة الإضافات ====================
 function openDecoyStudyScreen() {
     document.getElementById("gateScreen").style.display = "none";
     document.getElementById("decoyStudyScreen").style.display = "block";
@@ -643,12 +656,9 @@ function deleteDecoyNote(id) {
     renderDecoyNotes();
 }
 
-// ==================== بوابة الأقسام والإضافات ====================
 function openFutureModule(modId) {
     triggerHaptic(10);
-    if (window.AppModules && typeof window.AppModules[modId] === "function") {
-        window.AppModules[modId](); return;
-    }
+    if (window.AppModules && typeof window.AppModules[modId] === "function") { window.AppModules[modId](); return; }
     if (modId === "music_hub" && typeof window.openMusicPicker === "function") {
         window.openMusicPicker("🎵 مكتبة ومقترحات الأغاني", song => {
             if (me && confirm(`تثبيت «${song.title}» كأغنية لبروفايلك؟`)) {
@@ -660,11 +670,7 @@ function openFutureModule(modId) {
         });
         return;
     }
-    const labels = {
-        reels: "🎬 قسم الريلز (تيك توك وإنستا) قيد التجهيز للتحديث القادم!",
-        study: "⏱️ جاري تحميل غرفة المراجعة...",
-        ai: "🤖 جاري تحميل المساعد الذكي..."
-    };
+    const labels = { reels: "🎬 قسم الريلز قيد التجهيز للتحديث القادم!", study: "⏱️ جاري تحميل غرفة المراجعة...", ai: "🤖 جاري تحميل المساعد الذكي..." };
     showToast(labels[modId] || "هذا القسم جاهز للتوسعة المستقبلية ✨");
 }
 
@@ -690,8 +696,7 @@ function formatRichText(raw) {
 }
 
 function toggleChatExtras(force) {
-    const tray = document.getElementById("chatExtrasTray");
-    const btn = document.getElementById("fxToggleBtn");
+    const tray = document.getElementById("chatExtrasTray"), btn = document.getElementById("fxToggleBtn");
     if (!tray) return;
     const show = typeof force === "boolean" ? force : !tray.classList.contains("open");
     tray.classList.toggle("open", show);
@@ -760,8 +765,7 @@ async function toggleHideActiveChatInVault() {
 }
 
 function updateVaultMenuButton() {
-    const btn = document.getElementById("menuVaultBtn");
-    if (!btn || !activePartner) return;
+    const btn = document.getElementById("menuVaultBtn"); if (!btn || !activePartner) return;
     const isHidden = !!(vaultConfig.hidden && vaultConfig.hidden[activePartner]);
     btn.innerHTML = isHidden ? "🔓 &nbsp; إخراج المحادثة من الخزنة" : "🔐 &nbsp; إخفاء المحادثة بالخزنة";
 }
@@ -785,13 +789,12 @@ async function handleSidebarSearchInput(val) {
 
 function closeHiddenVault() {
     vaultUnlocked = false;
-    const btn = document.getElementById("vaultCloseBtn");
-    if (btn) btn.style.display = "none";
+    const btn = document.getElementById("vaultCloseBtn"); if (btn) btn.style.display = "none";
     showToast("🔒 تم قفل الخزنة السرية");
     renderChatsSidebarNow();
 }
 
-// ==================== 4. البوابة المموهة والحسابات (SHA-256) ====================
+// ==================== 4. البوابة المموهة والحسابات ====================
 async function verifyGate() {
     const now = Date.now();
     if (lockUntilTs > now) { renderDeviceLockoutScreen(lockUntilTs); return; }
@@ -799,7 +802,6 @@ async function verifyGate() {
     const err = document.getElementById("gateErr"); err.innerText = "";
     if (!pin) return;
 
-    // 1. فحص رمز لوحة المطور (مشفّر SHA-256)
     if (await verifyAdminPinInput(pin)) {
         failedAttempts = 0; localStorage.setItem("sec_fails", "0");
         AdminGuard.grant();
@@ -808,7 +810,6 @@ async function verifyGate() {
         return;
     }
 
-    // 2. فحص الرمز الوهمي (Decoy PIN)
     if (await verifyPinAgainstHashOrLegacy(pin, sysConfig.decoyPinHash, sysConfig.decoyPin, _BOOT_DECOY)) {
         failedAttempts = 0; localStorage.setItem("sec_fails", "0");
         openDecoyStudyScreen();
@@ -817,13 +818,11 @@ async function verifyGate() {
 
     if (sysConfig.locked) { err.innerText = "المنصة متوقفة حالياً من الإدارة."; return; }
 
-    // 3. فحص رمز البوابة الحقيقي
     if (await verifyPinAgainstHashOrLegacy(pin, sysConfig.pinHash, sysConfig.pin, _BOOT_GATE)) {
         failedAttempts = 0; localStorage.setItem("sec_fails", "0");
         document.getElementById("gateScreen").style.display = "none";
         const savedU = localStorage.getItem("saved_account_u"), savedP = localStorage.getItem("saved_account_p");
         if (savedU && savedP) {
-            // دخول فوري من الكاش إذا متوفر، مع تحقق أمني فوري بالخلفية
             const snap = await db.ref("users/" + savedU).once("value");
             const uData = snap.val();
             if (uData && uData.pass === savedP && !uData.banned) { enterMainApp(uData); return; }
@@ -913,7 +912,6 @@ async function doLogin() {
     const okLegacy = u.pass === simpleHash(pass);
     if (!okNew && !okLegacy) { err.innerText = "كلمة السر غير صحيحة."; return; }
 
-    // ترقية تلقائية لكلمة سر الحسابات القديمة إلى SHA-256
     if (okLegacy && !okNew) {
         u.pass = newHash; u.passAlgo = "sha256";
         db.ref("users/" + username).update({ pass: newHash, passAlgo: "sha256" }).catch(() => {});
@@ -930,24 +928,45 @@ function logoutAccount() {
     location.reload();
 }
 
-// ==================== 5. تهيئة التطبيق الفورية (Instant Boot Cache) ====================
+// ==================== 5. تحميل المنشورات عند الحاجة فقط (Lazy Posts) ====================
+function ensurePostsLoaded() {
+    if (postsLoaded || !me) return;
+    postsLoaded = true;
+    const postsRef = db.ref("posts").limitToLast(25);
+    postsRef.on("child_added", s => {
+        allPosts[s.key] = s.val();
+        if (document.getElementById("view-feed").classList.contains("active") && typeof syncFeedPostCard === "function") syncFeedPostCard(s.key, s.val());
+        if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
+    });
+    postsRef.on("child_changed", s => {
+        allPosts[s.key] = s.val();
+        if (typeof updatePostCardInPlace === "function") updatePostCardInPlace(s.key, s.val());
+        if (typeof activeCommentPostId !== "undefined" && activeCommentPostId === s.key && document.getElementById("commentsModal").style.display === "flex") renderCommentsList();
+    });
+    postsRef.on("child_removed", s => {
+        delete allPosts[s.key];
+        const card = document.querySelector(`.ig-post[data-pid="${s.key}"]`); if (card) card.remove();
+        if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
+    });
+}
+
 function switchMainTab(tabName) {
     triggerHaptic(8);
     document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.getAttribute("data-nav") === tabName));
     document.querySelectorAll(".tab-view").forEach(v => v.classList.toggle("active", v.id === "view-" + tabName));
-    if (tabName === "profile") renderMyProfilePage();
-    if (tabName === "feed") renderFeed();
+    if (tabName === "profile") { ensurePostsLoaded(); renderMyProfilePage(); }
+    if (tabName === "feed") { ensurePostsLoaded(); renderFeed(); }
     if (tabName === "spaces") renderSpacesList();
     if (tabName === "games" && typeof renderGamesHub === "function") renderGamesHub();
 }
 
+// ==================== 6. تهيئة التطبيق الخفيفة (Targeted Listeners) ====================
 function enterMainApp(userData) {
     if (appInitialized) return;
     appInitialized = true;
     me = userData;
     contactProfiles[me.username] = me;
 
-    // 1. تحميل الكاش الفوري قبل انتظار Firebase -> الحسابات والقنوات تظهر خلال 0.1 ثانية!
     loadInstantBootCache(me.username);
     contactProfiles[me.username] = me;
 
@@ -958,7 +977,7 @@ function enterMainApp(userData) {
     updateDynamicGreeting();
 
     renderChatsSidebarNow();
-    renderStoriesStrip();
+    scheduleStoriesRender();
     renderSpacesList();
 
     initStickerDrawer();
@@ -968,15 +987,24 @@ function enterMainApp(userData) {
     if (typeof initGamesListeners === "function") initGamesListeners();
     if (!selfDestructInterval) selfDestructInterval = setInterval(tickSelfDestructMessages, 1000);
 
-    // 2. ربط التحديثات الحية بالخلفية
+    // تحميل المنشورات بهدوء بعد استقرار الشاشة بـ 4 ثواني (أو فوراً عند الضغط على المنشورات)
+    setTimeout(() => ensurePostsLoaded(), 4000);
+
     db.ref("users/" + me.username).on("value", snap => {
         const d = snap.val();
         if (!d || d.banned) { showToast("تم حظر أو حذف حسابك"); setTimeout(logoutAccount, 1400); return; }
         me = d; contactProfiles[me.username] = d;
         updateDynamicGreeting();
         if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
-        renderStoriesStrip();
+        scheduleStoriesRender();
         scheduleSaveBootCache();
+    });
+
+    // مراقبة ستورياتي فقط (وستوريات الأصدقاء تُربط في syncContactListeners)
+    db.ref("stories/" + me.username).on("value", snap => {
+        if (snap.exists()) allStories[me.username] = snap.val();
+        else delete allStories[me.username];
+        scheduleStoriesRender();
     });
 
     db.ref(`user_vault/${me.username}`).on("value", snap => {
@@ -990,7 +1018,7 @@ function enterMainApp(userData) {
         myContacts = snap.val() || {};
         syncContactListeners();
         scheduleSidebarRender();
-        renderStoriesStrip();
+        scheduleStoriesRender();
         scheduleSaveBootCache();
         if (document.getElementById("view-games").classList.contains("active") && typeof renderGamesHub === "function") renderGamesHub();
     });
@@ -1000,21 +1028,6 @@ function enterMainApp(userData) {
         if (activeChatType === "dm") updateChatInputLockState();
     });
 
-    db.ref("chat_meta").on("value", async snap => {
-        allMeta = snap.val() || {};
-        // فك تشفير آخر رسالة للمحادثات الخاصة بالخلفية بسلاسة
-        const entries = Object.entries(allMeta).filter(([, m]) => m && m.lastMsgEnc);
-        await Promise.all(entries.map(async ([rId, m]) => {
-            if (rId.includes(me.username)) {
-                decryptedMetaPreviews[rId] = await e2eDecrypt(rId, m.lastMsgEnc);
-            }
-        }));
-        scheduleSidebarRender();
-        scheduleSaveBootCache();
-    });
-
-    db.ref("stories").on("value", snap => { allStories = snap.val() || {}; renderStoriesStrip(); });
-
     db.ref(`highlights/${me.username}`).on("value", snap => {
         myHighlights = snap.val() || {};
         if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
@@ -1022,22 +1035,6 @@ function enterMainApp(userData) {
 
     db.ref(`gifts/${me.username}`).on("value", snap => {
         myGifts = snap.val() || {};
-        if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
-    });
-
-    const postsRef = db.ref("posts").limitToLast(45);
-    postsRef.on("child_added", s => {
-        allPosts[s.key] = s.val();
-        if (document.getElementById("view-feed").classList.contains("active") && typeof syncFeedPostCard === "function") syncFeedPostCard(s.key, s.val());
-    });
-    postsRef.on("child_changed", s => {
-        allPosts[s.key] = s.val();
-        if (typeof updatePostCardInPlace === "function") updatePostCardInPlace(s.key, s.val());
-        if (activeCommentPostId === s.key && document.getElementById("commentsModal").style.display === "flex") renderCommentsList();
-    });
-    postsRef.on("child_removed", s => {
-        delete allPosts[s.key];
-        const card = document.querySelector(`.ig-post[data-pid="${s.key}"]`); if (card) card.remove();
         if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
     });
 
@@ -1051,19 +1048,25 @@ function enterMainApp(userData) {
         }
     });
 
-    db.ref(`notifications/${me.username}`).limitToLast(35).on("value", snap => {
+    db.ref(`notifications/${me.username}`).limitToLast(25).on("value", snap => {
         myNotifications = snap.val() || {};
         document.getElementById("notifDot").classList.toggle("on", Object.values(myNotifications).some(n => !n.read));
         if (document.getElementById("notificationsModal").style.display === "flex") renderNotifications();
     });
 }
 
+// مراقبة مستهدفة لأصدقائك فقط (الحساب + آخر رسالة + الستوري) بدون سحب بيانات الغرباء!
 function syncContactListeners() {
     const keys = Object.keys(myContacts);
     Object.keys(contactListeners).forEach(u => {
-        if (!myContacts[u]) { contactListeners[u].off(); delete contactListeners[u]; delete contactProfiles[u]; }
+        if (!myContacts[u]) {
+            contactListeners[u].off(); delete contactListeners[u]; delete contactProfiles[u];
+            if (metaListeners[u]) { metaListeners[u].off(); delete metaListeners[u]; }
+            if (storyListeners[u]) { storyListeners[u].off(); delete storyListeners[u]; delete allStories[u]; }
+        }
     });
     keys.forEach(u => {
+        if (u === me.username) return;
         if (!contactListeners[u]) {
             const r = db.ref("users/" + u);
             contactListeners[u] = r;
@@ -1071,9 +1074,35 @@ function syncContactListeners() {
                 if (s.exists() && !s.val().banned) contactProfiles[u] = s.val();
                 else delete contactProfiles[u];
                 scheduleSidebarRender();
-                renderStoriesStrip();
+                scheduleStoriesRender();
                 scheduleSaveBootCache();
                 if (activeChatType === "dm" && activePartner === u) updateActiveHeader();
+            });
+        }
+        if (!metaListeners[u]) {
+            const rId = getRoomId(me.username, u);
+            const mr = db.ref("chat_meta/" + rId);
+            metaListeners[u] = mr;
+            mr.on("value", async s => {
+                const m = s.val();
+                if (m) {
+                    allMeta[rId] = m;
+                    if (m.lastMsgEnc) decryptedMetaPreviews[rId] = await e2eDecrypt(rId, m.lastMsgEnc);
+                    else delete decryptedMetaPreviews[rId];
+                } else {
+                    delete allMeta[rId]; delete decryptedMetaPreviews[rId];
+                }
+                scheduleSidebarRender();
+                scheduleSaveBootCache();
+            });
+        }
+        if (!storyListeners[u]) {
+            const sr = db.ref("stories/" + u);
+            storyListeners[u] = sr;
+            sr.on("value", s => {
+                if (s.exists()) allStories[u] = s.val();
+                else delete allStories[u];
+                scheduleStoriesRender();
             });
         }
     });
@@ -1091,7 +1120,7 @@ function setupPresence() {
     });
 }
 
-// ==================== 6. البحث الموحد وقائمة المحادثات (Debounced + Vault) ====================
+// ==================== 7. البحث الموحد وقائمة المحادثات ====================
 function setSidebarFilter(f) {
     sidebarFilter = f || "all";
     document.querySelectorAll("#chatFilterBar .cf-pill").forEach(b => b.classList.toggle("active", b.getAttribute("data-cf") === sidebarFilter));
@@ -1117,7 +1146,7 @@ async function runUnifiedSearch() {
         const u = uSnap.val();
         html += `<div class="search-cat-title">👤 حساب شخصي</div>
             <div style="display:flex; align-items:center; justify-content:space-between; background:var(--glass-inner); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px; margin-bottom:10px;">
-                <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="document.getElementById('unifiedSearchModal').style.display='none'; openOtherProfile('${u.username}')">
+                <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="ensurePostsLoaded(); document.getElementById('unifiedSearchModal').style.display='none'; openOtherProfile('${u.username}')">
                     <div class="avatar sm" id="uniFoundUserAv"></div>
                     <div>
                         <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px;">${renderStyledUserName(u)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}</div>
@@ -1197,13 +1226,10 @@ function renderChatsSidebarNow() {
     if (combined.length === 0) {
         const empty = document.createElement("div");
         empty.style.cssText = "text-align:center; padding:26px 14px; color:var(--text-dim); font-size:13px;";
-        if (vaultUnlocked) {
-            empty.innerHTML = `🔐 الخزنة السرية فارغة حالياً.<br><span style="font-size:11.5px;">افتح أي محادثة واضغط ⋮ ← «إخفاء المحادثة بالخزنة»</span>`;
-        } else {
-            empty.innerHTML = sidebarFilter === "spaces"
-                ? `ما عندك قنوات أو مجموعات بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button>`
-                : `لا توجد محادثات أخرى.<br><br><button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>`;
-        }
+        if (vaultUnlocked) empty.innerHTML = `🔐 الخزنة السرية فارغة حالياً.<br><span style="font-size:11.5px;">افتح أي محادثة واضغط ⋮ ← «إخفاء المحادثة بالخزنة»</span>`;
+        else empty.innerHTML = sidebarFilter === "spaces"
+            ? `ما عندك قنوات أو مجموعات بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button>`
+            : `لا توجد محادثات أخرى.<br><br><button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>`;
         frag.appendChild(empty);
         list.innerHTML = "";
         list.appendChild(frag);
@@ -1242,56 +1268,41 @@ function renderChatsSidebarNow() {
     list.appendChild(frag);
 }
 
-// ==================== 7. البحث داخل المحادثة + معرض الوسائط + النزول لآخر رسالة ====================
+// ==================== 8. البحث داخل المحادثة + معرض الوسائط + التدمير الذاتي ====================
 function setupMessagesScrollWatcher() {
-    const area = document.getElementById("messagesList");
-    const btn = document.getElementById("scrollBottomBtn");
-    const cnt = document.getElementById("scrollBottomCount");
+    const area = document.getElementById("messagesList"), btn = document.getElementById("scrollBottomBtn"), cnt = document.getElementById("scrollBottomCount");
     if (!area || !btn) return;
     area.addEventListener("scroll", () => {
-        const distFromBottom = area.scrollHeight - area.scrollTop - area.clientHeight;
-        const farUp = distFromBottom > 220;
+        const farUp = (area.scrollHeight - area.scrollTop - area.clientHeight) > 220;
         btn.classList.toggle("show", farUp);
-        if (!farUp) {
-            unreadWhileScrolled = 0;
-            if (cnt) { cnt.style.display = "none"; cnt.innerText = "0"; }
-        }
+        if (!farUp) { unreadWhileScrolled = 0; if (cnt) { cnt.style.display = "none"; cnt.innerText = "0"; } }
     }, { passive: true });
 }
 
 function scrollToBottomSmooth() {
-    const area = document.getElementById("messagesList");
-    const cnt = document.getElementById("scrollBottomCount");
+    const area = document.getElementById("messagesList"), cnt = document.getElementById("scrollBottomCount");
     if (!area) return;
-    unreadWhileScrolled = 0;
-    if (cnt) { cnt.style.display = "none"; cnt.innerText = "0"; }
+    unreadWhileScrolled = 0; if (cnt) { cnt.style.display = "none"; cnt.innerText = "0"; }
     area.scrollTo({ top: area.scrollHeight, behavior: "smooth" });
 }
 
 function toggleInChatSearch(force) {
-    const bar = document.getElementById("inChatSearchBar");
-    const inp = document.getElementById("inChatSearchInp");
+    const bar = document.getElementById("inChatSearchBar"), inp = document.getElementById("inChatSearchInp");
     if (!bar) return;
     const show = typeof force === "boolean" ? force : !bar.classList.contains("open");
     bar.classList.toggle("open", show);
     if (show && inp) { inp.value = ""; document.getElementById("inChatSearchCount").innerText = ""; setTimeout(() => inp.focus(), 60); }
-    else {
-        document.querySelectorAll(".msg-wrap.search-hit").forEach(n => n.classList.remove("search-hit"));
-        if (inp) inp.value = ""; document.getElementById("inChatSearchCount").innerText = "";
-    }
+    else { document.querySelectorAll(".msg-wrap.search-hit").forEach(n => n.classList.remove("search-hit")); if (inp) inp.value = ""; document.getElementById("inChatSearchCount").innerText = ""; }
 }
 
 function runInChatSearch(query) {
-    const q = (query || "").trim().toLowerCase();
-    const countEl = document.getElementById("inChatSearchCount");
+    const q = (query || "").trim().toLowerCase(), countEl = document.getElementById("inChatSearchCount");
     document.querySelectorAll(".msg-wrap.search-hit").forEach(n => n.classList.remove("search-hit"));
     if (!q) { if (countEl) countEl.innerText = ""; return; }
     const hits = [];
     document.querySelectorAll("#messagesList .msg-wrap").forEach(node => {
-        const id = node.getAttribute("data-mid"), m = activeMsgsMap[id];
-        if (m && m.type === "text" && String(m.content || "").toLowerCase().includes(q)) {
-            node.classList.add("search-hit"); hits.push(node);
-        }
+        const m = activeMsgsMap[node.getAttribute("data-mid")];
+        if (m && m.type === "text" && String(m.content || "").toLowerCase().includes(q)) { node.classList.add("search-hit"); hits.push(node); }
     });
     if (countEl) countEl.innerText = hits.length ? `${hits.length} نتيجة` : "لا نتائج";
     if (hits.length) hits[hits.length - 1].scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1313,7 +1324,6 @@ function switchMediaGalleryTab(tab) {
 
     const body = document.getElementById("mediaGalleryBody");
     const msgs = Object.values(activeMsgsMap || {}).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-
     if (tab === "images") {
         const imgs = msgs.filter(m => m.type === "image" && m.content);
         if (!imgs.length) { body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-dim); font-size:13px;">لا توجد صور محفوظة هنا</div>`; return; }
@@ -1335,7 +1345,6 @@ function switchMediaGalleryTab(tab) {
     }
 }
 
-// ==================== 8. التدمير الذاتي بمؤقت ====================
 function handleSelfDestructSelect(val) {
     selectedSelfDestructSec = parseInt(val || "0", 10) || 0;
     const fxBtn = document.getElementById("fxToggleBtn");
@@ -1348,15 +1357,15 @@ function handleSelfDestructSelect(val) {
 
 function tickSelfDestructMessages() {
     if (!activeRoomId) return;
+    const pills = document.querySelectorAll(".sd-pill[data-sd-exp]");
+    if (!pills.length) return;
     const now = Date.now();
-    document.querySelectorAll(".sd-pill[data-sd-exp]").forEach(pill => {
-        const exp = parseInt(pill.getAttribute("data-sd-exp") || "0", 10);
-        const mid = pill.getAttribute("data-sd-mid");
+    pills.forEach(pill => {
+        const exp = parseInt(pill.getAttribute("data-sd-exp") || "0", 10), mid = pill.getAttribute("data-sd-mid");
         if (!exp || !mid) return;
         const leftSec = Math.ceil((exp - now) / 1000);
         if (leftSec <= 0) {
-            const wrap = document.querySelector(`.msg-wrap[data-mid="${mid}"]`);
-            if (wrap) wrap.remove();
+            const wrap = document.querySelector(`.msg-wrap[data-mid="${mid}"]`); if (wrap) wrap.remove();
             delete activeMsgsMap[mid];
             db.ref(`${getActiveRoomBasePath()}/${mid}`).remove().catch(() => {});
         } else {
@@ -1366,7 +1375,7 @@ function tickSelfDestructMessages() {
     });
 }
 
-// ==================== 9. محرّك المحادثة السريع (Fast Channel + E2E + Swipe) ====================
+// ==================== 9. محرّك المحادثة السريع ====================
 function stopAnyVoicePlayback() {
     if (currentPlayingAudio) { try { currentPlayingAudio.pause(); } catch {} currentPlayingAudio = null; }
     if (currentPlayingBtn) { currentPlayingBtn.innerText = "▶"; currentPlayingBtn = null; }
@@ -1374,6 +1383,7 @@ function stopAnyVoicePlayback() {
 
 function detachRoomListeners() {
     activeRoomToken++;
+    activePartnerTyping = false;
     stopAnyVoicePlayback();
     clearTimeout(seenFlushTimer);
     pendingSeenBatch = {};
@@ -1404,24 +1414,21 @@ function resetMessagesStage(dbPath) {
     const cached = dbPath && roomMsgsCache[dbPath];
     if (cached && Object.keys(cached).length > 0) {
         area.innerHTML = "";
+        const frag = document.createDocumentFragment();
         Object.entries(cached)
             .filter(([, m]) => m && !(m.deletedFor && m.deletedFor[me.username]))
             .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0))
-            .forEach(([id, m]) => { activeMsgsMap[id] = m; appendMessageWithDateSep(area, id, m); });
+            .forEach(([id, m]) => { activeMsgsMap[id] = m; appendMessageWithDateSep(frag, id, m); });
+        area.appendChild(frag);
         area.scrollTop = area.scrollHeight;
     } else {
-        area.innerHTML = `<div class="empty-room-hint skel-list">
-            <div class="skel-bubble other"></div>
-            <div class="skel-bubble me tall"></div>
-            <div class="skel-bubble other"></div>
-            <div class="skel-bubble me"></div>
-        </div>`;
+        area.innerHTML = `<div class="empty-room-hint skel-list"><div class="skel-bubble other"></div><div class="skel-bubble me tall"></div><div class="skel-bubble other"></div><div class="skel-bubble me"></div></div>`;
     }
 }
 
 function openSavedMessages() {
     detachRoomListeners();
-    const myToken = activeRoomToken; activeRoomLimit = 16;
+    const myToken = activeRoomToken; activeRoomLimit = 14;
     const dbPath = `saved_msgs/${me.username}`;
     activeChatType = "saved"; activePartner = null; activeRoomId = me.username; activeSpaceObj = null;
     seenMarkedSet.clear(); cancelReplyOrEdit(); toggleStickerDrawer(false); toggleChatExtras(false);
@@ -1444,9 +1451,9 @@ function openSavedMessages() {
 
 function openDM(partnerUsername) {
     detachRoomListeners();
-    const myToken = activeRoomToken; activeRoomLimit = 16;
+    const myToken = activeRoomToken; activeRoomLimit = 14;
     activeChatType = "dm"; activePartner = partnerUsername; activeRoomId = getRoomId(me.username, partnerUsername);
-    activeSpaceObj = null; blockedByPartner = false;
+    activeSpaceObj = null; blockedByPartner = false; activePartnerTyping = false;
     seenMarkedSet.clear(); cancelReplyOrEdit(); toggleStickerDrawer(false); toggleChatExtras(false);
     updateVaultMenuButton();
 
@@ -1466,9 +1473,9 @@ function openDM(partnerUsername) {
     updateActiveHeader(); renderChatsSidebarNow();
 
     const roomIdCopy = activeRoomId;
-    db.ref(`chat_meta/${roomIdCopy}/unreadFor`).once("value", s => {
-        if (s.val() === me.username) db.ref(`chat_meta/${roomIdCopy}/unreadFor`).set("");
-    });
+    if (allMeta[roomIdCopy]?.unreadFor === me.username) {
+        db.ref(`chat_meta/${roomIdCopy}/unreadFor`).set("").catch(() => {});
+    }
 
     blockCheckRef = db.ref(`user_blocks/${partnerUsername}/${me.username}`);
     blockCheckRef.on("value", s => { if (myToken !== activeRoomToken) return; blockedByPartner = !!s.val(); updateChatInputLockState(); });
@@ -1477,9 +1484,9 @@ function openDM(partnerUsername) {
     typingRef = db.ref(`chats/${roomIdCopy}/typing/${partnerUsername}`);
     typingRef.on("value", s => {
         if (myToken !== activeRoomToken) return;
-        const isTyping = s.val() === true;
+        activePartnerTyping = s.val() === true;
         const tb = document.getElementById("typingBubbleWrap"), nm = document.getElementById("typingBubbleName");
-        if (tb) tb.classList.toggle("show", isTyping);
+        if (tb) tb.classList.toggle("show", activePartnerTyping);
         if (nm) nm.innerText = `${contactProfiles[partnerUsername]?.name || ""} يكتب`;
         updateActiveHeader();
     });
@@ -1493,9 +1500,7 @@ function openDM(partnerUsername) {
 function openSpaceRoom(spaceId) {
     const sp = allSpaces[spaceId]; if (!sp) return;
     detachRoomListeners();
-    const myToken = activeRoomToken;
-    // تحميل أول 12 رسالة فقط بالقنوات والمجموعات لفتح صاروخي على النت الضعيف
-    activeRoomLimit = 12;
+    const myToken = activeRoomToken; activeRoomLimit = 12;
     activeChatType = sp.type; activePartner = null; activeRoomId = spaceId; activeSpaceObj = sp;
     seenMarkedSet.clear(); cancelReplyOrEdit(); toggleStickerDrawer(false); toggleChatExtras(false);
 
@@ -1524,7 +1529,7 @@ function openSpaceRoom(spaceId) {
 
 function loadOlderMessages() {
     if (!activeRoomId) return;
-    activeRoomLimit += 15;
+    activeRoomLimit += 14;
     const basePath = getActiveRoomBasePath();
     if (roomQueryRef) { roomQueryRef.off(); roomQueryRef = null; }
     const token = activeRoomToken;
@@ -1549,15 +1554,13 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
             hint.style.cssText = "margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); padding:14px 20px; border-radius:16px; border:1px solid var(--border);";
             hint.innerHTML = isDbConnected ? "لا توجد رسائل بعد 🔒" : "📡 النت ضعيف — جاري انتظار الاتصال...";
         }
-    }, 3800);
+    }, 3600);
 
     roomQueryRef.once("value", snap => {
         clearTimeout(safetyTimer);
         if (token !== activeRoomToken) return;
         initialDone = true;
-        const hint = area.querySelector(".empty-room-hint");
-        if (hint) hint.remove();
-
+        const hint = area.querySelector(".empty-room-hint"); if (hint) hint.remove();
         const count = snap.numChildren();
         if (count === 0 && !area.querySelector(".msg-wrap")) {
             area.innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); padding:14px 20px; border-radius:16px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
@@ -1572,14 +1575,13 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         if (token !== activeRoomToken) return;
         const id = snap.key, rawM = snap.val();
         if (!rawM || (rawM.deletedFor && rawM.deletedFor[me.username])) return;
-        if (rawM.sdExpireAt && Date.now() >= rawM.sdExpireAt) {
-            db.ref(`${dbPath}/${id}`).remove().catch(() => {}); return;
-        }
+        if (rawM.sdExpireAt && Date.now() >= rawM.sdExpireAt) { db.ref(`${dbPath}/${id}`).remove().catch(() => {}); return; }
 
         const m = await hydrateMessageDecryption(rawM, roomIdSnap);
         if (token !== activeRoomToken) return;
 
         roomMsgsCache[dbPath][id] = m;
+        trimRoomCache(dbPath);
         const hint = area.querySelector(".empty-room-hint"); if (hint) hint.remove();
         activeMsgsMap[id] = m;
 
@@ -1594,8 +1596,7 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
             playRecvSound();
             if (!nearBottom) {
                 unreadWhileScrolled++;
-                const cnt = document.getElementById("scrollBottomCount");
-                const sb = document.getElementById("scrollBottomBtn");
+                const cnt = document.getElementById("scrollBottomCount"), sb = document.getElementById("scrollBottomBtn");
                 if (cnt) { cnt.innerText = unreadWhileScrolled; cnt.style.display = "flex"; }
                 if (sb) sb.classList.add("show");
             }
@@ -1638,9 +1639,7 @@ function scheduleSeenMark(id, m, token) {
     if (activeChatType === "dm" && !isMe && !m.seen && !seenMarkedSet.has(id)) {
         seenMarkedSet.add(id);
         pendingSeenBatch[`${id}/seen`] = true;
-        if (m.sdSec && !m.sdExpireAt) {
-            pendingSeenBatch[`${id}/sdExpireAt`] = Date.now() + (m.sdSec * 1000);
-        }
+        if (m.sdSec && !m.sdExpireAt) pendingSeenBatch[`${id}/sdExpireAt`] = Date.now() + (m.sdSec * 1000);
     } else if (activeChatType === "channel" && (!m.views || !m.views[me.username]) && !seenMarkedSet.has(id)) {
         seenMarkedSet.add(id); pendingSeenBatch[`${id}/views/${me.username}`] = true;
     } else return;
@@ -1650,18 +1649,18 @@ function scheduleSeenMark(id, m, token) {
         if (token !== activeRoomToken) return;
         const batch = pendingSeenBatch; pendingSeenBatch = {};
         if (Object.keys(batch).length > 0) db.ref(getActiveRoomBasePath()).update(batch).catch(() => {});
-    }, 220);
+    }, 240);
 }
 
-function appendMessageWithDateSep(area, id, m) {
+function appendMessageWithDateSep(container, id, m) {
     const dKey = formatDateKey(m.ts);
-    const lastSep = area.querySelectorAll(".date-sep");
-    const lastKey = lastSep.length ? lastSep[lastSep.length - 1].getAttribute("data-dkey") : null;
+    const seps = container.querySelectorAll ? container.querySelectorAll(".date-sep") : [];
+    const lastKey = seps.length ? seps[seps.length - 1].getAttribute("data-dkey") : null;
     if (dKey !== lastKey) {
         const sep = document.createElement("div"); sep.className = "date-sep"; sep.setAttribute("data-dkey", dKey); sep.innerText = formatDateLabel(m.ts);
-        area.appendChild(sep);
+        container.appendChild(sep);
     }
-    area.appendChild(buildMessageNode(id, m));
+    container.appendChild(buildMessageNode(id, m));
 }
 
 function attachSwipeToReply(wrap, id) {
@@ -1689,7 +1688,7 @@ function attachSwipeToReply(wrap, id) {
     wrap.addEventListener("touchcancel", finish, { passive: true });
 }
 
-// ==================== مشغّل البصمة (مع فلاتر الصوت) والفيديو ====================
+// ==================== مشغّل البصمة والفيديو ====================
 function buildVoicePlayer(src, msgId, voiceFilter = "normal") {
     const wrap = document.createElement("div"); wrap.className = "voice-player";
     const playBtn = document.createElement("button"); playBtn.className = "vp-play"; playBtn.innerText = "▶";
@@ -1711,8 +1710,7 @@ function buildVoicePlayer(src, msgId, voiceFilter = "normal") {
     wrap.appendChild(playBtn); wrap.appendChild(body);
 
     const aud = new Audio(src);
-    let baseRate = voiceFilter === "deep" ? 0.80 : (voiceFilter === "fast" ? 1.32 : 1);
-    let rate = 1;
+    let baseRate = voiceFilter === "deep" ? 0.80 : (voiceFilter === "fast" ? 1.32 : 1), rate = 1;
     try { aud.preservesPitch = voiceFilter === "normal"; } catch {}
     const fmt = sec => !isFinite(sec) ? "00:00" : `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
     const lblPrefix = fLabels[voiceFilter] ? fLabels[voiceFilter] + " • " : "";
@@ -1732,8 +1730,7 @@ function buildVoicePlayer(src, msgId, voiceFilter = "normal") {
         e.stopPropagation();
         if (aud.paused) {
             if (currentPlayingAudio && currentPlayingAudio !== aud) stopAnyVoicePlayback();
-            aud.playbackRate = baseRate * rate;
-            aud.play().catch(() => {});
+            aud.playbackRate = baseRate * rate; aud.play().catch(() => {});
             playBtn.innerText = "⏸"; currentPlayingAudio = aud; currentPlayingBtn = playBtn;
         } else { aud.pause(); playBtn.innerText = "▶"; }
     };
@@ -1841,10 +1838,8 @@ function buildMessageNode(id, m) {
             if (ev.target.closest("button, .vo-card, .poll-opt, .spoiler-txt, .voice-player, .custom-vid-box, .react-chip, .scratch-canvas, .capsule-card") || ev.target.tagName === "IMG" || ev.target.tagName === "A") return;
             const t = Date.now();
             if (t - lastTap < 300) {
-                triggerHaptic(14);
-                spawnSparks(ev.clientX, ev.clientY);
-                selectedMsg = { id, data: activeMsgsMap[id] || m };
-                reactToSelected("❤️", true);
+                triggerHaptic(14); spawnSparks(ev.clientX, ev.clientY);
+                selectedMsg = { id, data: activeMsgsMap[id] || m }; reactToSelected("❤️", true);
             }
             lastTap = t;
         });
@@ -1859,8 +1854,7 @@ function buildMessageNode(id, m) {
 
     const menuBtn = document.createElement("button"); menuBtn.className = "msg-menu-trigger"; menuBtn.innerText = "⋮";
     menuBtn.onclick = e => { e.stopPropagation(); openMsgActions(id, activeMsgsMap[id] || m); };
-    topBar.appendChild(lbl); topBar.appendChild(menuBtn);
-    bubble.appendChild(topBar);
+    topBar.appendChild(lbl); topBar.appendChild(menuBtn); bubble.appendChild(topBar);
 
     if (m.replyTo) {
         const rq = document.createElement("div"); rq.className = "reply-quote";
@@ -1969,14 +1963,10 @@ function updateActiveHeader() {
         const p = contactProfiles[activePartner]; if (!p) return;
         setAvatarStyle(av, p);
         nm.innerHTML = `${renderStyledUserName(p)} ${getVerifiedBadgeHTML(p.verified)} ${getDevBadgeHTML(p)}`;
-        const roomCopy = activeRoomId, partnerCopy = activePartner;
-        db.ref(`chats/${roomCopy}/typing/${partnerCopy}`).once("value", s => {
-            if (activeRoomId !== roomCopy) return;
-            if (s.val() === true) { st.innerText = "يكتب الآن..."; st.className = "status-typing"; }
-            else if (p.moodText) { st.innerText = p.moodText + (p.online ? " • متصل" : ""); st.className = p.online ? "status-online" : ""; }
-            else if (p.online) { st.innerText = "متصل الآن"; st.className = "status-online"; }
-            else { st.innerText = p.lastSeen ? `آخر ظهور ${formatTime(p.lastSeen)}` : "غير متصل"; st.className = ""; }
-        });
+        if (activePartnerTyping) { st.innerText = "يكتب الآن..."; st.className = "status-typing"; }
+        else if (p.moodText) { st.innerText = p.moodText + (p.online ? " • متصل" : ""); st.className = p.online ? "status-online" : ""; }
+        else if (p.online) { st.innerText = "متصل الآن"; st.className = "status-online"; }
+        else { st.innerText = p.lastSeen ? `آخر ظهور ${formatTime(p.lastSeen)}` : "غير متصل"; st.className = ""; }
     } else if (activeSpaceObj) {
         setAvatarStyle(av, { name: activeSpaceObj.name, avatarColor: activeSpaceObj.avatarColor }, false);
         nm.innerHTML = `${escapeHTML(activeSpaceObj.name)} ${getVerifiedBadgeHTML(activeSpaceObj.verified)}`;
@@ -1986,7 +1976,7 @@ function updateActiveHeader() {
 }
 
 function openActiveRoomInfo() {
-    if (activeChatType === "dm" && activePartner) openOtherProfile(activePartner);
+    if (activeChatType === "dm" && activePartner) { ensurePostsLoaded(); openOtherProfile(activePartner); }
     else if (activeSpaceObj) openSpaceInfoModal();
 }
 
@@ -2041,7 +2031,6 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     const dbPath = getActiveRoomBasePath();
     const chatTypeCopy = activeChatType, partnerCopy = activePartner, roomIdCopy = activeRoomId;
 
-    // إرفاق مؤقت التدمير الذاتي إن كان مفعّلاً
     const sdSec = (!extra.isAi && chatTypeCopy === "dm" && selectedSelfDestructSec > 0) ? selectedSelfDestructSec : 0;
     if (sdSec > 0) {
         selectedSelfDestructSec = 0;
@@ -2057,22 +2046,14 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     const replySnap = (!extra.isAi && replyTarget) ? { ...replyTarget } : null;
     if (replySnap) { baseLocal.replyTo = replySnap; cancelReplyOrEdit(); }
 
-    // تشفير AES-GCM تلقائي للرسائل النصية والكبسولات في المحادثات الخاصة
     let dbPayload = { ...baseLocal };
     const shouldEncrypt = chatTypeCopy === "dm" && (type === "text" || type === "capsule") && !extra.isAi;
     if (shouldEncrypt) {
         const enc = await e2eEncrypt(roomIdCopy, content);
-        if (enc.e2e) {
-            dbPayload.e2e = true;
-            dbPayload.encContent = enc.data;
-            dbPayload.content = "";
-            baseLocal.e2e = true;
-        }
+        if (enc.e2e) { dbPayload.e2e = true; dbPayload.encContent = enc.data; dbPayload.content = ""; baseLocal.e2e = true; }
         if (replySnap && replySnap.preview) {
             const encRp = await e2eEncrypt(roomIdCopy, replySnap.preview);
-            if (encRp.e2e) {
-                dbPayload.replyTo = { ...replySnap, preview: "", encPreview: encRp.data };
-            }
+            if (encRp.e2e) dbPayload.replyTo = { ...replySnap, preview: "", encPreview: encRp.data };
         }
     }
 
@@ -2082,6 +2063,7 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     activeMsgsMap[msgId] = pendingObj;
     if (!roomMsgsCache[dbPath]) roomMsgsCache[dbPath] = {};
     roomMsgsCache[dbPath][msgId] = pendingObj;
+    trimRoomCache(dbPath);
     appendMessageWithDateSep(area, msgId, pendingObj);
     area.scrollTop = area.scrollHeight;
     playSendSound();
@@ -2089,8 +2071,7 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     const isLight = type === "text" || type === "sticker" || type === "gif_card" || type === "poll" || type === "capsule";
     if (isLight && (!navigator.onLine || !isDbConnected)) {
         offlineQueue.push({ owner: me.username, dbPath, chatType: chatTypeCopy, partner: partnerCopy, roomId: roomIdCopy, previewLabel, payload: dbPayload, localDisplay: pendingObj });
-        saveOfflineQueue();
-        showToast("تم حفظ الرسالة وستُرسل تلقائياً عند توفر الشبكة 🕒");
+        saveOfflineQueue(); showToast("تم حفظ الرسالة وستُرسل تلقائياً عند توفر الشبكة 🕒");
         setTimeout(() => { sendLock = false; }, 220);
         return;
     }
@@ -2132,11 +2113,8 @@ async function sendTextMessage() {
         const targetId = editingMsgId; cancelReplyOrEdit();
         if (activeChatType === "dm") {
             const enc = await e2eEncrypt(activeRoomId, txt);
-            if (enc.e2e) {
-                await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ e2e: true, encContent: enc.data, content: "", edited: true });
-            } else {
-                await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ content: txt, edited: true });
-            }
+            if (enc.e2e) await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ e2e: true, encContent: enc.data, content: "", edited: true });
+            else await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ content: txt, edited: true });
         } else {
             await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ content: txt, edited: true });
         }
@@ -2183,8 +2161,7 @@ async function reactToSelected(emoji, forceSet = false) {
 function replyToSelected() {
     if (!selectedMsg) return;
     editingMsgId = null;
-    const d = selectedMsg.data;
-    const sName = d.sender === me.username ? me.name : (d.senderName || d.sender);
+    const d = selectedMsg.data, sName = d.sender === me.username ? me.name : (d.senderName || d.sender);
     const prev = d.scratch ? "🪄 رسالة كشط مخفية" : (d.type === "text" ? d.content : (d.type === "image" ? "📷 صورة" : d.type === "audio" ? "🎤 بصمة" : "🎭 ملصق"));
     replyTarget = { id: selectedMsg.id, sender: d.sender || "", senderName: sName, preview: prev };
     document.getElementById("replyPreviewSender").innerText = "رد على " + sName;
@@ -2207,10 +2184,8 @@ function cancelReplyOrEdit() { replyTarget = null; editingMsgId = null; document
 
 async function pinSelectedMessage() {
     if (!selectedMsg || !activeRoomId) return;
-    const d = selectedMsg.data;
-    const txt = d.type === "text" ? d.content : (d.type === "image" ? "📷 صورة" : "🎤 بصمة صوتية");
-    const pPath = activeChatType === "dm" ? `chats/${activeRoomId}/pinned` : `spaces/${activeRoomId}/pinned`;
-    await db.ref(pPath).set({ id: selectedMsg.id, text: txt });
+    const d = selectedMsg.data, txt = d.type === "text" ? d.content : (d.type === "image" ? "📷 صورة" : "🎤 بصمة صوتية");
+    await db.ref(activeChatType === "dm" ? `chats/${activeRoomId}/pinned` : `spaces/${activeRoomId}/pinned`).set({ id: selectedMsg.id, text: txt });
     closeMsgActions(); showToast("تم التثبيت بالأعلى 📌");
 }
 async function unpinMessage() { if (!activeRoomId) return; await db.ref(activeChatType === "dm" ? `chats/${activeRoomId}/pinned` : `spaces/${activeRoomId}/pinned`).remove(); }
@@ -2233,7 +2208,7 @@ async function clearChatForMe() {
     showToast("تم التنظيف من عندك فقط");
 }
 
-// ==================== 11. محرّك المكالمات (TURN + STUN + إعادة ربط تلقائي) ====================
+// ==================== 11. محرّك المكالمات ====================
 const RTC_CONFIG = {
     iceCandidatePoolSize: 8, bundlePolicy: "max-bundle", rtcpMuxPolicy: "require", iceTransportPolicy: "all",
     iceServers: [
@@ -2440,7 +2415,7 @@ async function endCall(notify = true) {
     setCallNetState(""); document.getElementById("callOverlay").style.display = "none";
 }
 
-// ==================== 12. لوحة تحكم المطور المحمية (AdminGuard + SHA-256) ====================
+// ==================== 12. لوحة تحكم المطور المحمية ====================
 function downloadOfficialPngIcon(size) {
     const c = document.createElement("canvas"); c.width = size; c.height = size;
     const ctx = c.getContext("2d"), grad = ctx.createLinearGradient(0, 0, size, size);
