@@ -3,46 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
-    <meta name="theme-color" content="#050912">
+    <meta name="theme-color" content="#07090f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>مفكرة دراسية - السادس العلمي</title>
-    <link rel="manifest" href="./manifest.json?v=11">
+    <link rel="manifest" href="./manifest.json?v=12">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./style.css?v=11">
+    <link rel="stylesheet" href="./style.css?v=12">
 </head>
 <body>
 
-    <!-- شاشة البداية الزجاجية السريعة (Splash) -->
+    <!-- شاشة البداية الفخمة (Splash V12) -->
     <div id="splashScreen">
         <div class="splash-logo">
-            <svg viewBox="0 0 24 24"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h8"/><path d="M8 11h5"/></svg>
         </div>
         <div class="splash-title">مفكرة السادس العلمي</div>
         <div class="splash-bar"><i></i></div>
     </div>
 
-    <!-- الإضاءة المحيطية الناعمة بالخلفية -->
-    <div class="ambient-aura" aria-hidden="true"></div>
-
     <div id="toastBox"></div>
-    <div id="netBanner">📡 الاتصال ضعيف — رسائلك تُحفظ وتُرسل تلقائياً</div>
+    <div id="netBanner">الاتصال ضعيف — رسائلك محفوظة وتُرسل تلقائياً عند عودة الشبكة</div>
     <audio id="remoteAudio" autoplay playsinline style="display:none;"></audio>
 
-    <!-- ==================== 1. بوابة الدخول المموهة ==================== -->
+    <!-- ==================== 1. بوابة الدخول الفخمة (Vault Gate V12) ==================== -->
     <div class="center-screen" id="gateScreen">
-        <div class="glass-card hero-glass">
+        <div class="glass-card hero-glass gate-card">
             <div class="brand-icon">
-                <svg viewBox="0 0 24 24"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h8"/><path d="M8 11h5"/></svg>
             </div>
             <h2>مفكرة السادس العلمي</h2>
-            <p class="sub">أدخل رمز الجلسة الخاص لفتح المساحة الدراسية</p>
-            <input type="password" id="gatePin" class="input pin-field" placeholder="•••••" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault(); verifyGate();}">
-            <button class="btn" onclick="verifyGate()">دخول للمفكرة</button>
+            <p class="sub">أدخل رمز الجلسة الخاص للوصول إلى مساحتك الدراسية</p>
+
+            <div class="pin-dots" id="gatePinDots" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i>
+            </div>
+
+            <input type="password" id="gatePin" class="input pin-field" placeholder="أدخل الرمز" autocomplete="off"
+                oninput="window.updateGatePinDots && window.updateGatePinDots(this.value)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); verifyGate();}">
+            <button class="btn btn-lg" onclick="verifyGate()">
+                <span>فتح المفكرة</span>
+                <svg class="ic" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </button>
             <div class="err-text" id="gateErr"></div>
         </div>
     </div>
@@ -52,33 +59,36 @@
         <div class="decoy-wrap">
             <div class="decoy-header">
                 <div>
-                    <h3>📚 مفكرة السادس العلمي</h3>
+                    <h3>مفكرة السادس العلمي</h3>
                     <span>ملخصاتك وملاحظاتك اليومية</span>
                 </div>
-                <button class="btn btn-outline btn-sm" onclick="quickLock()">🔒 قفل</button>
+                <button class="btn btn-outline btn-sm" onclick="quickLock()">
+                    <svg class="ic-sm" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span>قفل</span>
+                </button>
             </div>
             <div class="decoy-tabs">
-                <button class="decoy-tab active" onclick="switchDecoyTab('notes', this)">📝 ملاحظاتي</button>
-                <button class="decoy-tab" onclick="switchDecoyTab('laws', this)">📐 قوانين مهمة</button>
-                <button class="decoy-tab" onclick="switchDecoyTab('plan', this)">📅 جدول المراجعة</button>
+                <button class="decoy-tab active" onclick="switchDecoyTab('notes', this)">ملاحظاتي</button>
+                <button class="decoy-tab" onclick="switchDecoyTab('laws', this)">قوانين مهمة</button>
+                <button class="decoy-tab" onclick="switchDecoyTab('plan', this)">جدول المراجعة</button>
             </div>
             <div id="decoyTab-notes" class="decoy-pane active">
                 <div style="display:flex; gap:8px; margin-bottom:12px;">
                     <input type="text" id="decoyNoteInp" class="input" placeholder="أضف ملاحظة دراسية جديدة..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addDecoyNote();}">
-                    <button class="btn" style="width:85px;" onclick="addDecoyNote()">حفظ</button>
+                    <button class="btn" style="width:88px;" onclick="addDecoyNote()">حفظ</button>
                 </div>
                 <div id="decoyNotesList"></div>
             </div>
             <div id="decoyTab-laws" class="decoy-pane">
-                <div class="decoy-card"><strong>⚡ الفيزياء — المتسعات:</strong><p>C = Q / ΔV &nbsp;|&nbsp; E = ½ C (ΔV)² &nbsp;|&nbsp; C_k = k · C</p></div>
-                <div class="decoy-card"><strong>🧪 الكيمياء — الاتزان الكيميائي:</strong><p>Kp = Kc (RT)^Δng &nbsp;|&nbsp; ΔG° = ΔH° - TΔS° &nbsp;|&nbsp; pH + pOH = 14</p></div>
-                <div class="decoy-card"><strong>📐 الرياضيات — التفاضل والتكامل:</strong><p>d/dx (sin x) = cos x &nbsp;|&nbsp; ∫ e^x dx = e^x + C &nbsp;|&nbsp; z = r(cosθ + i sinθ)</p></div>
-                <div class="decoy-card"><strong>🧬 الأحياء — الانقسامات:</strong><p>الطور التمهيدي ← الاستوائي ← الانفصالي ← النهائي</p></div>
+                <div class="decoy-card"><strong>الفيزياء — المتسعات</strong><p>C = Q / ΔV &nbsp;|&nbsp; E = ½ C (ΔV)² &nbsp;|&nbsp; C_k = k · C</p></div>
+                <div class="decoy-card"><strong>الكيمياء — الاتزان الكيميائي</strong><p>Kp = Kc (RT)^Δng &nbsp;|&nbsp; ΔG° = ΔH° - TΔS° &nbsp;|&nbsp; pH + pOH = 14</p></div>
+                <div class="decoy-card"><strong>الرياضيات — التفاضل والتكامل</strong><p>d/dx (sin x) = cos x &nbsp;|&nbsp; ∫ e^x dx = e^x + C &nbsp;|&nbsp; z = r(cosθ + i sinθ)</p></div>
+                <div class="decoy-card"><strong>الأحياء — الانقسامات</strong><p>الطور التمهيدي ← الاستوائي ← الانفصالي ← النهائي</p></div>
             </div>
             <div id="decoyTab-plan" class="decoy-pane">
-                <div class="decoy-card"><strong>🌅 الصباح (8:00 - 11:00):</strong><p>الرياضيات — حل تمارين وزارية (الفصل الثالث والرابع)</p></div>
-                <div class="decoy-card"><strong>☀️ الظهر (1:30 - 4:00):</strong><p>الفيزياء — مراجعة كلاميات ومسائل الحث الكهرومغناطيسي</p></div>
-                <div class="decoy-card"><strong>🌙 المساء (7:00 - 10:00):</strong><p>الكيمياء والأحياء — حفظيات وتعاليل + اختبار سريع</p></div>
+                <div class="decoy-card"><strong>الصباح (8:00 - 11:00)</strong><p>الرياضيات — حل تمارين وزارية (الفصل الثالث والرابع)</p></div>
+                <div class="decoy-card"><strong>الظهر (1:30 - 4:00)</strong><p>الفيزياء — مراجعة كلاميات ومسائل الحث الكهرومغناطيسي</p></div>
+                <div class="decoy-card"><strong>المساء (7:00 - 10:00)</strong><p>الكيمياء والأحياء — حفظيات وتعاليل + اختبار سريع</p></div>
             </div>
         </div>
     </div>
@@ -87,10 +97,10 @@
     <div class="center-screen" id="authScreen" style="display:none;">
         <div class="glass-card hero-glass">
             <div class="brand-icon">
-                <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
             <h2>بوابة الحسابات الخاصة</h2>
-            <p class="sub">تسجّل مرة واحدة فقط وتنحفظ جلستك تلقائياً</p>
+            <p class="sub">تسجّل مرة واحدة فقط وتُحفظ جلستك بأمان تلقائياً</p>
             <div class="tabs">
                 <button class="tab-btn active" id="tabLogin" onclick="switchAuthTab('login')">تسجيل الدخول</button>
                 <button class="tab-btn" id="tabReg" onclick="switchAuthTab('register')">إنشاء حساب جديد</button>
@@ -105,7 +115,7 @@
                     <label>كلمة السر</label>
                     <input type="password" id="loginPass" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter'){event.preventDefault(); doLogin();}">
                 </div>
-                <button class="btn" onclick="doLogin()">دخول وحفظ الجلسة</button>
+                <button class="btn btn-lg" onclick="doLogin()">دخول وحفظ الجلسة</button>
             </div>
 
             <div id="regForm" style="display:none;">
@@ -125,36 +135,36 @@
                     <label>النبذة (اختياري)</label>
                     <input type="text" id="regBio" class="input" placeholder="متاح للمراسلة">
                 </div>
-                <button class="btn" onclick="doRegister()">إنشاء الحساب والدخول</button>
+                <button class="btn btn-lg" onclick="doRegister()">إنشاء الحساب والدخول</button>
             </div>
 
             <div class="err-text" id="authErr"></div>
-            <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="quickLock()">🔒 قفل والعودة</button>
+            <button class="btn btn-outline btn-sm" style="margin-top:12px;" onclick="quickLock()">قفل والعودة</button>
         </div>
     </div>
 
-    <!-- ==================== 3. التطبيق الرئيسي (V11 Ultra Shield) ==================== -->
+    <!-- ==================== 3. التطبيق الرئيسي (V12 Signature) ==================== -->
     <div id="appShell">
         <nav class="nav-bar floating-dock" id="mainNavBar">
             <button class="nav-item active" data-nav="chats" onclick="switchMainTab('chats')">
-                <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                <svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                 <span>الدردشة</span>
             </button>
             <button class="nav-item" data-nav="feed" onclick="switchMainTab('feed')">
-                <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+                <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
                 <span>المنشورات</span>
             </button>
             <button class="nav-item" data-nav="spaces" onclick="switchMainTab('spaces')">
-                <svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>
+                <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/></svg>
                 <span>المزيد</span>
             </button>
             <button class="nav-item" data-nav="games" onclick="switchMainTab('games')" style="position:relative;">
-                <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                <svg class="ic" viewBox="0 0 24 24"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="5"/></svg>
                 <span>الألعاب</span>
                 <span class="notif-dot" id="gameInviteDot"></span>
             </button>
             <button class="nav-item" data-nav="profile" onclick="switchMainTab('profile')">
-                <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                <svg class="ic" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 <span>حسابي</span>
             </button>
         </nav>
@@ -165,20 +175,29 @@
                 <aside class="sidebar">
                     <div class="top-bar">
                         <div style="min-width:0;">
-                            <h3>💬 المحادثات</h3>
+                            <h3>المحادثات</h3>
                             <div id="greetingLine" class="greeting-sub"></div>
                         </div>
-                        <div style="display:flex; gap:5px;">
-                            <button class="icon-btn" title="الذكاء الاصطناعي AI" onclick="openFutureModule('ai')" style="font-size:16px;">🤖</button>
-                            <button class="icon-btn accent" title="بحث موحد عن حساب أو قناة @" onclick="openUnifiedSearchModal()">
-                                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        <div class="top-bar-acts">
+                            <button class="icon-btn ai-glow-btn" title="الذكاء الاصطناعي AI" onclick="openFutureModule('ai')">
+                                <svg class="ic" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>
                             </button>
-                            <button class="icon-btn" title="الإشعارات والتفاعلات" onclick="openNotificationsModal()" style="position:relative;">
-                                🔔<span class="notif-dot" id="notifDot"></span>
+                            <button class="icon-btn accent" title="بحث باليوزر @" onclick="openUnifiedSearchModal()">
+                                <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
                             </button>
-                            <button class="icon-btn" title="الرسائل المحفوظة" onclick="openSavedMessages()">🔖</button>
-                            <button class="icon-btn" id="installTopBtn" style="display:none;" title="تثبيت التطبيق على موبايلك" onclick="triggerPwaInstall()">📲</button>
-                            <button class="icon-btn danger" title="قفل فوري" onclick="quickLock()">🔒</button>
+                            <button class="icon-btn" title="الإشعارات" onclick="openNotificationsModal()" style="position:relative;">
+                                <svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                                <span class="notif-dot" id="notifDot"></span>
+                            </button>
+                            <button class="icon-btn" title="الرسائل المحفوظة" onclick="openSavedMessages()">
+                                <svg class="ic" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                            </button>
+                            <button class="icon-btn" id="installTopBtn" style="display:none;" title="تثبيت التطبيق" onclick="triggerPwaInstall()">
+                                <svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </button>
+                            <button class="icon-btn danger" title="قفل فوري" onclick="quickLock()">
+                                <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </button>
                         </div>
                     </div>
 
@@ -186,9 +205,9 @@
 
                     <div class="search-wrap">
                         <div class="search-box">
-                            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                            <input type="text" id="localFilterInput" placeholder="بحث بالمحادثات أو اكتب الرمز السري للخزنة..." oninput="handleSidebarSearchInput(this.value)">
-                            <button type="button" id="vaultCloseBtn" class="vault-pill-btn" style="display:none;" onclick="closeHiddenVault()">🔒 قفل الخزنة</button>
+                            <svg class="ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" id="localFilterInput" placeholder="بحث بالمحادثات أو رمز الخزنة..." oninput="handleSidebarSearchInput(this.value)">
+                            <button type="button" id="vaultCloseBtn" class="vault-pill-btn" style="display:none;" onclick="closeHiddenVault()">قفل الخزنة</button>
                         </div>
                     </div>
 
@@ -204,21 +223,21 @@
                 <main class="chat-pane" id="chatPane">
                     <div class="empty-chat" id="chatEmptyState">
                         <div class="brand-icon">
-                            <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                         </div>
-                        <h3 style="color:var(--text); margin-bottom:6px;">مساحتك الخاصة المشفّرة جاهزة</h3>
-                        <p style="font-size:13px; margin-bottom:16px;">تشفير AES-GCM، سلاسة 60fps، أغاني، يوتيوب سوا، وذكاء اصطناعي</p>
+                        <h3 style="color:var(--text); margin-bottom:6px;">مساحتك الخاصة المشفّرة</h3>
+                        <p style="font-size:13px; margin-bottom:18px; max-width:300px; line-height:1.6;">تشفير AES-GCM، سجل محادثات دائم، أغاني، يوتيوب سوا، وذكاء اصطناعي</p>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
-                            <button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>
-                            <button class="btn btn-sm btn-outline" onclick="openFutureModule('ai')">🤖 مساعد AI</button>
-                            <button class="btn btn-sm btn-outline" onclick="openSavedMessages()">🔖 المحفوظة</button>
+                            <button class="btn btn-sm" onclick="openUnifiedSearchModal()">بحث باليوزر (@)</button>
+                            <button class="btn btn-sm btn-outline" onclick="openFutureModule('ai')">مساعد AI</button>
+                            <button class="btn btn-sm btn-outline" onclick="openSavedMessages()">المحفوظة</button>
                         </div>
                     </div>
 
                     <div id="activeChatView">
                         <div class="chat-header">
                             <button class="pill-btn back-mobile" onclick="closeActiveChat()" title="رجوع">
-                                <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+                                <svg class="ic" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
                             </button>
                             <div class="chat-partner-pill" onclick="openActiveRoomInfo()">
                                 <div class="avatar sm" id="chatPartnerAvatar">؟</div>
@@ -229,60 +248,50 @@
                             </div>
                             <div class="chat-actions-pill">
                                 <button class="pill-act" id="btnVoiceCall" title="مكالمة صوتية" onclick="startCall(false)">
-                                    <svg viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.58a1 1 0 0 1-.25 1.01l-2.2 2.2z"/></svg>
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                                 </button>
                                 <button class="pill-act" id="btnVideoCall" title="مكالمة فيديو" onclick="startCall(true)">
-                                    <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2.5"/></svg>
                                 </button>
-                                <button class="pill-act" id="btnPollCreate" style="display:none;" title="إنشاء استطلاع رأي" onclick="openCreatePollModal()">📊</button>
-                                <button class="pill-act" id="btnSearchChat" title="بحث داخل المحادثة" onclick="toggleInChatSearch()">🔍</button>
-                                <button class="pill-act" id="btnChatToolsMenu" title="أدوات المحادثة السحرية" onclick="toggleChatToolsMenu()">⋮</button>
-                            </div>
-
-                            <!-- قائمة أدوات المحادثة الشاملة (V11) -->
-                            <div id="chatToolsDropdown">
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.sendLiveHeartbeat && window.sendLiveHeartbeat()">💓 &nbsp; إرسال نبضة حية</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.startListenTogetherPicker && window.startListenTogetherPicker()">🎧 &nbsp; نسمع أغنية سوا</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openYoutubeTogetherModal && window.openYoutubeTogetherModal()">📺 &nbsp; نشوف يوتيوب سوا لايف</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openDailyPromptModal && window.openDailyPromptModal()">💌 &nbsp; سؤال اليوم السري</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openLiveDrawModal && window.openLiveDrawModal()">🎨 &nbsp; ارسم وياي لايف</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openTimeCapsuleModal && window.openTimeCapsuleModal()">⏳ &nbsp; كبسولة زمن (رسالة بوقت)</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openMemoriesBoardModal && window.openMemoriesBoardModal()">🗓️ &nbsp; لوحة المناسبات والذكريات</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openChatThemeModal && window.openChatThemeModal()">🎨 &nbsp; ثيم خاص لهذه المحادثة</button>
-                                <button class="pop-item dm-only-tool" id="menuVanishBtn" onclick="toggleChatToolsMenu(false); window.toggleVanishMode && window.toggleVanishMode()">👻 &nbsp; تفعيل الوضع المختفي</button>
-                                <button class="pop-item dm-only-tool" onclick="toggleChatToolsMenu(false); window.openSharedWpModal && window.openSharedWpModal()">🖼️ &nbsp; خلفية لكلا الطرفين</button>
-                                <button class="pop-item dm-only-tool" id="menuVaultBtn" onclick="toggleChatToolsMenu(false); toggleHideActiveChatInVault()">🔐 &nbsp; إخفاء المحادثة بالخزنة</button>
-                                <button class="pop-item" onclick="toggleChatToolsMenu(false); openMediaGalleryModal()">📂 &nbsp; معرض الوسائط والملفات</button>
-                                <button class="pop-item space-only-tool" style="display:none;" onclick="toggleChatToolsMenu(false); openSpaceInfoModal()">ℹ️ &nbsp; معلومات القناة / المجموعة</button>
-                                <button class="pop-item dm-only-tool" style="color:#fb7185;" onclick="toggleChatToolsMenu(false); clearChatForMe()">🗑️ &nbsp; تنظيف المحادثة من عندي</button>
-                                <div id="futureChatToolsSlot"></div>
+                                <button class="pill-act" id="btnPollCreate" style="display:none;" title="إنشاء استطلاع رأي" onclick="openCreatePollModal()">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                                </button>
+                                <button class="pill-act" id="btnSearchChat" title="بحث داخل المحادثة" onclick="toggleInChatSearch()">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
+                                </button>
+                                <button class="pill-act" id="btnChatToolsMenu" title="أدوات المحادثة" onclick="toggleChatToolsMenu()">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></svg>
+                                </button>
                             </div>
                         </div>
 
                         <div id="inChatSearchBar">
                             <input type="text" id="inChatSearchInp" placeholder="ابحث عن أي كلمة بالمحادثة..." oninput="runInChatSearch(this.value)">
                             <span id="inChatSearchCount"></span>
-                            <button type="button" class="icon-btn" style="width:30px; height:30px;" onclick="toggleInChatSearch(false)">✕</button>
+                            <button type="button" class="icon-btn" style="width:30px; height:30px;" onclick="toggleInChatSearch(false)">
+                                <svg class="ic-xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
                         </div>
 
                         <div id="pinnedBar">
                             <div class="pinned-content">
-                                <strong>📌 رسالة مثبتة</strong>
+                                <strong>رسالة مثبتة</strong>
                                 <span id="pinnedText">...</span>
                             </div>
-                            <button class="icon-btn" style="width:28px; height:28px;" onclick="unpinMessage()">✕</button>
+                            <button class="icon-btn" style="width:28px; height:28px;" onclick="unpinMessage()">
+                                <svg class="ic-xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
                         </div>
 
-                        <!-- شريط المناسبات التنازلي + شريط يوتيوب سوا (يُداران من premium.js) -->
                         <div id="countdownBanner"></div>
                         <div id="ytTogetherBar"></div>
 
                         <div class="messages-area" id="messagesList"></div>
 
-                        <!-- زر عائم للنزول لآخر رسالة مع عداد الرسائل الجديدة -->
+                        <!-- زر عائم للنزول لآخر رسالة -->
                         <button type="button" id="scrollBottomBtn" onclick="scrollToBottomSmooth()" title="النزول لآخر رسالة">
                             <span id="scrollBottomCount" style="display:none;">0</span>
-                            ↓
+                            <svg class="ic-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
 
                         <div id="typingBubbleWrap">
@@ -297,45 +306,40 @@
                                 <strong id="replyPreviewSender">رد على</strong>
                                 <span id="replyPreviewText">...</span>
                             </div>
-                            <button class="icon-btn" style="width:30px; height:30px;" onclick="cancelReplyOrEdit()">✕</button>
+                            <button class="icon-btn" style="width:30px; height:30px;" onclick="cancelReplyOrEdit()">
+                                <svg class="ic-xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
                         </div>
 
-                        <!-- شريط الأدوات السحرية والذكاء والتدمير الذاتي وتنسيق النص -->
                         <div id="chatExtrasTray">
                             <div class="extras-row" id="magicModeRow">
                                 <button type="button" class="fx-opt-btn" id="scratchModeBtn" onclick="window.toggleScratchMode && window.toggleScratchMode()">🪄 رسالة كشط</button>
                                 <select id="selfDestructSel" class="fx-select-pill" onchange="handleSelfDestructSelect(this.value)" title="تدمير ذاتي بعد القراءة">
-                                    <option value="0">⏱️ بدون مؤقت</option>
-                                    <option value="10">🔥 تنمسح بعد 10ث</option>
-                                    <option value="60">⏳ تنمسح بعد 1د</option>
-                                    <option value="3600">🕐 تنمسح بعد 1س</option>
+                                    <option value="0">بدون مؤقت</option>
+                                    <option value="10">تدمير بعد 10ث</option>
+                                    <option value="60">تدمير بعد 1د</option>
+                                    <option value="3600">تدمير بعد 1س</option>
                                 </select>
                                 <button type="button" class="fx-opt-btn" onclick="toggleChatExtras(false); window.openTimeCapsuleModal && window.openTimeCapsuleModal()">⏳ كبسولة زمن</button>
-                                <button type="button" class="fx-opt-btn" onclick="insertAiMention()">🤖 @ai</button>
-                                <button type="button" class="fx-opt-btn" onclick="toggleChatExtras(false); window.aiSummarizeActiveChat && window.aiSummarizeActiveChat()">✨ لخّصلي</button>
-                                <button type="button" class="fx-opt-btn" onclick="toggleChatExtras(false); window.aiSuggestQuickReply && window.aiSuggestQuickReply()">💡 اقترح رد</button>
+                                <button type="button" class="fx-opt-btn" onclick="insertAiMention()">@ai</button>
+                                <button type="button" class="fx-opt-btn" onclick="toggleChatExtras(false); window.aiSummarizeActiveChat && window.aiSummarizeActiveChat()">لخّصلي</button>
+                                <button type="button" class="fx-opt-btn" onclick="toggleChatExtras(false); window.aiSuggestQuickReply && window.aiSuggestQuickReply()">اقترح رد</button>
                             </div>
                             <div class="extras-row" id="effectPickerRow"></div>
                             <div class="extras-row" id="formatBar">
-                                <button type="button" onclick="applyTextFormat('bold')" title="عريض"><b>عريض</b></button>
-                                <button type="button" onclick="applyTextFormat('italic')" title="مائل"><i>مائل</i></button>
-                                <button type="button" onclick="applyTextFormat('underline')" title="تسطير"><u>تسطير</u></button>
-                                <button type="button" onclick="applyTextFormat('strike')" title="مشطوب"><s>مشطوب</s></button>
-                                <button type="button" onclick="applyTextFormat('spoiler')" title="تشويش">🌫️ تشويش</button>
-                                <button type="button" onclick="applyTextFormat('code')" title="رمز">&lt;رمز&gt;</button>
-                                <button type="button" onclick="applyTextFormat('quote')" title="اقتباس">❝ اقتباس</button>
-                                <button type="button" onclick="applyTextFormat('link')" title="رابط">🔗 رابط</button>
+                                <button type="button" onclick="applyTextFormat('bold')"><b>عريض</b></button>
+                                <button type="button" onclick="applyTextFormat('italic')"><i>مائل</i></button>
+                                <button type="button" onclick="applyTextFormat('underline')"><u>تسطير</u></button>
+                                <button type="button" onclick="applyTextFormat('strike')"><s>مشطوب</s></button>
+                                <button type="button" onclick="applyTextFormat('spoiler')">تشويش</button>
+                                <button type="button" onclick="applyTextFormat('code')">&lt;رمز&gt;</button>
+                                <button type="button" onclick="applyTextFormat('quote')">اقتباس</button>
+                                <button type="button" onclick="applyTextFormat('link')">رابط</button>
                             </div>
                         </div>
 
+                        <!-- شريط الكتابة الكبسولي العائم (Floating Pill Composer V12) -->
                         <div class="input-area">
-                            <div id="mediaMenu">
-                                <button class="pop-item" onclick="toggleMediaMenu(false); document.getElementById('imgInput').click()">📷 &nbsp; صورة عادية</button>
-                                <button class="pop-item" id="voAttachBtn" onclick="toggleMediaMenu(false); document.getElementById('voImgInput').click()">💣 &nbsp; صورة عرض لمرة واحدة</button>
-                                <button class="pop-item" onclick="toggleMediaMenu(false); document.getElementById('vidInput').click()">🎬 &nbsp; فيديو قصير</button>
-                                <button class="pop-item" onclick="toggleMediaMenu(false); window.openAiImageGenerator && window.openAiImageGenerator(true)">🎨 &nbsp; توليد صورة بالـ AI</button>
-                                <button class="pop-item" id="pollAttachBtn" style="display:none;" onclick="toggleMediaMenu(false); openCreatePollModal()">📊 &nbsp; إنشاء استطلاع رأي</button>
-                            </div>
                             <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="handleSendImage(event, false)">
                             <input type="file" id="voImgInput" accept="image/*" style="display:none" onchange="handleSendImage(event, true)">
                             <input type="file" id="vidInput" accept="video/*" style="display:none" onchange="handleSendVideo(event)">
@@ -343,43 +347,47 @@
 
                             <div id="chatNoticeBar"></div>
 
-                            <div id="inputNormalBar">
-                                <button class="icon-btn" onclick="toggleStickerDrawer()" title="رموز وملصقات" id="stickerBtn">😊</button>
-                                <textarea id="msgInput" rows="1" placeholder="اكتب رسالة أو @ai..." oninput="handleMsgInputResize(this); handleTyping();" onkeydown="handleMsgKeydown(event)"></textarea>
-                                <button class="icon-btn" onclick="toggleChatExtras()" title="تأثيرات وسحر وذكاء وتنسيق" id="fxToggleBtn">✨</button>
-                                <button class="icon-btn" onclick="toggleMediaMenu()" title="إرفاق وسائط">
-                                    <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
+                            <div id="inputNormalBar" class="composer-pill">
+                                <button class="comp-btn" onclick="toggleStickerDrawer()" title="رموز وملصقات" id="stickerBtn">
+                                    <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
                                 </button>
-                                <button class="icon-btn morph-btn" id="micBtn" onclick="startRecording()" title="بصمة صوتية">
-                                    <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 0 0-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
+                                <textarea id="msgInput" rows="1" placeholder="رسالة..." oninput="handleMsgInputResize(this); handleTyping();" onkeydown="handleMsgKeydown(event)"></textarea>
+                                <button class="comp-btn" onclick="toggleChatExtras()" title="تأثيرات وسحر وذكاء" id="fxToggleBtn">
+                                    <svg class="ic" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
+                                </button>
+                                <button class="comp-btn" onclick="toggleMediaMenu()" title="إرفاق وسائط">
+                                    <svg class="ic" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                </button>
+                                <button class="send-circle mic-circle morph-btn" id="micBtn" onclick="startRecording()" title="بصمة صوتية">
+                                    <svg class="ic" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                                 </button>
                                 <button class="send-circle morph-btn" id="sendBtn" style="display:none;" onclick="sendTextMessage()" title="إرسال">
-                                    <svg viewBox="0 0 24 24" style="transform:rotate(180deg);"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                                    <svg class="ic" viewBox="0 0 24 24" style="transform:rotate(180deg);"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                                 </button>
                             </div>
 
                             <div id="inputRecordBar">
-                                <button class="btn btn-danger btn-sm" onclick="stopRecording(true)">✕</button>
+                                <button class="btn btn-danger btn-sm" onclick="stopRecording(true)">إلغاء</button>
                                 <div class="rec-live-wave">
                                     <span class="rec-dot"></span>
                                     <span id="recTimerEl">00:00</span>
                                     <div class="live-bars"><i></i><i></i><i></i><i></i><i></i></div>
                                 </div>
                                 <select id="voiceFilterSel" class="fx-select-pill" title="فلتر الصوت">
-                                    <option value="normal">🎙️ عادي</option>
-                                    <option value="deep">🗣️ عميق</option>
-                                    <option value="fast">⚡ مسرّع</option>
-                                    <option value="echo">🏛️ صدى</option>
+                                    <option value="normal">عادي</option>
+                                    <option value="deep">عميق</option>
+                                    <option value="fast">مسرّع</option>
+                                    <option value="echo">صدى</option>
                                 </select>
-                                <button class="btn btn-success btn-sm" onclick="stopRecording(false)">إرسال ➤</button>
+                                <button class="btn btn-success btn-sm" onclick="stopRecording(false)">إرسال</button>
                             </div>
                         </div>
 
                         <div id="stickerDrawer">
                             <div id="drawerBody" class="drawer-body"></div>
                             <div class="drawer-bottom-tabs">
-                                <button class="dbt-btn active" data-dtab="emojis" onclick="switchDrawerTab('emojis')">الرموز التعبيرية</button>
-                                <button class="dbt-btn" data-dtab="gifs" onclick="switchDrawerTab('gifs')">صور متحركة</button>
+                                <button class="dbt-btn active" data-dtab="emojis" onclick="switchDrawerTab('emojis')">الرموز</button>
+                                <button class="dbt-btn" data-dtab="gifs" onclick="switchDrawerTab('gifs')">متحركة</button>
                                 <button class="dbt-btn" data-dtab="stickers" onclick="switchDrawerTab('stickers')">الملصقات</button>
                                 <button class="dbt-close" onclick="toggleStickerDrawer(false)">✕</button>
                             </div>
@@ -392,10 +400,15 @@
             <section class="tab-view" id="view-feed">
                 <div class="feed-wrap">
                     <div class="top-bar">
-                        <h3>📸 المنشورات</h3>
-                        <div style="display:flex; gap:6px;">
-                            <button class="icon-btn" title="تفاعلات منشوراتك" onclick="openNotificationsModal()">🔔</button>
-                            <button class="btn btn-sm" onclick="openCreatePostModal()">➕ منشور</button>
+                        <h3>المنشورات</h3>
+                        <div class="top-bar-acts">
+                            <button class="icon-btn" title="تفاعلات منشوراتك" onclick="openNotificationsModal()">
+                                <svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                            </button>
+                            <button class="btn btn-sm" onclick="openCreatePostModal()">
+                                <svg class="ic-xs" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>منشور جديد</span>
+                            </button>
                         </div>
                     </div>
                     <div class="feed-scroll" id="feedContainer"></div>
@@ -406,38 +419,46 @@
             <section class="tab-view" id="view-spaces">
                 <div class="spaces-wrap">
                     <div class="top-bar">
-                        <h3>✨ المزيد والإضافات</h3>
-                        <div style="display:flex; gap:6px;">
-                            <button class="btn btn-sm btn-outline" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر</button>
-                            <button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ قناة/مجموعة</button>
+                        <h3>المزيد</h3>
+                        <div class="top-bar-acts">
+                            <button class="btn btn-sm btn-outline" onclick="openUnifiedSearchModal()">بحث</button>
+                            <button class="btn btn-sm" onclick="openCreateSpaceModal()">+ قناة / مجموعة</button>
                         </div>
                     </div>
                     <div class="list-scroll" style="padding:12px;">
-                        <div class="hub-section-title">🚀 عالم المنصة الفائق</div>
+                        <div class="hub-section-title">أدوات المنصة</div>
                         <div class="future-grid stagger-grid" id="futureModulesGrid">
                             <div class="future-card ai-card" onclick="openFutureModule('ai')">
-                                <span class="fc-icon">🤖</span>
+                                <div class="fc-badge-ic" style="background:linear-gradient(135deg,#0ea5e9,#8b5cf6);">
+                                    <svg class="ic" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
+                                </div>
                                 <strong>الذكاء الاصطناعي AI</strong>
                                 <span class="fc-sub">أستاذ السادس + دردشة + صور</span>
                             </div>
                             <div class="future-card study-card" onclick="openFutureModule('study')">
-                                <span class="fc-icon">⏱️</span>
+                                <div class="fc-badge-ic" style="background:linear-gradient(135deg,#059669,#0ea5e9);">
+                                    <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+                                </div>
                                 <strong>غرفة المراجعة</strong>
                                 <span class="fc-sub">مؤقت جماعي + مطر + أهداف</span>
                             </div>
                             <div class="future-card" onclick="openFutureModule('music_hub')">
-                                <span class="fc-icon">🎵</span>
+                                <div class="fc-badge-ic" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);">
+                                    <svg class="ic" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                                </div>
                                 <strong>مكتبة الأغاني</strong>
-                                <span class="fc-sub">مقترحات + قص + MP3 + يوتيوب</span>
+                                <span class="fc-sub">قصّ المدة + MP3 + يوتيوب</span>
                             </div>
                             <div class="future-card" onclick="openFutureModule('reels')">
-                                <span class="fc-icon">🎬</span>
+                                <div class="fc-badge-ic" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">
+                                    <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="4"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+                                </div>
                                 <strong>قسم الريلز</strong>
-                                <span class="fc-sub">تحديثنا القادم (تيك وإنستا)</span>
+                                <span class="fc-sub">قريباً — مقاطع سريعة</span>
                             </div>
                         </div>
 
-                        <div class="hub-section-title" style="margin-top:16px;">📢 قنواتي ومجموعاتي</div>
+                        <div class="hub-section-title" style="margin-top:18px;">قنواتي ومجموعاتي</div>
                         <div id="spacesListEl"></div>
                     </div>
                 </div>
@@ -447,8 +468,8 @@
             <section class="tab-view" id="view-games">
                 <div class="games-wrap">
                     <div class="top-bar">
-                        <h3>🎮 الألعاب والتحديات</h3>
-                        <button class="btn btn-sm btn-outline" onclick="refreshGamesHub()">🔄 تحديث</button>
+                        <h3>الألعاب والتحديات</h3>
+                        <button class="btn btn-sm btn-outline" onclick="refreshGamesHub()">تحديث</button>
                     </div>
                     <div class="games-scroll" id="gamesHubContainer"></div>
                 </div>
@@ -460,18 +481,21 @@
                     <div class="profile-container">
                         <div class="prof-cover" id="myProfCover">
                             <input type="file" id="profCoverInput" accept="image/*" style="display:none" onchange="handleCoverUpload(event)">
-                            <button type="button" class="cover-edit-btn" onclick="document.getElementById('profCoverInput').click()">🖼️ تغيير الغلاف</button>
+                            <button type="button" class="cover-edit-btn" onclick="document.getElementById('profCoverInput').click()">
+                                <svg class="ic-xs" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                                <span>تغيير الغلاف</span>
+                            </button>
                         </div>
                         <div class="prof-header-body">
                             <div class="prof-av-row">
                                 <div class="avatar lg" id="myProfAvatar" onclick="openUserStory(me.username)">ح</div>
                                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                    <button class="btn btn-sm btn-outline" onclick="openSettingsModal()">⚙️ إعدادات</button>
-                                    <button class="btn btn-sm" onclick="openVerifyReqModal()">✓ توثيق</button>
+                                    <button class="btn btn-sm btn-outline" onclick="openSettingsModal()">الإعدادات</button>
+                                    <button class="btn btn-sm" onclick="openVerifyReqModal()">توثيق</button>
                                 </div>
                             </div>
 
-                            <h2 id="myProfName" style="font-size:21px; font-weight:800; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">الاسم</h2>
+                            <h2 id="myProfName" style="font-size:21px; font-weight:800; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">الاسم</h2>
                             <div id="myProfTag" class="handle-ltr" dir="ltr">@H</div>
                             <p id="myProfBio" style="font-size:13.5px; color:var(--text-dim); margin:6px 0 10px;"></p>
 
@@ -483,18 +507,14 @@
                                 <div><strong id="stMyGifts">0</strong><span>هدية</span></div>
                             </div>
 
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <span style="font-size:13px; font-weight:800; color:var(--text-dim);">✨ اللحظات المثبتة (الهايلايت)</span>
-                            </div>
+                            <div class="prof-sub-head">اللحظات المثبتة (الهايلايت)</div>
                             <div class="highlights-row" id="myHighlightsRow"></div>
 
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <span style="font-size:13px; font-weight:800; color:var(--text-dim);">🎁 الهدايا والتذكارات الواردة</span>
-                            </div>
+                            <div class="prof-sub-head">الهدايا والتذكارات</div>
                             <div class="gifts-row" id="myGiftsRow"></div>
 
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid var(--border); padding-top:12px;">
-                                <span style="font-size:14px; font-weight:800;">🖼️ منشوراتي</span>
+                                <span style="font-size:14px; font-weight:800;">منشوراتي</span>
                                 <button class="btn btn-sm btn-outline" onclick="openCreatePostModal()">+ نشر</button>
                             </div>
                             <div class="posts-grid" id="myPostsGrid"></div>
@@ -503,18 +523,20 @@
                 </div>
             </section>
 
-            <!-- ===== القسم 5.5: صفحة البروفايل الكامل للأصدقاء (Full-Screen Parallax Profile V11) ===== -->
+            <!-- ===== القسم 5.5: صفحة البروفايل الكامل للأصدقاء (Full-Screen V12) ===== -->
             <section class="tab-view" id="view-other-profile">
                 <div class="profile-wrap" id="otherProfileScroll">
                     <div class="op-sticky-bar" id="opStickyBar">
                         <button class="pill-btn" onclick="closeOtherProfilePage()" title="رجوع">
-                            <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+                            <svg class="ic" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
                         <div class="op-sticky-title" id="opStickyName">الملف الشخصي</div>
-                        <button class="pill-btn" id="opMoreBlockBtn" title="حظر / إبلاغ" onclick="toggleOpMoreMenu()">⋮</button>
+                        <button class="pill-btn" id="opMoreBlockBtn" title="خيارات" onclick="toggleOpMoreMenu()">
+                            <svg class="ic-sm" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></svg>
+                        </button>
                         <div id="opMoreDropdown">
-                            <button class="pop-item" id="opBlockBtn">🚫 &nbsp; حظر المستخدم</button>
-                            <button class="pop-item" id="opReportBtn">⚠️ &nbsp; إبلاغ للإدارة</button>
+                            <button class="pop-item" id="opBlockBtn">حظر المستخدم</button>
+                            <button class="pop-item" id="opReportBtn">إبلاغ للإدارة</button>
                         </div>
                     </div>
 
@@ -535,13 +557,27 @@
 
                             <div id="otherProfileSongSlot" style="margin-bottom:12px;"></div>
 
-                            <!-- شريط الإجراءات الفوري -->
                             <div class="op-quick-actions">
-                                <button class="op-qa-btn primary" id="opMsgBtn"><span>💬</span><span>مراسلة</span></button>
-                                <button class="op-qa-btn" id="opCallBtn"><span>📞</span><span>صوت</span></button>
-                                <button class="op-qa-btn" id="opVidBtn"><span>📹</span><span>فيديو</span></button>
-                                <button class="op-qa-btn" id="opHbBtn"><span>💓</span><span>نبضة</span></button>
-                                <button class="op-qa-btn gold" id="opGiftBtn"><span>🎁</span><span>إهداء</span></button>
+                                <button class="op-qa-btn primary" id="opMsgBtn">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                                    <span>مراسلة</span>
+                                </button>
+                                <button class="op-qa-btn" id="opCallBtn">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                    <span>صوت</span>
+                                </button>
+                                <button class="op-qa-btn" id="opVidBtn">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2.5"/></svg>
+                                    <span>فيديو</span>
+                                </button>
+                                <button class="op-qa-btn" id="opHbBtn">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                    <span>نبضة</span>
+                                </button>
+                                <button class="op-qa-btn gold" id="opGiftBtn">
+                                    <svg class="ic-sm" viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+                                    <span>إهداء</span>
+                                </button>
                             </div>
 
                             <div class="prof-stats">
@@ -550,12 +586,11 @@
                                 <div><strong id="opStGifts">0</strong><span>هدية</span></div>
                             </div>
 
-                            <!-- 4 تبويبات مرتبة داخل البروفايل الكامل -->
                             <div class="op-tabs-bar" id="opTabsBar">
-                                <button type="button" class="op-tab active" data-optab="posts" onclick="switchOtherProfileTab('posts')">🖼️ المنشورات</button>
-                                <button type="button" class="op-tab" data-optab="highlights" onclick="switchOtherProfileTab('highlights')">✨ الهايلايت</button>
-                                <button type="button" class="op-tab" data-optab="shared" onclick="switchOtherProfileTab('shared')">📂 المشتركة</button>
-                                <button type="button" class="op-tab" data-optab="gifts" onclick="switchOtherProfileTab('gifts')">🎁 الهدايا</button>
+                                <button type="button" class="op-tab active" data-optab="posts" onclick="switchOtherProfileTab('posts')">المنشورات</button>
+                                <button type="button" class="op-tab" data-optab="highlights" onclick="switchOtherProfileTab('highlights')">الهايلايت</button>
+                                <button type="button" class="op-tab" data-optab="shared" onclick="switchOtherProfileTab('shared')">المشتركة</button>
+                                <button type="button" class="op-tab" data-optab="gifts" onclick="switchOtherProfileTab('gifts')">الهدايا</button>
                             </div>
 
                             <div id="opTabContent" style="min-height:180px; padding-top:10px;"></div>
@@ -570,32 +605,136 @@
         </div>
     </div>
 
+    <!-- ==================== لوحة أدوات المحادثة السفلية الفخمة (Native Action Grid Sheet V12) ==================== -->
+    <div id="chatToolsDropdown" class="modal-bg sheet-bg" onclick="if(event.target===this) toggleChatToolsMenu(false)">
+        <div class="bottom-sheet" style="max-height:80dvh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h4 style="font-size:15.5px;">أدوات المحادثة</h4>
+                <button class="icon-btn" style="width:32px; height:32px;" onclick="toggleChatToolsMenu(false)">
+                    <svg class="ic-xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="action-grid">
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.sendLiveHeartbeat && window.sendLiveHeartbeat()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#e11d48,#f43f5e);"><svg class="ic" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+                    <span>نبضة حية</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.startListenTogetherPicker && window.startListenTogetherPicker()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#8b5cf6,#ec4899);"><svg class="ic" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg></span>
+                    <span>نسمع سوا</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openYoutubeTogetherModal && window.openYoutubeTogetherModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#dc2626,#f97316);"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="4"/><polygon points="10 9 15 12 10 15 10 9" fill="#fff"/></svg></span>
+                    <span>يوتيوب سوا</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openDailyPromptModal && window.openDailyPromptModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#db2777,#9333ea);"><svg class="ic" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+                    <span>سؤال اليوم</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openLiveDrawModal && window.openLiveDrawModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#0ea5e9,#6366f1);"><svg class="ic" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg></span>
+                    <span>رسم لايف</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openTimeCapsuleModal && window.openTimeCapsuleModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#6366f1,#a855f7);"><svg class="ic" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></svg></span>
+                    <span>كبسولة زمن</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openMemoriesBoardModal && window.openMemoriesBoardModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#d97706,#f59e0b);"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                    <span>المناسبات</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openChatThemeModal && window.openChatThemeModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#06b6d4,#3b82f6);"><svg class="ic" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="#fff"/><circle cx="17.5" cy="10.5" r=".5" fill="#fff"/><circle cx="8.5" cy="7.5" r=".5" fill="#fff"/><circle cx="6.5" cy="12.5" r=".5" fill="#fff"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6 0-5-4.5-8.6-10-8.6z"/></svg></span>
+                    <span>ثيم الشات</span>
+                </button>
+                <button class="ag-tile dm-only-tool" onclick="toggleChatToolsMenu(false); window.openSharedWpModal && window.openSharedWpModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#059669,#10b981);"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span>
+                    <span>خلفية مشتركة</span>
+                </button>
+                <button class="ag-tile dm-only-tool" id="menuVanishBtn" onclick="toggleChatToolsMenu(false); window.toggleVanishMode && window.toggleVanishMode()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#4c1d95,#7c3aed);"><svg class="ic" viewBox="0 0 24 24"><path d="M9 10h.01"/><path d="M15 10h.01"/><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/></svg></span>
+                    <span>الوضع المختفي</span>
+                </button>
+                <button class="ag-tile dm-only-tool" id="menuVaultBtn" onclick="toggleChatToolsMenu(false); toggleHideActiveChatInVault()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#b45309,#eab308);"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                    <span>خزنة سرية</span>
+                </button>
+                <button class="ag-tile" onclick="toggleChatToolsMenu(false); openMediaGalleryModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#0284c7,#0ea5e9);"><svg class="ic" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                    <span>معرض الوسائط</span>
+                </button>
+                <button class="ag-tile space-only-tool" style="display:none;" onclick="toggleChatToolsMenu(false); openSpaceInfoModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#0284c7,#6366f1);"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+                    <span>معلومات القناة</span>
+                </button>
+                <button class="ag-tile dm-only-tool danger-tile" onclick="toggleChatToolsMenu(false); clearChatForMe()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#991b1b,#e11d48);"><svg class="ic" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+                    <span>تنظيف عندي</span>
+                </button>
+            </div>
+            <div id="futureChatToolsSlot"></div>
+        </div>
+    </div>
+
+    <!-- ==================== لوحة المرفقات السفلية (Native Attach Grid V12) ==================== -->
+    <div id="mediaMenu" class="modal-bg sheet-bg" onclick="if(event.target===this) toggleMediaMenu(false)">
+        <div class="bottom-sheet">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h4 style="font-size:15.5px;">إرفاق وإرسال</h4>
+                <button class="icon-btn" style="width:32px; height:32px;" onclick="toggleMediaMenu(false)">
+                    <svg class="ic-xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="action-grid" style="grid-template-columns:repeat(4,1fr);">
+                <button class="ag-tile" onclick="toggleMediaMenu(false); document.getElementById('imgInput').click()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#0284c7,#38bdf8);"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span>
+                    <span>صورة</span>
+                </button>
+                <button class="ag-tile" id="voAttachBtn" onclick="toggleMediaMenu(false); document.getElementById('voImgInput').click()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#d97706,#f59e0b);"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+                    <span>لمرة واحدة</span>
+                </button>
+                <button class="ag-tile" onclick="toggleMediaMenu(false); document.getElementById('vidInput').click()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#dc2626,#f43f5e);"><svg class="ic" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2.5"/></svg></span>
+                    <span>فيديو</span>
+                </button>
+                <button class="ag-tile" onclick="toggleMediaMenu(false); window.openAiImageGenerator && window.openAiImageGenerator(true)">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#7c3aed,#ec4899);"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg></span>
+                    <span>توليد AI</span>
+                </button>
+                <button class="ag-tile" id="pollAttachBtn" style="display:none;" onclick="toggleMediaMenu(false); openCreatePollModal()">
+                    <span class="ag-ic" style="background:linear-gradient(135deg,#059669,#10b981);"><svg class="ic" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+                    <span>استطلاع</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== النوافذ المنبثقة ==================== -->
 
-    <!-- نافذة إرسال هدية تذكارية للبروفايل -->
     <div class="modal-bg sheet-bg" id="sendGiftModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet">
-            <h4 style="text-align:center; margin-bottom:4px;">🎁 إرسال هدية تذكارية</h4>
+            <h4 style="text-align:center; margin-bottom:4px;">إرسال هدية تذكارية</h4>
             <div style="text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:12px;">تُحفظ الهدية في بروفايل <b id="giftTargetName"></b> كذكرى دائمة</div>
             <div class="gift-picker-grid" id="giftPickerGrid"></div>
             <div class="form-group" style="margin-top:10px;">
                 <label>رسالة الإهداء (اختياري)</label>
                 <input type="text" id="giftMessageInp" class="input" maxlength="80" placeholder="اكتب كلمة حلوة ويه الهدية...">
             </div>
-            <button class="btn btn-gold" onclick="confirmSendGift()">إرسال الهدية الآن 🎁✨</button>
+            <button class="btn btn-gold" onclick="confirmSendGift()">إرسال الهدية الآن</button>
         </div>
     </div>
 
     <div class="modal-bg sheet-bg" id="mediaGalleryModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:82dvh; display:flex; flex-direction:column;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h4>📂 معرض وسائط المحادثة</h4>
+                <h4>معرض وسائط المحادثة</h4>
                 <button class="icon-btn" style="width:32px; height:32px;" onclick="document.getElementById('mediaGalleryModal').style.display='none'">✕</button>
             </div>
             <div class="tabs" style="margin-bottom:10px;">
-                <button class="tab-btn active" id="mgTabImgs" onclick="switchMediaGalleryTab('images')">🖼️ صور</button>
-                <button class="tab-btn" id="mgTabVids" onclick="switchMediaGalleryTab('videos')">🎬 فيديو</button>
-                <button class="tab-btn" id="mgTabAuds" onclick="switchMediaGalleryTab('audios')">🎤 بصمات</button>
+                <button class="tab-btn active" id="mgTabImgs" onclick="switchMediaGalleryTab('images')">صور</button>
+                <button class="tab-btn" id="mgTabVids" onclick="switchMediaGalleryTab('videos')">فيديو</button>
+                <button class="tab-btn" id="mgTabAuds" onclick="switchMediaGalleryTab('audios')">بصمات</button>
             </div>
             <div id="mediaGalleryBody" style="flex:1; overflow-y:auto; max-height:55dvh;"></div>
         </div>
@@ -603,7 +742,7 @@
 
     <div class="modal-bg" id="unifiedSearchModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
-            <h3>🔍 البحث الموحد باليوزر</h3>
+            <h3>البحث الموحد باليوزر</h3>
             <p class="sub">ابحث عن أي حساب شخصي أو قناة أو مجموعة بنفس الخانة</p>
             <div style="display:flex; gap:8px; margin-bottom:14px;">
                 <input type="text" id="unifiedSearchInput" class="input" placeholder="اكتب اليوزر مثل H أو يوزر القناة..." dir="auto" onkeydown="if(event.key==='Enter'){event.preventDefault(); runUnifiedSearch();}">
@@ -617,7 +756,7 @@
     <div class="modal-bg sheet-bg" id="notificationsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:78dvh; display:flex; flex-direction:column;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h4>🔔 النشاطات والتفاعلات</h4>
+                <h4>النشاطات والتفاعلات</h4>
                 <button class="btn btn-sm btn-outline" onclick="clearAllNotifications()">تنظيف</button>
             </div>
             <div id="notifList" style="flex:1; overflow-y:auto; max-height:55dvh;"></div>
@@ -626,12 +765,12 @@
 
     <div class="modal-bg" id="createStoryModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
-            <h3>✨ إضافة قصة جديدة (24 ساعة)</h3>
+            <h3>إضافة قصة جديدة (24 ساعة)</h3>
             <p class="sub">نص أو صورة مع أغنية (بقصّ المدة أو للنهاية)، أو فيديو قصير</p>
             <div class="tabs">
-                <button class="tab-btn active" id="stTabText" onclick="switchStoryType('text')">📝 نص</button>
-                <button class="tab-btn" id="stTabImg" onclick="switchStoryType('image')">🖼️ صورة</button>
-                <button class="tab-btn" id="stTabVid" onclick="switchStoryType('video')">🎬 فيديو</button>
+                <button class="tab-btn active" id="stTabText" onclick="switchStoryType('text')">نص</button>
+                <button class="tab-btn" id="stTabImg" onclick="switchStoryType('image')">صورة</button>
+                <button class="tab-btn" id="stTabVid" onclick="switchStoryType('video')">فيديو</button>
             </div>
             <div id="stTextForm">
                 <textarea id="storyTextContent" class="input" rows="4" placeholder="اكتب حالتك هنا..."></textarea>
@@ -646,13 +785,13 @@
                 <input type="text" id="storyVidCaption" class="input" placeholder="وصف مختصر (اختياري)">
             </div>
             <div id="storyMusicDraftSlot" style="margin-top:10px;"></div>
-            <button class="btn" style="margin-top:14px;" onclick="publishStory()">نشر القصة 🚀</button>
+            <button class="btn" style="margin-top:14px;" onclick="publishStory()">نشر القصة</button>
         </div>
     </div>
 
     <div class="modal-bg sheet-bg story-top-modal" id="storyViewersModal" onclick="if(event.target===this) closeStoryViewersModal()">
         <div class="bottom-sheet" style="max-height:74dvh; display:flex; flex-direction:column;">
-            <h4 style="margin-bottom:10px; text-align:center;">👁️ المشاهدون والتفاعلات</h4>
+            <h4 style="margin-bottom:10px; text-align:center;">المشاهدون والتفاعلات</h4>
             <div id="storyViewersList" style="flex:1; overflow-y:auto; max-height:48dvh;"></div>
             <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="closeStoryViewersModal()">إغلاق</button>
         </div>
@@ -660,45 +799,27 @@
 
     <div class="modal-bg" id="createHighlightModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:390px;">
-            <h3>🌟 إضافة هايلايت دائم</h3>
-            <div class="form-group" style="margin-top:12px;">
-                <label>العنوان</label>
-                <input type="text" id="hlTitle" class="input" placeholder="مثال: ذكريات">
-            </div>
-            <div class="form-group">
-                <label>أيقونة الغلاف</label>
-                <input type="text" id="hlIcon" class="input" value="✨" style="text-align:center; font-size:20px;">
-            </div>
-            <div class="form-group">
-                <label>صورة (اختياري)</label>
-                <input type="file" id="hlImgFile" accept="image/*" class="input">
-            </div>
-            <div class="form-group">
-                <label>نص أو وصف</label>
-                <input type="text" id="hlCaption" class="input" placeholder="وصف مختصر...">
-            </div>
+            <h3>إضافة هايلايت دائم</h3>
+            <div class="form-group" style="margin-top:12px;"><label>العنوان</label><input type="text" id="hlTitle" class="input" placeholder="مثال: ذكريات"></div>
+            <div class="form-group"><label>أيقونة الغلاف</label><input type="text" id="hlIcon" class="input" value="✨" style="text-align:center; font-size:20px;"></div>
+            <div class="form-group"><label>صورة (اختياري)</label><input type="file" id="hlImgFile" accept="image/*" class="input"></div>
+            <div class="form-group"><label>نص أو وصف</label><input type="text" id="hlCaption" class="input" placeholder="وصف مختصر..."></div>
             <button class="btn" onclick="publishHighlight()">حفظ</button>
         </div>
     </div>
 
     <div class="modal-bg" id="createPostModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:420px;">
-            <h3>📸 نشر منشور جديد</h3>
-            <div class="form-group" style="margin-top:12px;">
-                <label>صورة المنشور (اختياري)</label>
-                <input type="file" id="postImgFile" accept="image/*" class="input">
-            </div>
-            <div class="form-group">
-                <label>نص المنشور / التعليق</label>
-                <textarea id="postCaptionInput" class="input" rows="4" placeholder="شارك لحظتك أو فكرتك..."></textarea>
-            </div>
-            <button class="btn" onclick="publishPost()">نشر الآن 🚀</button>
+            <h3>نشر منشور جديد</h3>
+            <div class="form-group" style="margin-top:12px;"><label>صورة المنشور (اختياري)</label><input type="file" id="postImgFile" accept="image/*" class="input"></div>
+            <div class="form-group"><label>نص المنشور / التعليق</label><textarea id="postCaptionInput" class="input" rows="4" placeholder="شارك لحظتك أو فكرتك..."></textarea></div>
+            <button class="btn" onclick="publishPost()">نشر الآن</button>
         </div>
     </div>
 
     <div class="modal-bg sheet-bg" id="commentsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:78dvh; display:flex; flex-direction:column;">
-            <h4 style="margin-bottom:10px; text-align:center;">💬 التعليقات</h4>
+            <h4 style="margin-bottom:10px; text-align:center;">التعليقات</h4>
             <div id="commentsList" style="flex:1; overflow-y:auto; margin-bottom:12px; max-height:46dvh;"></div>
             <div style="display:flex; gap:8px;">
                 <input type="text" id="commentInput" class="input" placeholder="أضف تعليقاً..." onkeydown="if(event.key==='Enter'){event.preventDefault(); submitComment();}">
@@ -709,46 +830,34 @@
 
     <div class="modal-bg sheet-bg" id="postLikesModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="bottom-sheet" style="max-height:65dvh; display:flex; flex-direction:column;">
-            <h4 style="margin-bottom:10px; text-align:center;">❤️ الإعجابات</h4>
+            <h4 style="margin-bottom:10px; text-align:center;">الإعجابات</h4>
             <div id="postLikesList" style="flex:1; overflow-y:auto; max-height:45dvh;"></div>
         </div>
     </div>
 
     <div class="modal-bg" id="createSpaceModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:410px;">
-            <h3>📢 إنشاء مساحة جديدة</h3>
+            <h3>إنشاء مساحة جديدة</h3>
             <div class="tabs" style="margin-top:12px;">
-                <button class="tab-btn active" id="spTabCh" onclick="switchSpaceCreateType('channel')">📢 قناة بث</button>
-                <button class="tab-btn" id="spTabGrp" onclick="switchSpaceCreateType('group')">👥 مجموعة</button>
+                <button class="tab-btn active" id="spTabCh" onclick="switchSpaceCreateType('channel')">قناة بث</button>
+                <button class="tab-btn" id="spTabGrp" onclick="switchSpaceCreateType('group')">مجموعة</button>
             </div>
-            <div class="form-group">
-                <label>الاسم</label>
-                <input type="text" id="spName" class="input" placeholder="مثال: قناة الملاحظات">
-            </div>
-            <div class="form-group">
-                <label>اليوزر الموحد للبحث والانضمام (@handle)</label>
-                <input type="text" id="spHandle" class="input" placeholder="مثال: study_iq" dir="auto">
-            </div>
-            <div class="form-group">
-                <label>الوصف</label>
-                <input type="text" id="spDesc" class="input" placeholder="وصف مختصر...">
-            </div>
+            <div class="form-group"><label>الاسم</label><input type="text" id="spName" class="input" placeholder="مثال: قناة الملاحظات"></div>
+            <div class="form-group"><label>اليوزر الموحد للبحث والانضمام (@handle)</label><input type="text" id="spHandle" class="input" placeholder="مثال: study_iq" dir="auto"></div>
+            <div class="form-group"><label>الوصف</label><input type="text" id="spDesc" class="input" placeholder="وصف مختصر..."></div>
             <button class="btn" onclick="createSpace()">إنشاء الآن</button>
         </div>
     </div>
 
     <div class="modal-bg" id="createPollModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:400px;">
-            <h3>📊 إنشاء استطلاع رأي</h3>
-            <div class="form-group" style="margin-top:10px;">
-                <label>السؤال</label>
-                <input type="text" id="pollQuestion" class="input" placeholder="اكتب سؤال التصويت...">
-            </div>
+            <h3>إنشاء استطلاع رأي</h3>
+            <div class="form-group" style="margin-top:10px;"><label>السؤال</label><input type="text" id="pollQuestion" class="input" placeholder="اكتب سؤال التصويت..."></div>
             <div class="form-group"><input type="text" id="pollOpt1" class="input" placeholder="الخيار الأول"></div>
             <div class="form-group"><input type="text" id="pollOpt2" class="input" placeholder="الخيار الثاني"></div>
             <div class="form-group"><input type="text" id="pollOpt3" class="input" placeholder="الخيار الثالث (اختياري)"></div>
             <div class="form-group"><input type="text" id="pollOpt4" class="input" placeholder="الخيار الرابع (اختياري)"></div>
-            <button class="btn" onclick="publishPoll()">نشر الاستطلاع 📊</button>
+            <button class="btn" onclick="publishPoll()">نشر الاستطلاع</button>
         </div>
     </div>
 
@@ -763,7 +872,7 @@
                     <input type="text" id="siAddUser" class="input" placeholder="إضافة عضو باليوزر..." dir="auto">
                     <button class="btn btn-sm" onclick="addMemberToActiveSpace()">إضافة</button>
                 </div>
-                <button class="btn btn-sm btn-outline" id="siReqVerifyBtn" style="width:100%;" onclick="requestSpaceVerify()">✓ طلب توثيق القناة من الإدارة</button>
+                <button class="btn btn-sm btn-outline" id="siReqVerifyBtn" style="width:100%;" onclick="requestSpaceVerify()">طلب توثيق القناة من الإدارة</button>
             </div>
             <div style="text-align:right; font-size:12px; color:var(--text-dim); margin-bottom:6px;">الأعضاء (<span id="siCount">0</span>):</div>
             <div id="siMembersList" style="max-height:130px; overflow-y:auto; text-align:right; background:var(--glass-inner); padding:8px; border-radius:12px; margin-bottom:14px;"></div>
@@ -789,33 +898,51 @@
                 <button onclick="reactToSelected('👍')">👍</button>
                 <button onclick="reactToSelected('👏')">👏</button>
             </div>
-            <button class="sheet-action" id="replyActionBtn" onclick="replyToSelected()">↩️ &nbsp; رد على الرسالة</button>
-            <button class="sheet-action" id="editActionBtn" onclick="startEditSelected()">✏️ &nbsp; تعديل الرسالة</button>
-            <button class="sheet-action" id="pinActionBtn" onclick="pinSelectedMessage()">📌 &nbsp; تثبيت الرسالة بالأعلى</button>
-            <button class="sheet-action" id="copyActionBtn" onclick="copySelectedText()">📋 &nbsp; نسخ النص</button>
-            <button class="sheet-action" onclick="deleteSelectedForMe()">🙈 &nbsp; حذف من عندي فقط</button>
-            <button class="sheet-action danger" id="delEveryoneBtn" onclick="deleteSelectedForEveryone()">🗑️ &nbsp; حذف نهائياً للجميع</button>
-            <button class="sheet-action" style="justify-content:center; background:transparent; color:var(--text-dim);" onclick="closeMsgActions()">إغلاق</button>
+            <button class="sheet-action" id="replyActionBtn" onclick="replyToSelected()">
+                <svg class="ic-sm" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                <span>رد على الرسالة</span>
+            </button>
+            <button class="sheet-action" id="editActionBtn" onclick="startEditSelected()">
+                <svg class="ic-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <span>تعديل الرسالة</span>
+            </button>
+            <button class="sheet-action" id="pinActionBtn" onclick="pinSelectedMessage()">
+                <svg class="ic-sm" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+                <span>تثبيت الرسالة بالأعلى</span>
+            </button>
+            <button class="sheet-action" id="copyActionBtn" onclick="copySelectedText()">
+                <svg class="ic-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span>نسخ النص</span>
+            </button>
+            <button class="sheet-action" onclick="deleteSelectedForMe()">
+                <svg class="ic-sm" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                <span>حذف من عندي فقط</span>
+            </button>
+            <button class="sheet-action danger" id="delEveryoneBtn" onclick="deleteSelectedForEveryone()">
+                <svg class="ic-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>حذف نهائياً للجميع</span>
+            </button>
+            <button class="sheet-action" style="justify-content:center; background:transparent; color:var(--text-dim); border-color:transparent;" onclick="closeMsgActions()">إغلاق</button>
         </div>
     </div>
 
     <div class="modal-bg" id="settingsModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:440px;">
-            <h3 style="margin-bottom:10px;">⚙️ الإعدادات والمظهر</h3>
-            <div style="display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:12px;">
+            <h3 style="margin-bottom:12px;">الإعدادات والمظهر</h3>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:9px; margin-bottom:14px;">
                 <div class="avatar lg" id="profAvatarPreview">ح</div>
                 <input type="file" id="profAvatarInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
                 <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
-                    <button class="btn btn-outline btn-sm" onclick="document.getElementById('profAvatarInput').click()">📷 الصورة الشخصية</button>
-                    <button class="btn btn-outline btn-sm" onclick="document.getElementById('profCoverInput').click()">🖼️ غلاف البروفايل</button>
+                    <button class="btn btn-outline btn-sm" onclick="document.getElementById('profAvatarInput').click()">الصورة الشخصية</button>
+                    <button class="btn btn-outline btn-sm" onclick="document.getElementById('profCoverInput').click()">غلاف البروفايل</button>
                 </div>
             </div>
 
             <div class="form-group">
-                <label>ثيم الواجهة:</label>
+                <label>ثيم الواجهة</label>
                 <div class="theme-grid">
-                    <div class="theme-swatch" data-t="midnight" style="background:linear-gradient(135deg,#0d1726,#0ea5e9);" onclick="applyTheme('midnight')">كحلي</div>
-                    <div class="theme-swatch" data-t="obsidian" style="background:linear-gradient(135deg,#050508,#7c3aed);" onclick="applyTheme('obsidian')">فحمي</div>
+                    <div class="theme-swatch" data-t="midnight" style="background:linear-gradient(135deg,#07090f,#0ea5e9);" onclick="applyTheme('midnight')">أوبسيديان</div>
+                    <div class="theme-swatch" data-t="obsidian" style="background:linear-gradient(135deg,#0a0814,#7c3aed);" onclick="applyTheme('obsidian')">بنفسجي</div>
                     <div class="theme-swatch" data-t="emerald" style="background:linear-gradient(135deg,#051410,#10b981);" onclick="applyTheme('emerald')">زمردي</div>
                     <div class="theme-swatch" data-t="amethyst" style="background:linear-gradient(135deg,#160b24,#ec4899);" onclick="applyTheme('amethyst')">مخملي</div>
                     <div class="theme-swatch" data-t="amber" style="background:linear-gradient(135deg,#151109,#eab308);" onclick="applyTheme('amber')">ذهبي</div>
@@ -823,7 +950,7 @@
             </div>
 
             <div class="form-group">
-                <label>ستايل فقاعات الشات:</label>
+                <label>ستايل فقاعات الشات</label>
                 <div class="chip-grid" id="bubbleStyleGrid">
                     <button type="button" class="chip-btn" data-b="soft" onclick="applyBubbleStyle('soft')">ناعم</button>
                     <button type="button" class="chip-btn" data-b="glass" onclick="applyBubbleStyle('glass')">زجاجي</button>
@@ -833,10 +960,10 @@
             </div>
 
             <div class="form-group">
-                <label>نوع وحجم الخط:</label>
+                <label>نوع وحجم الخط</label>
                 <div class="chip-grid" id="fontGrid">
                     <button type="button" class="chip-btn" data-f="tajawal" onclick="applyFont('tajawal')">تجوّل</button>
-                    <button type="button" class="chip-btn" data-f="ibm" onclick="applyFont('ibm')">IBM أنيق</button>
+                    <button type="button" class="chip-btn" data-f="ibm" onclick="applyFont('ibm')">IBM</button>
                     <button type="button" class="chip-btn" data-f="readex" onclick="applyFont('readex')">عصري</button>
                     <button type="button" class="chip-btn" data-f="cairo" onclick="applyFont('cairo')">كايرو</button>
                 </div>
@@ -848,42 +975,32 @@
             </div>
 
             <div class="form-group">
-                <label>خلفية المحادثة:</label>
+                <label>خلفية المحادثة</label>
                 <div class="chip-grid" id="wpGrid">
                     <button type="button" class="chip-btn" data-w="pattern" onclick="applyWallpaper('pattern')">نقش خفيف</button>
                     <button type="button" class="chip-btn" data-w="aurora" onclick="applyWallpaper('aurora')">شفق هادئ</button>
                     <button type="button" class="chip-btn" data-w="clean" onclick="applyWallpaper('clean')">سادة صافي</button>
-                    <button type="button" class="chip-btn" data-w="custom" onclick="document.getElementById('chatBgFileInput').click()">🖼️ صورة</button>
+                    <button type="button" class="chip-btn" data-w="custom" onclick="document.getElementById('chatBgFileInput').click()">صورة</button>
                 </div>
                 <input type="file" id="chatBgFileInput" accept="image/*" style="display:none" onchange="handleChatWallpaperUpload(event)">
             </div>
 
-            <div class="form-group">
-                <label>الاسم الظاهر</label>
-                <input type="text" id="profName" class="input">
-            </div>
-            <div class="form-group">
-                <label>تغيير اليوزر (@username)</label>
-                <input type="text" id="profNewUser" class="input" dir="ltr">
-            </div>
-            <div class="form-group">
-                <label>النبذة / البايو</label>
-                <input type="text" id="profBio" class="input">
-            </div>
+            <div class="form-group"><label>الاسم الظاهر</label><input type="text" id="profName" class="input"></div>
+            <div class="form-group"><label>تغيير اليوزر (@username)</label><input type="text" id="profNewUser" class="input" dir="ltr"></div>
+            <div class="form-group"><label>النبذة / البايو</label><input type="text" id="profBio" class="input"></div>
 
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-inner); padding:9px 13px; border-radius:12px; margin-bottom:8px; border:1px solid var(--border);">
-                <span style="font-size:13px; font-weight:700;">🔐 رمز خزنة المحادثات المخفية</span>
+            <div class="set-row">
+                <span>رمز خزنة المحادثات المخفية</span>
                 <button class="btn btn-sm btn-outline" onclick="configureVaultPin()">تعيين / تغيير</button>
             </div>
-
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-inner); padding:9px 13px; border-radius:12px; margin-bottom:10px; border:1px solid var(--border);">
-                <span style="font-size:13px; font-weight:700;">🔊 أصوات التنبيهات</span>
+            <div class="set-row">
+                <span>أصوات التنبيهات</span>
                 <button class="btn btn-sm btn-outline" id="soundToggleBtn" onclick="toggleSoundPref()">مفعلة</button>
             </div>
 
             <div class="pwa-box">
                 <div id="pwaDiagBox" style="font-size:11.5px; color:var(--text-dim); margin-bottom:8px; text-align:right;">جاري فحص جاهزية التثبيت...</div>
-                <button class="btn btn-outline" id="pwaModalInstallBtn" onclick="triggerPwaInstall()">📲 تثبيت التطبيق على الهاتف</button>
+                <button class="btn btn-outline" id="pwaModalInstallBtn" onclick="triggerPwaInstall()">تثبيت التطبيق على الهاتف</button>
             </div>
 
             <div style="display:flex; gap:8px; margin-top:10px;">
@@ -895,8 +1012,8 @@
 
     <div class="modal-bg" id="verifyReqModal" onclick="if(event.target===this) this.style.display='none'">
         <div class="glass-card" style="max-width:390px;">
-            <h3>✓ تقديم طلب توثيق</h3>
-            <p class="sub">يُراجع الطلب ويُعتمد بأمر المطور فقط</p>
+            <h3>تقديم طلب توثيق</h3>
+            <p class="sub">يُراجع الطلب ويُعتمد من المطور فقط</p>
             <div class="form-group">
                 <label>نوع الشارة المطلوبة</label>
                 <select id="vrType" class="input">
@@ -904,15 +1021,12 @@
                     <option value="gold">توثيق ذهبي مميز ★</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label>ملاحظة / سبب الطلب</label>
-                <textarea id="vrReason" class="input" rows="3" placeholder="اكتب سبب طلب التوثيق..."></textarea>
-            </div>
-            <button class="btn" onclick="submitVerifyRequest()">إرسال الطلب 📨</button>
+            <div class="form-group"><label>ملاحظة / سبب الطلب</label><textarea id="vrReason" class="input" rows="3" placeholder="اكتب سبب طلب التوثيق..."></textarea></div>
+            <button class="btn" onclick="submitVerifyRequest()">إرسال الطلب</button>
         </div>
     </div>
 
-    <!-- عارض الستوري بترتيب أزرار نظيف بدون تداخل -->
+    <!-- عارض الستوري بترتيب أزرار نظيف -->
     <div id="storyViewer">
         <div class="sv-bars" id="svBars"></div>
         <div class="sv-header" style="gap:8px;">
@@ -924,9 +1038,15 @@
                 </div>
             </div>
             <div style="display:flex; gap:5px; flex-shrink:0;">
-                <button class="icon-btn" id="svSaveHlBtn" style="display:none; width:32px; height:32px; font-size:14px;" title="حفظ بالهايلايت" onclick="saveCurrentStoryToHighlight()">🌟</button>
-                <button class="icon-btn danger" id="svDelBtn" style="display:none; width:32px; height:32px; font-size:14px;" title="حذف القصة" onclick="deleteCurrentStory()">🗑️</button>
-                <button class="icon-btn" style="width:32px; height:32px; font-size:14px;" onclick="closeStoryViewer()">✕</button>
+                <button class="icon-btn" id="svSaveHlBtn" style="display:none; width:34px; height:34px;" title="حفظ بالهايلايت" onclick="saveCurrentStoryToHighlight()">
+                    <svg class="ic-xs" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </button>
+                <button class="icon-btn danger" id="svDelBtn" style="display:none; width:34px; height:34px;" title="حذف القصة" onclick="deleteCurrentStory()">
+                    <svg class="ic-xs" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                </button>
+                <button class="icon-btn" style="width:34px; height:34px;" onclick="closeStoryViewer()">
+                    <svg class="ic-xs" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
             </div>
         </div>
         <div class="sv-stage" id="svStage" onclick="handleStoryTap(event)"></div>
@@ -935,7 +1055,7 @@
 
     <div class="modal-bg" id="viewOnceModal" onclick="closeViewOnce()">
         <div style="text-align:center; max-width:95%;">
-            <div style="color:#fbbf24; font-weight:800; margin-bottom:10px; font-size:13px;">💣 عرض لمرة واحدة — ستُحذف فور الإغلاق</div>
+            <div style="color:#fbbf24; font-weight:800; margin-bottom:10px; font-size:13px;">عرض لمرة واحدة — ستُحذف الصورة فور الإغلاق</div>
             <img id="voImgDisplay" src="" style="max-width:100%; max-height:78dvh; border-radius:16px;">
         </div>
     </div>
@@ -971,12 +1091,24 @@
             <video id="localVideo" autoplay playsinline muted></video>
         </div>
         <div class="call-actions">
-            <button class="c-btn accept" id="acceptCallBtn" style="display:none;" onclick="answerIncomingCall()">📞</button>
-            <button class="c-btn" id="muteBtn" title="كتم الصوت" onclick="toggleMicMute()">🎤</button>
-            <button class="c-btn" id="camBtn" title="الكاميرا" onclick="toggleCamVideo()">📹</button>
-            <button class="c-btn" id="flipCamBtn" title="قلب الكاميرا" onclick="flipCamera()">🔄</button>
-            <button class="c-btn" id="reconnectCallBtn" style="display:none;" title="إعادة ربط الشبكة" onclick="restartCallIce()">📡</button>
-            <button class="c-btn hangup" title="إنهاء" onclick="endCall(true)">📵</button>
+            <button class="c-btn accept" id="acceptCallBtn" style="display:none;" onclick="answerIncomingCall()">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <button class="c-btn" id="muteBtn" title="كتم الصوت" onclick="toggleMicMute()">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            </button>
+            <button class="c-btn" id="camBtn" title="الكاميرا" onclick="toggleCamVideo()">
+                <svg class="ic" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2.5"/></svg>
+            </button>
+            <button class="c-btn" id="flipCamBtn" title="قلب الكاميرا" onclick="flipCamera()">
+                <svg class="ic" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            <button class="c-btn" id="reconnectCallBtn" style="display:none;" title="إعادة ربط" onclick="restartCallIce()">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            </button>
+            <button class="c-btn hangup" title="إنهاء" onclick="endCall(true)">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+            </button>
         </div>
     </div>
 
@@ -985,25 +1117,25 @@
         <div class="admin-wrap">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <div>
-                    <h2 style="color:var(--accent);">🛡️ لوحة تحكم المطور المحمية (V11)</h2>
-                    <span style="font-size:12px; color:var(--text-dim);">تشفير SHA-256، تغيير كل الرموز، التوثيق، وإعدادات الذكاء الاصطناعي</span>
+                    <h2 style="color:var(--accent);">لوحة تحكم المطور (V12)</h2>
+                    <span style="font-size:12px; color:var(--text-dim);">تشفير SHA-256، تغيير الرموز، التوثيق، وإعدادات الذكاء الاصطناعي</span>
                 </div>
-                <button class="btn btn-outline btn-sm" onclick="quickLock()">🔒 خروج</button>
+                <button class="btn btn-outline btn-sm" onclick="quickLock()">خروج</button>
             </div>
 
             <div class="stats-grid">
                 <div class="stat-card"><h3 id="admStatUsers">0</h3><span>الحسابات</span></div>
                 <div class="stat-card"><h3 id="admStatOnline" style="color:var(--success);">0</h3><span>متصل الآن</span></div>
-                <div class="stat-card"><h3 id="admStatSpaces">0</h3><span>القنوات/المجموعات</span></div>
+                <div class="stat-card"><h3 id="admStatSpaces">0</h3><span>القنوات والمجموعات</span></div>
             </div>
 
             <div class="adm-section">
-                <h4>🤖 إعدادات الذكاء الاصطناعي (AI)</h4>
+                <h4>إعدادات الذكاء الاصطناعي (AI)</h4>
                 <div style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">اختر المزوّد وضع رابط الـ Worker أو المفتاح بأمان:</div>
                 <div class="form-group">
                     <select id="admAiProvider" class="input">
                         <option value="free">مجاني تلقائي (بدون مفتاح API)</option>
-                        <option value="gemini">Google Gemini (سريع جداً ومجاني)</option>
+                        <option value="gemini">Google Gemini (سريع ومجاني)</option>
                         <option value="groq">Groq Llama 3 (فائق السرعة ومجاني)</option>
                     </select>
                 </div>
@@ -1014,13 +1146,13 @@
             </div>
 
             <div class="adm-section">
-                <h4>🔐 الحماية وتغيير جميع الرموز (مشفّرة SHA-256)</h4>
+                <h4>الحماية وتغيير جميع الرموز (مشفّرة SHA-256)</h4>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                     <button class="btn" id="admLockBtn" onclick="adminToggleSystemLock()">...</button>
                     <button class="btn" id="admRegBtn" onclick="adminToggleRegistration()">...</button>
                 </div>
                 <div style="display:flex; gap:8px; margin-bottom:8px;">
-                    <input type="password" id="admNewAdminPin" class="input" placeholder="تغيير رمز دخول لوحة التحكم (المطور) 🔐">
+                    <input type="password" id="admNewAdminPin" class="input" placeholder="تغيير رمز دخول لوحة التحكم (المطور)">
                     <button class="btn btn-gold" style="width:115px;" onclick="adminUpdateAdminPin()">تغيير الرمز</button>
                 </div>
                 <div style="display:flex; gap:8px; margin-bottom:8px;">
@@ -1034,40 +1166,21 @@
             </div>
 
             <div class="adm-section">
-                <h4>📲 أيقونات التثبيت الأصلية (PNG)</h4>
+                <h4>أيقونات التثبيت الأصلية (PNG)</h4>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn btn-sm" onclick="downloadOfficialPngIcon(192)">⬇️ تحميل icon-192.png</button>
-                    <button class="btn btn-sm btn-success" onclick="downloadOfficialPngIcon(512)">⬇️ تحميل icon-512.png</button>
+                    <button class="btn btn-sm" onclick="downloadOfficialPngIcon(192)">تحميل icon-192.png</button>
+                    <button class="btn btn-sm btn-success" onclick="downloadOfficialPngIcon(512)">تحميل icon-512.png</button>
                 </div>
             </div>
 
-            <div class="adm-section">
-                <h4>✅ طلبات التوثيق الواردة (حسابات وقنوات)</h4>
-                <div id="admVerifyReqs">لا توجد طلبات حالياً</div>
-            </div>
+            <div class="adm-section"><h4>طلبات التوثيق الواردة</h4><div id="admVerifyReqs">لا توجد طلبات حالياً</div></div>
+            <div class="adm-section"><h4>إدارة وتوثيق القنوات والمجموعات</h4><div id="admSpacesList">لا توجد قنوات أو مجموعات بعد</div></div>
+            <div class="adm-section"><h4>البلاغات الواردة</h4><div id="admReportsList">لا توجد بلاغات حالياً</div></div>
+            <div class="adm-section"><h4>إدارة وتوثيق الحسابات</h4><div id="admUsersList">جاري التحميل...</div></div>
+            <div class="adm-section"><h4>سجل الأمان والنشاط</h4><div class="adm-logs" id="admLogsList">لا توجد سجلات...</div></div>
 
-            <div class="adm-section">
-                <h4>📢 إدارة وتوثيق القنوات والمجموعات</h4>
-                <div id="admSpacesList">لا توجد قنوات أو مجموعات بعد</div>
-            </div>
-
-            <div class="adm-section">
-                <h4>⚠️ البلاغات الواردة</h4>
-                <div id="admReportsList">لا توجد بلاغات حالياً</div>
-            </div>
-
-            <div class="adm-section">
-                <h4>👥 إدارة وتوثيق الحسابات</h4>
-                <div id="admUsersList">جاري التحميل...</div>
-            </div>
-
-            <div class="adm-section">
-                <h4>📜 سجل الأمان والنشاط</h4>
-                <div class="adm-logs" id="admLogsList">لا توجد سجلات...</div>
-            </div>
-
-            <div class="adm-section" style="border-color:rgba(239,68,68,0.35);">
-                <h4 style="color:#f87171;">☢️ إجراءات الطوارئ</h4>
+            <div class="adm-section" style="border-color:rgba(244,63,94,0.35);">
+                <h4 style="color:#fb7185;">إجراءات الطوارئ</h4>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <button class="btn btn-danger" style="flex:1;" onclick="adminNukeMessages()">مسح المحادثات</button>
                     <button class="btn btn-danger" style="flex:1;" onclick="adminNukeAll()">تدمير شامل لكل شيء</button>
@@ -1078,11 +1191,11 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="./core.js?v=11"></script>
-    <script src="./features.js?v=11"></script>
-    <script src="./games.js?v=11"></script>
-    <script src="./premium.js?v=11"></script>
-    <script src="./study.js?v=11"></script>
-    <script src="./ai.js?v=11"></script>
+    <script src="./core.js?v=12"></script>
+    <script src="./features.js?v=12"></script>
+    <script src="./games.js?v=12"></script>
+    <script src="./premium.js?v=12"></script>
+    <script src="./study.js?v=12"></script>
+    <script src="./ai.js?v=12"></script>
 </body>
 </html>
