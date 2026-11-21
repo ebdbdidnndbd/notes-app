@@ -1,4 +1,4 @@
-const CACHE_NAME = "study-notes-v9-pro";
+const CACHE_NAME = "study-notes-v10-ultra";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -7,6 +7,8 @@ const APP_SHELL = [
   "./features.js",
   "./games.js",
   "./premium.js",
+  "./study.js",
+  "./ai.js",
   "./manifest.json"
 ];
 
@@ -26,7 +28,6 @@ self.addEventListener("activate", e => {
   );
 });
 
-// Network-First مع مهلة سريعة: يسحب التحديثات فوراً، وإذا النت ضعيف أو مقطوع يفتح من الكاش
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
@@ -41,7 +42,7 @@ self.addEventListener("fetch", e => {
         }
         return res;
       }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3200))
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
     ]).catch(() => caches.match(e.request).then(c => c || fetch(e.request)))
   );
 });
