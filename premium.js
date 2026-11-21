@@ -1,10 +1,10 @@
-// ==================== نظام المميزات الملكي (V11 Ultra Shield — قص أغاني + MP3 + يوتيوب سوا + ذكريات + ثيم لكل شات + إطارات — 60fps) ====================
+// ==================== نظام المميزات الملكي (V12 Signature — متوافق SVG + إشعارات اختيارية مموّهة + قص أغاني + يوتيوب سوا + ذكريات — 60fps) ====================
 (function () {
-    if (window.__PREMIUM_V11_LOADED__) return;
-    window.__PREMIUM_V11_LOADED__ = true;
+    if (window.__PREMIUM_V12_LOADED__) return;
+    window.__PREMIUM_V12_LOADED__ = true;
 
     const ACCENT_PALETTES = {
-        default: { label: "افتراضي", main: "#38bdf8", grad: "linear-gradient(135deg,#0ea5e9,#3b82f6)" },
+        default: { label: "افتراضي", main: "#38bdf8", grad: "linear-gradient(135deg,#0ea5e9,#2563eb)" },
         rose:    { label: "وردي",    main: "#f472b6", grad: "linear-gradient(135deg,#ec4899,#8b5cf6)" },
         violet:  { label: "بنفسجي",  main: "#a78bfa", grad: "linear-gradient(135deg,#7c3aed,#4f46e5)" },
         gold:    { label: "ذهبي",    main: "#fbbf24", grad: "linear-gradient(135deg,#f59e0b,#eab308)" },
@@ -16,10 +16,10 @@
 
     const AVATAR_FRAMES = [
         { id: "",       label: "بدون إطار", css: "var(--bg-card)" },
-        { id: "gold",   label: "👑 ذهبي",    css: "linear-gradient(135deg,#ca8a04,#fde047)" },
-        { id: "neon",   label: "⚡ نيون",    css: "linear-gradient(135deg,#06b6d4,#3b82f6)" },
-        { id: "galaxy", label: "🌌 مجرّة",   css: "linear-gradient(135deg,#7c3aed,#ec4899)" },
-        { id: "rose",   label: "🌹 وردي",    css: "linear-gradient(135deg,#e11d48,#f472b6)" }
+        { id: "gold",   label: "ذهبي ملكي", css: "linear-gradient(135deg,#ca8a04,#fde047)" },
+        { id: "neon",   label: "نيون سماوي", css: "linear-gradient(135deg,#06b6d4,#3b82f6)" },
+        { id: "galaxy", label: "مجرّة",      css: "linear-gradient(135deg,#7c3aed,#ec4899)" },
+        { id: "rose",   label: "وردي ناعم",  css: "linear-gradient(135deg,#e11d48,#f472b6)" }
     ];
 
     const CHAT_THEMES = [
@@ -39,7 +39,7 @@
     ];
 
     const QUICK_MOODS = [
-        { id: "",      label: "✕ بدون مود" },
+        { id: "",      label: "بدون مود" },
         { id: "study", label: "📚 أدرس سادس" },
         { id: "tea",   label: "☕ أشرب چاي" },
         { id: "music", label: "🎧 أسمع أغاني" },
@@ -111,14 +111,18 @@
     ];
 
     const MUSIC_SUGGEST_CATS = [
-        { id: "iraqi",    label: "🔥 عراقية",   queries: ["ماجد المهندس", "محمود التركي", "أصيل هميم"] },
-        { id: "romantic", label: "❤️ رومانسية", queries: ["كاظم الساهر", "إليسا"] },
-        { id: "hype",     label: "⚡ حماسية",   queries: ["سيف نبيل", "نور الزين"] },
-        { id: "chill",    label: "🌙 هادئة",    queries: ["فيروز", "شيرين"] },
-        { id: "global",   label: "🌍 أجنبي",    queries: ["The Weeknd", "Lana Del Rey"] }
+        { id: "iraqi",    label: "عراقية",   queries: ["ماجد المهندس", "محمود التركي", "أصيل هميم"] },
+        { id: "romantic", label: "رومانسية", queries: ["كاظم الساهر", "إليسا"] },
+        { id: "hype",     label: "حماسية",   queries: ["سيف نبيل", "نور الزين"] },
+        { id: "chill",    label: "هادئة",    queries: ["فيروز", "شيرين"] },
+        { id: "global",   label: "أجنبي",    queries: ["The Weeknd", "Lana Del Rey"] }
     ];
 
-    // حالات المميزات
+    // حالات المميزات + نظام الإشعارات الاختياري (افتراضياً متوقف)
+    const sessionStartTs = Date.now();
+    let optNotifsEnabled = localStorage.getItem("app_notifs_enabled") === "on";
+    let lastNotifiedIds = new Set();
+
     let selectedMsgEffect = "";
     let scratchModeActive = false;
     let sharedWpRef = null;
@@ -139,7 +143,6 @@
     let uploadTargetPackId = null;
     const playedFxIds = new Set();
 
-    // الملاحظات والموسيقى المطوّرة
     let allNotesMap = {};
     let viewingNoteUser = "";
     let draftNoteSong = null;
@@ -149,12 +152,11 @@
     let musicPickerAllowTrim = true;
     let musicPreviewIdx = -1;
     let activeMusicCat = "iraqi";
-    let activeMusicSourceTab = "search"; // "search" | "youtube" | "mp3"
+    let activeMusicSourceTab = "search";
     let pendingTrimSong = null;
     const musicCatCache = {};
     let storyMusicMuted = false;
 
-    // نسمع سوا + الوضع المختفي + الشعلة + السؤال اليومي + الرسم الحي + كبسولات الزمن
     let listenRef = null;
     let currentListenData = null;
     let vanishRef = null;
@@ -179,13 +181,81 @@
         return m ? m[1] : "";
     }
 
-    // ==================== محرّك الصوت الموحّد (يدعم القصّ startSec/endSec + التشغيل للنهاية) ====================
+    function syncFxButtonState() {
+        const btn = document.getElementById("fxToggleBtn");
+        if (!btn) return;
+        const sdActive = typeof selectedSelfDestructSec !== "undefined" && selectedSelfDestructSec > 0;
+        const hasMode = !!selectedMsgEffect || scratchModeActive || sdActive;
+        if (hasMode) btn.setAttribute("data-fx-on", "1");
+        else btn.removeAttribute("data-fx-on");
+        const trayOpen = document.getElementById("chatExtrasTray")?.classList.contains("open");
+        btn.classList.toggle("accent", hasMode || !!trayOpen);
+    }
+
+    // ==================== نظام الإشعارات الاختيارية المموّهة ====================
+    function updateNotifToggleUI() {
+        const btn = document.getElementById("notifToggleBtn");
+        if (!btn) return;
+        btn.innerText = optNotifsEnabled ? "مفعّلة" : "متوقفة";
+        btn.className = "btn btn-sm " + (optNotifsEnabled ? "btn-success" : "btn-outline");
+    }
+
+    window.toggleOptionalNotifications = async function () {
+        if (optNotifsEnabled) {
+            optNotifsEnabled = false;
+            localStorage.setItem("app_notifs_enabled", "off");
+            updateNotifToggleUI();
+            showToast("تم إيقاف الإشعارات — تصفّحك صامت بالكامل");
+            return;
+        }
+        // طلب الإذن فقط عند رغبة المستخدم وضغطه على الزر
+        if ("Notification" in window) {
+            try {
+                if (Notification.permission === "default") {
+                    const perm = await Notification.requestPermission();
+                    if (perm === "denied") {
+                        optNotifsEnabled = true;
+                        localStorage.setItem("app_notifs_enabled", "on");
+                        updateNotifToggleUI();
+                        showToast("تم تفعيل التنبيهات داخل التطبيق (إشعارات المتصفح محجوبة من إعدادات هاتفك)");
+                        return;
+                    }
+                }
+            } catch {}
+        }
+        optNotifsEnabled = true;
+        localStorage.setItem("app_notifs_enabled", "on");
+        updateNotifToggleUI();
+        playSendSound();
+        showToast("تم تفعيل الإشعارات الاختيارية المموّهة بنجاح");
+    };
+
+    function dispatchOptionalNotification(key, title, inAppText) {
+        if (!optNotifsEnabled || !key || lastNotifiedIds.has(key)) return;
+        lastNotifiedIds.add(key);
+        if (lastNotifiedIds.size > 80) lastNotifiedIds.clear();
+
+        if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+            try {
+                // إشعار مموّه يحمي الخصوصية على شاشة القفل
+                new Notification(title || "مفكرة السادس العلمي", {
+                    body: "لديك تحديث جديد في المفكرة",
+                    icon: "./icon-192.png",
+                    tag: "study-note-ping"
+                });
+            } catch {}
+        } else if (!document.hidden && inAppText) {
+            showToast(inAppText);
+        }
+    }
+
+    // ==================== محرّك الصوت الموحّد ====================
     const PremAudio = {
         el: new Audio(),
         context: "",
         currentUrl: "",
         clipStart: 0,
-        clipEnd: 0, // 0 تعني للنهاية
+        clipEnd: 0,
         playFull: true,
         onStateChange: null,
         init() {
@@ -194,12 +264,8 @@
             this.el.volume = 1.0;
             this.el.addEventListener("timeupdate", () => {
                 if (this.clipEnd > 0 && this.el.currentTime >= this.clipEnd) {
-                    if (this.el.loop) {
-                        this.el.currentTime = this.clipStart || 0;
-                    } else {
-                        this.el.pause();
-                        this.notify(false);
-                    }
+                    if (this.el.loop) this.el.currentTime = this.clipStart || 0;
+                    else { this.el.pause(); this.notify(false); }
                 }
             });
             this.el.addEventListener("ended", () => { if (!this.el.loop) this.notify(false); });
@@ -253,7 +319,6 @@
     };
     PremAudio.init();
 
-    // إرجاع نسبة التقدم الحقيقية لصوت الستوري عند تفعيل «تشغيل للنهاية»
     window.__storyAudioProgress = function () {
         if (PremAudio.context !== "story" || !PremAudio.el || !isFinite(PremAudio.el.duration) || PremAudio.el.duration <= 0) return null;
         const start = PremAudio.clipStart || 0;
@@ -336,104 +401,71 @@
     function attachLazyVideos(c) { if (!c) return; c.querySelectorAll("video.tg-lazy-vid").forEach(v => vidObserver ? vidObserver.observe(v) : requestManagedVideoPlay(v)); }
     function stopAndReleaseVideos(c) { if (!c) return; c.querySelectorAll("video.tg-lazy-vid").forEach(v => { if (vidObserver) vidObserver.unobserve(v); pauseManagedVideo(v); try { v.removeAttribute("src"); v.load(); } catch {} }); }
 
-    // ==================== 1. حقن ستايلات V11 السحرية ====================
+    // ==================== 1. حقن ستايلات V12 المصقولة (Zero Blur Lag) ====================
     function injectPremiumStyles() {
-        if (document.getElementById("premStylesV11")) return;
+        if (document.getElementById("premStylesV12")) return;
         const s = document.createElement("style");
-        s.id = "premStylesV11";
+        s.id = "premStylesV12";
         s.textContent = `
-            /* ===== شريط يوتيوب سوا لايف (Watch Together 📺) ===== */
-            #ytTogetherBar {
-                flex-direction: column; background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(9, 13, 25, 0.94));
-                border-bottom: 1px solid var(--border-bright); flex-shrink: 0; z-index: 10;
-            }
+            #ytTogetherBar { flex-direction: column; background: var(--bg-panel); border-bottom: 1px solid var(--border-bright); flex-shrink: 0; z-index: 10; }
             #ytTogetherBar.open { display: flex !important; }
-            .yt-bar-head {
-                display: flex; align-items: center; justify-content: space-between; gap: 8px;
-                padding: 7px 12px; font-size: 12px; font-weight: 800; color: #fff;
-            }
-            .yt-frame-wrap {
-                width: 100%; max-width: 440px; aspect-ratio: 16 / 9; margin: 0 auto 8px;
-                border-radius: 14px; overflow: hidden; border: 1px solid var(--border-bright); background: #000;
-            }
+            .yt-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 12px; font-size: 12px; font-weight: 800; color: #fff; }
+            .yt-frame-wrap { width: 100%; max-width: 440px; aspect-ratio: 16 / 9; margin: 0 auto 8px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border-bright); background: #000; }
             .yt-frame-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
 
-            /* ===== شريط المناسبات التنازلي براس الشات (🗓️) ===== */
-            #countdownBanner.open {
-                display: flex !important; align-items: center; justify-content: space-between; gap: 10px;
-                padding: 7px 12px; background: linear-gradient(90deg, rgba(245,158,11,0.18), rgba(236,72,153,0.18));
-                border-bottom: 1px solid rgba(251,191,36,0.34); cursor: pointer; flex-shrink: 0;
-            }
+            #countdownBanner.open { display: flex !important; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px; background: linear-gradient(90deg, rgba(245,158,11,0.16), rgba(236,72,153,0.16)); border-bottom: 1px solid rgba(251,191,36,0.32); cursor: pointer; flex-shrink: 0; }
             .cd-title { font-size: 12.5px; font-weight: 800; color: #fde047; display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .cd-days-pill { background: rgba(0,0,0,0.36); border: 1px solid rgba(251,191,36,0.45); color: #fff; font-size: 11.5px; font-weight: 800; padding: 3px 10px; border-radius: 99px; flex-shrink: 0; }
-            .mem-item {
-                background: var(--glass-inner); border: 1px solid var(--border); border-radius: 14px;
-                padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
-            }
+            .cd-days-pill { background: rgba(0,0,0,0.36); border: 1px solid rgba(251,191,36,0.42); color: #fff; font-size: 11.5px; font-weight: 800; padding: 3px 10px; border-radius: 99px; flex-shrink: 0; }
+            .mem-item { background: var(--glass-inner); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
             .mem-item strong { display: block; font-size: 13px; color: var(--text); margin-bottom: 2px; }
             .mem-item span { font-size: 11px; color: var(--text-dim); }
 
-            /* ===== شريط قصّ الأغنية وتحديد المدة (Audio Trimmer ✂️) ===== */
-            .trim-card {
-                background: linear-gradient(135deg, rgba(14,165,233,0.14), rgba(139,92,246,0.14));
-                border: 1px solid var(--border-bright); border-radius: 18px; padding: 14px; margin: 10px 0;
-            }
+            .trim-card { background: var(--bg-card); border: 1px solid var(--border-bright); border-radius: 18px; padding: 14px; margin: 10px 0; }
             .trim-range-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; font-weight: 700; }
             .trim-range-row input[type="range"] { flex: 1; accent-color: var(--accent); }
-            .trim-toggle {
-                display: flex; align-items: center; justify-content: space-between; gap: 8px;
-                background: var(--glass-inner); border: 1px solid var(--border); border-radius: 12px;
-                padding: 9px 12px; margin-bottom: 10px; cursor: pointer; font-size: 12.5px; font-weight: 800;
-            }
-            .sv-yt-wrap {
-                position: absolute; bottom: 88px; left: 50%; transform: translateX(-50%); z-index: 12;
-                width: 240px; height: 135px; border-radius: 14px; overflow: hidden;
-                border: 1px solid rgba(255,255,255,0.28); box-shadow: 0 10px 28px rgba(0,0,0,0.65); background: #000;
-            }
+            .trim-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--glass-inner); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; margin-bottom: 10px; cursor: pointer; font-size: 12.5px; font-weight: 800; }
+            .sv-yt-wrap { position: absolute; bottom: 88px; left: 50%; transform: translateX(-50%); z-index: 12; width: 240px; height: 135px; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.28); background: #000; }
 
-            /* ===== الكشط + النبضة + الكبسولة + السؤال اليومي + الرسم + المود ===== */
             .scratch-box { position: relative; min-width: 170px; min-height: 54px; border-radius: 14px; overflow: hidden; padding: 8px 10px; background: rgba(0, 0, 0, 0.22); }
             .scratch-secret { font-size: var(--msg-fs, 14.5px); line-height: 1.55; white-space: pre-wrap; user-select: text; }
-            .scratch-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; z-index: 3; transition: opacity 0.45s ease; }
+            .scratch-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; z-index: 3; transition: opacity 0.4s ease; }
             .scratch-canvas.done { opacity: 0; pointer-events: none; }
 
-            #heartbeatOverlay { position: fixed; inset: 0; pointer-events: none; z-index: 9600; display: none; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(circle, rgba(244,63,94,0.28) 0%, rgba(139,92,246,0.14) 45%, transparent 75%); }
+            #heartbeatOverlay { position: fixed; inset: 0; pointer-events: none; z-index: 9600; display: none; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(circle, rgba(244,63,94,0.26) 0%, rgba(139,92,246,0.12) 45%, transparent 75%); }
             #heartbeatOverlay.pulse { display: flex; animation: hbFade 2.6s ease forwards; }
-            .hb-heart { font-size: 86px; animation: hbBeat 0.85s ease-in-out 3; filter: drop-shadow(0 0 28px rgba(244,63,94,0.85)); }
-            .hb-label { margin-top: 10px; background: rgba(10,16,32,0.86); border: 1px solid rgba(251,113,133,0.5); color: #fff; padding: 8px 20px; border-radius: 99px; font-size: 15px; font-weight: 800; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
-            @keyframes hbBeat { 0%,100%{transform:scale(1);} 25%{transform:scale(1.28);} 45%{transform:scale(0.95);} 70%{transform:scale(1.18);} }
+            .hb-heart { font-size: 84px; animation: hbBeat 0.85s ease-in-out 3; }
+            .hb-label { margin-top: 10px; background: var(--bg-glass); border: 1px solid rgba(251,113,133,0.48); color: #fff; padding: 8px 20px; border-radius: 99px; font-size: 15px; font-weight: 800; }
+            @keyframes hbBeat { 0%,100%{transform:scale(1);} 25%{transform:scale(1.26);} 45%{transform:scale(0.95);} 70%{transform:scale(1.16);} }
             @keyframes hbFade { 0%{opacity:0;} 15%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;} }
 
-            .capsule-card { min-width: 215px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, rgba(99,102,241,0.28), rgba(236,72,153,0.22)); border: 1px solid rgba(196,181,253,0.42); text-align: center; cursor: pointer; }
-            .capsule-card.unlocked { background: linear-gradient(135deg, rgba(16,185,129,0.26), rgba(14,165,233,0.24)); border-color: rgba(52,211,153,0.55); }
+            .capsule-card { min-width: 215px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, rgba(99,102,241,0.26), rgba(236,72,153,0.20)); border: 1px solid rgba(196,181,253,0.38); text-align: center; cursor: pointer; }
+            .capsule-card.unlocked { background: linear-gradient(135deg, rgba(16,185,129,0.24), rgba(14,165,233,0.22)); border-color: rgba(52,211,153,0.5); }
             .capsule-timer { font-size: 16px; font-weight: 800; color: #fde047; margin: 5px 0 3px; font-variant-numeric: tabular-nums; }
             .capsule-sub { font-size: 11px; color: rgba(255,255,255,0.82); }
             @keyframes capShake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
             .capsule-card.shake { animation: capShake 0.3s ease; }
 
-            .dp-q-box { background: linear-gradient(135deg, rgba(236,72,153,0.18), rgba(139,92,246,0.22)); border: 1px solid rgba(244,114,182,0.4); border-radius: 20px; padding: 16px; text-align: center; margin: 10px 0 14px; }
+            .dp-q-box { background: linear-gradient(135deg, rgba(236,72,153,0.16), rgba(139,92,246,0.20)); border: 1px solid rgba(244,114,182,0.36); border-radius: 20px; padding: 16px; text-align: center; margin: 10px 0 14px; }
             .dp-q-box h4 { font-size: 16.5px; line-height: 1.55; color: #fff; }
             .dp-ans-card { background: var(--glass-inner); border: 1px solid var(--border-bright); border-radius: 16px; padding: 12px 14px; margin-bottom: 9px; text-align: right; }
             .dp-ans-card strong { display: block; font-size: 12px; color: var(--accent); margin-bottom: 4px; }
             .dp-ans-card p { font-size: 14px; line-height: 1.55; color: var(--text); }
 
-            .draw-stage-wrap { width: 100%; aspect-ratio: 4 / 3; background: #070c18; border: 1px solid var(--border-bright); border-radius: 18px; overflow: hidden; position: relative; margin: 10px 0; }
+            .draw-stage-wrap { width: 100%; aspect-ratio: 4 / 3; background: #070b14; border: 1px solid var(--border-bright); border-radius: 18px; overflow: hidden; position: relative; margin: 10px 0; }
             #liveDrawCanvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
             .draw-colors { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-            .draw-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.12s; }
-            .draw-dot.active { border-color: #fff; transform: scale(1.18); }
+            .draw-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+            .draw-dot.active { border-color: #fff; transform: scale(1.16); }
 
             .mood-strip { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 8px; margin-top: 6px; }
             .mood-chip { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-dim); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
             .mood-chip.active { background: var(--primary-grad); border-color: transparent; color: #fff; }
-            .chat-pane.music-glow-on { box-shadow: inset 0 0 38px rgba(139, 92, 246, 0.28), inset 0 0 14px rgba(56, 189, 248, 0.22); }
+            .chat-pane.music-glow-on { box-shadow: inset 0 0 28px rgba(139, 92, 246, 0.24); }
 
-            /* ===== الملاحظات + الأغاني + نسمع سوا + الشعلة + المختفي + الملصقات ===== */
-            .notes-strip { display: flex; gap: 14px; overflow-x: auto; padding: 10px 14px 9px; border-bottom: 1px solid var(--border); flex-shrink: 0; align-items: flex-end; background: rgba(255,255,255,0.015); }
-            .note-item { display: flex; flex-direction: column; align-items: center; min-width: 74px; max-width: 84px; cursor: pointer; flex-shrink: 0; transition: transform 0.14s; }
-            .note-item:active { transform: scale(0.94); }
+            .notes-strip { display: flex; gap: 14px; overflow-x: auto; padding: 10px 14px 9px; border-bottom: 1px solid var(--border); flex-shrink: 0; align-items: flex-end; background: rgba(255,255,255,0.01); }
+            .note-item { display: flex; flex-direction: column; align-items: center; min-width: 74px; max-width: 84px; cursor: pointer; flex-shrink: 0; }
             .note-bubble-slot { min-height: 38px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: -10px; z-index: 3; width: 100%; }
-            .note-bubble { position: relative; background: var(--bg-card); border: 1px solid var(--border-bright); color: var(--text); padding: 5px 9px; border-radius: 15px; font-size: 10.5px; font-weight: 700; line-height: 1.3; text-align: center; max-width: 86px; min-width: 58px; box-shadow: 0 4px 12px rgba(0,0,0,0.42); word-break: break-word; }
+            .note-bubble { position: relative; background: var(--bg-card); border: 1px solid var(--border-bright); color: var(--text); padding: 5px 9px; border-radius: 15px; font-size: 10.5px; font-weight: 700; line-height: 1.3; text-align: center; max-width: 86px; min-width: 58px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); word-break: break-word; }
             .note-bubble.empty-note { color: var(--text-dim); border-style: dashed; background: var(--glass-inner); }
             .note-bubble-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
             .note-music-mini { display: flex; align-items: center; justify-content: center; gap: 3px; font-size: 9.5px; color: var(--accent); margin-top: 2px; }
@@ -458,8 +490,8 @@
             @keyframes eqAnim { 0% { height: 3px; } 100% { height: 12px; } }
             @keyframes discSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-            .song-card-inline { display: flex; align-items: center; gap: 10px; background: linear-gradient(135deg, rgba(14,165,233,0.12), rgba(139,92,246,0.12)); border: 1px solid var(--border-bright); border-radius: 16px; padding: 8px 10px; margin-top: 10px; text-align: right; }
-            .song-cover { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; flex-shrink: 0; background: var(--bg-card); border: 1px solid rgba(255,255,255,0.18); }
+            .song-card-inline { display: flex; align-items: center; gap: 10px; background: var(--bg-card); border: 1px solid var(--border-bright); border-radius: 16px; padding: 8px 10px; margin-top: 10px; text-align: right; }
+            .song-cover { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; flex-shrink: 0; background: var(--glass-inner); border: 1px solid rgba(255,255,255,0.14); }
             .song-cover.round { border-radius: 50%; }
             .song-cover.spin { animation: discSpin 6s linear infinite; }
             .song-meta { flex: 1; min-width: 0; }
@@ -468,14 +500,14 @@
             .song-play-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--primary-grad); color: #fff; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
             .music-res-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--glass-inner); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 7px; }
 
-            .sv-music-pill { position: absolute; top: 12px; right: 12px; z-index: 12; display: flex; align-items: center; gap: 8px; max-width: 82%; background: rgba(8, 13, 26, 0.84); border: 1px solid rgba(255,255,255,0.28); border-radius: 99px; padding: 5px 10px 5px 6px; color: #fff; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.5); }
+            .sv-music-pill { position: absolute; top: 12px; right: 12px; z-index: 12; display: flex; align-items: center; gap: 8px; max-width: 82%; background: rgba(8, 13, 26, 0.88); border: 1px solid rgba(255,255,255,0.24); border-radius: 99px; padding: 5px 10px 5px 6px; color: #fff; cursor: pointer; }
             .sv-music-pill img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
             .sv-music-pill .svm-txt { min-width: 0; font-size: 11.5px; line-height: 1.25; }
             .sv-music-pill .svm-txt b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
             .sv-music-pill .svm-txt span { display: block; font-size: 10px; color: rgba(255,255,255,0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
             .sv-mute-btn { min-width: 30px; height: 30px; padding: 0 8px; border-radius: 99px; border: none; background: var(--primary-grad); color: #fff; font-size: 12px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
 
-            #listenTogetherBar { display: none; align-items: center; gap: 9px; padding: 7px 12px; background: linear-gradient(90deg, rgba(14,165,233,0.20), rgba(139,92,246,0.22)); border-bottom: 1px solid var(--border-bright); flex-shrink: 0; z-index: 5; }
+            #listenTogetherBar { display: none; align-items: center; gap: 9px; padding: 7px 12px; background: linear-gradient(90deg, rgba(14,165,233,0.18), rgba(139,92,246,0.20)); border-bottom: 1px solid var(--border-bright); flex-shrink: 0; z-index: 5; }
             #listenTogetherBar.open { display: flex; }
             .lt-info { flex: 1; min-width: 0; }
             .lt-info strong { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -483,29 +515,30 @@
             .lt-btn { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-bright); background: rgba(0,0,0,0.35); color: #fff; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
             .lt-sync-pill { background: var(--primary-grad); border: none; color: #fff; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 99px; cursor: pointer; flex-shrink: 0; }
 
-            .streak-pill { display: inline-flex; align-items: center; gap: 2px; background: linear-gradient(135deg, rgba(249,115,22,0.22), rgba(239,68,68,0.22)); border: 1px solid rgba(251,146,60,0.45); color: #fdba74; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 99px; margin-right: 5px; flex-shrink: 0; }
+            .streak-pill { display: inline-flex; align-items: center; gap: 2px; background: rgba(249,115,22,0.18); border: 1px solid rgba(251,146,60,0.42); color: #fdba74; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 99px; margin-right: 5px; flex-shrink: 0; }
             .streak-pill.warn { border-style: dashed; color: #fde047; }
 
-            #vanishBanner { display: none; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 800; color: #e9d5ff; background: linear-gradient(90deg, #1e1036, #311557, #1e1036); border-bottom: 1px solid rgba(192,132,252,0.35); flex-shrink: 0; }
+            #vanishBanner { display: none; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 800; color: #e9d5ff; background: linear-gradient(90deg, #1b0f30, #2c144e, #1b0f30); border-bottom: 1px solid rgba(192,132,252,0.32); flex-shrink: 0; }
             #vanishBanner.open { display: flex; }
             .chat-pane.vanish-on { background: #07040e !important; }
-            .chat-pane.vanish-on .messages-area { background-image: radial-gradient(rgba(168,85,247,0.14) 1.3px, transparent 1.3px) !important; background-size: 24px 24px !important; }
-            .chat-pane.vanish-on .input-area { background: #0d0719 !important; border-top-color: rgba(192,132,252,0.32) !important; }
-            .pill-act.vanish-active { background: rgba(168,85,247,0.32) !important; color: #e9d5ff !important; }
-            .msg-wrap.vanish-msg .msg-bubble { border: 1px dashed rgba(192,132,252,0.58) !important; box-shadow: 0 3px 14px rgba(139,92,246,0.22); }
-            .vanish-tag { font-size: 10px; opacity: 0.9; margin-left: 3px; }
+            .chat-pane.vanish-on .messages-area { background-image: radial-gradient(rgba(168,85,247,0.12) 1.3px, transparent 1.3px) !important; background-size: 24px 24px !important; }
+            .chat-pane.vanish-on .input-area { background: #0b0616 !important; border-top-color: rgba(192,132,252,0.28) !important; }
+            .pill-act.vanish-active { background: rgba(168,85,247,0.28) !important; color: #e9d5ff !important; }
+            .ag-tile.active-tile .ag-ic { box-shadow: 0 0 0 2.5px #fff, 0 0 14px rgba(168,85,247,0.7); }
+            .msg-wrap.vanish-msg .msg-bubble { border: 1px dashed rgba(192,132,252,0.55) !important; }
+            .vanish-tag { font-size: 10px; opacity: 0.88; margin-left: 3px; }
 
-            .status-em { display: inline-block; margin-right: 4px; font-size: 14px; animation: premFloat 2.4s ease-in-out infinite; vertical-align: middle; }
-            @keyframes premFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+            .status-em { display: inline-block; margin-right: 4px; font-size: 13.5px; vertical-align: middle; }
             @keyframes premBeat  { 0%,100% { transform: scale(1); } 30% { transform: scale(1.22); } 60% { transform: scale(0.95); } }
             @keyframes premBounce{ 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
             @keyframes premWiggle{ 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg); } 75% { transform: rotate(10deg); } }
+            @keyframes premFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
             @keyframes premSpin  { 0%,100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.16) rotate(12deg); } }
 
-            .anim-em { display: inline-block; font-size: 1.32em; vertical-align: -2px; margin: 0 1px; }
-            .anim-em.beat   { animation: premBeat 1.4s ease-in-out infinite; }
-            .anim-em.bounce { animation: premBounce 1.2s ease-in-out infinite; }
-            .anim-em.wiggle { animation: premWiggle 1.3s ease-in-out infinite; }
+            .anim-em { display: inline-block; font-size: 1.3em; vertical-align: -2px; margin: 0 1px; }
+            .anim-em.beat   { animation: premBeat 1.5s ease-in-out infinite; }
+            .anim-em.bounce { animation: premBounce 1.3s ease-in-out infinite; }
+            .anim-em.wiggle { animation: premWiggle 1.4s ease-in-out infinite; }
             .anim-em.float  { animation: premFloat 2s ease-in-out infinite; }
             .anim-em.spin   { animation: premSpin 2.2s ease-in-out infinite; }
 
@@ -519,19 +552,19 @@
 
             .fx-opt-btn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text); padding: 5px 11px; border-radius: 99px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
             .fx-opt-btn.active { background: var(--primary-grad); border-color: transparent; color: #fff; }
-            .fx-msg-pill { display: inline-flex; align-items: center; gap: 3px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.28); border-radius: 99px; padding: 1px 7px; font-size: 11px; font-weight: 800; color: #fff; cursor: pointer; margin-left: 4px; }
+            .fx-msg-pill { display: inline-flex; align-items: center; gap: 3px; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.24); border-radius: 99px; padding: 1px 7px; font-size: 11px; font-weight: 800; color: #fff; cursor: pointer; margin-left: 4px; }
 
-            .prem-big-sticker { width: 146px; height: 146px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; box-shadow: 0 8px 22px rgba(0,0,0,0.34); position: relative; border: 1px solid rgba(255,255,255,0.22); }
+            .prem-big-sticker { width: 146px; height: 146px; border-radius: 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; box-shadow: 0 8px 20px rgba(0,0,0,0.34); position: relative; border: 1px solid rgba(255,255,255,0.22); }
             .prem-big-sticker .pbs-em { font-size: 60px; animation: premBeat 1.8s ease-in-out infinite; }
             .prem-big-sticker .pbs-cap { font-size: 12px; font-weight: 800; color: #fff; }
             .prem-big-sticker .pbs-spark { position: absolute; top: 8px; left: 8px; font-size: 14px; }
 
             .tg-st-wrap { position: relative; display: inline-block; cursor: pointer; }
             .tg-st-media { width: 148px; height: 148px; object-fit: contain; border-radius: 14px; display: block; background: transparent; }
-            .tg-st-hint { position: absolute; bottom: 4px; right: 4px; background: rgba(8, 13, 26, 0.78); border: 1px solid rgba(255,255,255,0.22); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; }
+            .tg-st-hint { position: absolute; bottom: 4px; right: 4px; background: rgba(8, 13, 26, 0.8); border: 1px solid rgba(255,255,255,0.22); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; }
             .tg-tile { contain: content; }
             .tg-tile video { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; pointer-events: none; background: rgba(0,0,0,0.2); }
-            .tg-vid-dot { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.68); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 6px; pointer-events: none; }
+            .tg-vid-dot { position: absolute; bottom: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 6px; pointer-events: none; }
 
             .pack-tabs-bar { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 4px; }
             .pack-tab-pill { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-dim); padding: 5px 11px; border-radius: 99px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
@@ -544,18 +577,37 @@
 
             .prem-color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 12px; }
             .prem-color-dot { height: 38px; border-radius: 12px; cursor: pointer; border: 2px solid transparent; color: #fff; font-size: 11.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-            .prem-color-dot.active { border-color: #fff; transform: scale(1.05); }
+            .prem-color-dot.active { border-color: #fff; transform: scale(1.04); }
             .status-em-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 8px 0 12px; }
             .status-em-btn { height: 40px; border-radius: 12px; border: 1px solid var(--border); background: var(--glass-inner); font-size: 20px; cursor: pointer; color: var(--text); }
-            .status-em-btn.active { border-color: var(--accent); background: rgba(56,189,248,0.22); }
+            .status-em-btn.active { border-color: var(--accent); background: rgba(56,189,248,0.2); }
             .swp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
             .swp-tile { height: 62px; border-radius: 14px; border: 2px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #fff; }
         `;
         document.head.appendChild(s);
     }
 
-    // ==================== 2. حقن عناصر الواجهة ====================
+    // ==================== 2. حقن عناصر الواجهة + خيار الإشعارات الاختيارية ====================
     function injectPremiumDOM() {
+        // حقن زر تفعيل/إيقاف الإشعارات الاختيارية بداخل نافذة الإعدادات
+        const soundBtn = document.getElementById("soundToggleBtn");
+        if (soundBtn && !document.getElementById("notifPrefRow")) {
+            const soundRow = soundBtn.closest(".set-row");
+            if (soundRow && soundRow.parentNode) {
+                const row = document.createElement("div");
+                row.id = "notifPrefRow";
+                row.className = "set-row";
+                row.innerHTML = `
+                    <div style="text-align:right;">
+                        <div>إشعارات الرسائل والتنبيهات</div>
+                        <div style="font-size:11px; color:var(--text-dim); font-weight:500;">اختياري — مموّهة وتعمل فقط إذا فعّلتها</div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline" id="notifToggleBtn" onclick="window.toggleOptionalNotifications()">متوقفة</button>`;
+                soundRow.parentNode.insertBefore(row, soundRow);
+                updateNotifToggleUI();
+            }
+        }
+
         if (!document.getElementById("fxStage")) {
             const stage = document.createElement("div"); stage.id = "fxStage"; document.body.appendChild(stage);
         }
@@ -577,7 +629,7 @@
             pinnedBar.parentNode.insertBefore(lt, pinnedBar.nextSibling);
 
             const vb = document.createElement("div"); vb.id = "vanishBanner";
-            vb.innerHTML = `<span>👻 الوضع المختفي مُفعّل — الرسائل تختفي بعد قراءتها</span><button type="button" class="pack-mini-btn" onclick="window.toggleVanishMode()">إيقاف</button>`;
+            vb.innerHTML = `<span>الوضع المختفي مُفعّل — الرسائل تختفي بعد قراءتها</span><button type="button" class="pack-mini-btn" onclick="window.toggleVanishMode()">إيقاف</button>`;
             lt.parentNode.insertBefore(vb, lt.nextSibling);
         }
 
@@ -593,49 +645,40 @@
             myProfBio.parentNode.insertBefore(div, myProfBio.nextSibling);
         }
 
-        // نافذة يوتيوب سوا لايف (Watch Together 📺)
         if (!document.getElementById("ytTogetherModal")) {
             const m = document.createElement("div"); m.id = "ytTogetherModal"; m.className = "modal-bg";
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="glass-card" style="max-width:420px;">
-                    <h3>📺 نشوف يوتيوب سوا لايف</h3>
-                    <p class="sub">الصق رابط أي فيديو يوتيوب (محاضرة، أغنية، مقطع) وراح يشتغل عندكم اثنينكم بنفس اللحظة</p>
-                    <div class="form-group">
-                        <label>رابط فيديو يوتيوب</label>
-                        <input type="text" id="ytTogetherUrlInp" class="input" dir="ltr" placeholder="https://youtu.be/... أو youtube.com/watch?v=...">
-                    </div>
-                    <div class="form-group">
-                        <label>عنوان اختياري (مثال: محاضرة فيزياء أو أغنية)</label>
-                        <input type="text" id="ytTogetherTitleInp" class="input" maxlength="50" placeholder="مشاهدة ممتعة سوا 🍿">
-                    </div>
-                    <button class="btn" onclick="window.startYoutubeTogetherSession()">تشغيل الفيديو للطرفين 📺▶</button>
+                    <h3>نشوف يوتيوب سوا لايف</h3>
+                    <p class="sub">الصق رابط أي فيديو يوتيوب وراح يشتغل عندكم اثنينكم بنفس اللحظة</p>
+                    <div class="form-group"><label>رابط فيديو يوتيوب</label><input type="text" id="ytTogetherUrlInp" class="input" dir="ltr" placeholder="https://youtu.be/... أو youtube.com/watch?v=..."></div>
+                    <div class="form-group"><label>عنوان اختياري</label><input type="text" id="ytTogetherTitleInp" class="input" maxlength="50" placeholder="مشاهدة ممتعة سوا"></div>
+                    <button class="btn" onclick="window.startYoutubeTogetherSession()">تشغيل الفيديو للطرفين</button>
                 </div>`;
             document.body.appendChild(m);
         }
 
-        // نافذة لوحة المناسبات والذكريات (Memories & Countdown 🗓️)
         if (!document.getElementById("memoriesBoardModal")) {
             const m = document.createElement("div"); m.id = "memoriesBoardModal"; m.className = "modal-bg sheet-bg";
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="bottom-sheet" style="max-height:85dvh; display:flex; flex-direction:column;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <h4>🗓️ لوحة المناسبات والذكريات</h4>
+                        <h4>لوحة المناسبات والذكريات</h4>
                         <button class="icon-btn" style="width:32px; height:32px;" onclick="document.getElementById('memoriesBoardModal').style.display='none'">✕</button>
                     </div>
                     <div style="overflow-y:auto; max-height:70dvh;">
                         <div style="background:var(--glass-inner); border:1px solid var(--border-bright); border-radius:16px; padding:12px; margin-bottom:12px;">
-                            <div style="font-size:12.5px; font-weight:800; color:#fde047; margin-bottom:8px;">⏳ تثبيت عدّاد مناسبة براس المحادثة</div>
-                            <input type="text" id="cdTitleInp" class="input" style="margin-bottom:7px;" placeholder="مثال: امتحانات السادس أو يوم تعارفنا ✨">
+                            <div style="font-size:12.5px; font-weight:800; color:#fde047; margin-bottom:8px;">تثبيت عدّاد مناسبة براس المحادثة</div>
+                            <input type="text" id="cdTitleInp" class="input" style="margin-bottom:7px;" placeholder="مثال: امتحانات السادس أو تاريخ مميز">
                             <div style="display:flex; gap:7px;">
                                 <input type="date" id="cdDateInp" class="input" style="flex:1;">
                                 <button class="btn btn-sm" onclick="window.saveChatCountdown()">تثبيت</button>
                                 <button class="btn btn-sm btn-outline" onclick="window.clearChatCountdown()">مسح</button>
                             </div>
                         </div>
-
-                        <div style="font-size:12.5px; font-weight:800; color:var(--accent); margin-bottom:6px;">📌 ذكرياتنا وعباراتنا المحفوظة</div>
+                        <div style="font-size:12.5px; font-weight:800; color:var(--accent); margin-bottom:6px;">ذكرياتنا وعباراتنا المحفوظة</div>
                         <div style="display:flex; gap:7px; margin-bottom:10px;">
                             <input type="text" id="memNoteInp" class="input" maxlength="140" placeholder="احفظ عبارة حلوة أو ذكرى جميلة بينكم..." onkeydown="if(event.key==='Enter'){event.preventDefault(); window.addSharedMemory();}">
                             <button class="btn" style="width:76px;" onclick="window.addSharedMemory()">حفظ</button>
@@ -646,13 +689,12 @@
             document.body.appendChild(m);
         }
 
-        // نافذة ثيم خاص للمحادثة الواحدة (Per-Chat Theme 🎨)
         if (!document.getElementById("chatThemeModal")) {
             const m = document.createElement("div"); m.id = "chatThemeModal"; m.className = "modal-bg";
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="glass-card" style="max-width:400px;">
-                    <h3>🎨 ثيم خاص لهذه المحادثة</h3>
+                    <h3>ثيم خاص لهذه المحادثة</h3>
                     <p class="sub">يغيّر لون فقاعات هذه المحادثة لكليكما بدون تغيير باقي المحادثات</p>
                     <div class="prem-color-grid" id="chatThemeGrid"></div>
                     <button class="btn btn-outline btn-sm" style="width:100%;" onclick="document.getElementById('chatThemeModal').style.display='none'">إغلاق</button>
@@ -660,14 +702,13 @@
             document.body.appendChild(m);
         }
 
-        // نافذة سؤال اليوم السري
         if (!document.getElementById("dailyPromptModal")) {
             const m = document.createElement("div"); m.id = "dailyPromptModal"; m.className = "modal-bg sheet-bg";
             m.onclick = e => { if (e.target === m) window.closeDailyPromptModal(); };
             m.innerHTML = `
                 <div class="bottom-sheet" style="max-height:84dvh; display:flex; flex-direction:column;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h4>💌 سؤال اليوم السري</h4>
+                        <h4>سؤال اليوم السري</h4>
                         <button class="icon-btn" style="width:32px; height:32px;" onclick="window.closeDailyPromptModal()">✕</button>
                     </div>
                     <div id="dpBody" style="overflow-y:auto; max-height:68dvh;"></div>
@@ -675,81 +716,67 @@
             document.body.appendChild(m);
         }
 
-        // نافذة ارسم وياي لايف
         if (!document.getElementById("liveDrawModal")) {
             const m = document.createElement("div"); m.id = "liveDrawModal"; m.className = "modal-bg";
             m.onclick = e => { if (e.target === m) window.closeLiveDrawModal(); };
             m.innerHTML = `
                 <div class="glass-card" style="max-width:430px; padding:16px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <h3 style="font-size:16px;">🎨 ارسم وياي لايف</h3>
+                        <h3 style="font-size:16px;">ارسم وياي لايف</h3>
                         <button class="icon-btn" style="width:32px; height:32px;" onclick="window.closeLiveDrawModal()">✕</button>
                     </div>
-                    <p class="sub" style="margin-bottom:8px;">أي خط ترسمه يظهر گدام شريكك بنفس اللحظة!</p>
+                    <p class="sub" style="margin-bottom:8px;">أي خط ترسمه يظهر گدام شريكك بنفس اللحظة</p>
                     <div class="draw-stage-wrap"><canvas id="liveDrawCanvas"></canvas></div>
                     <div class="draw-colors" id="liveDrawColors"></div>
                     <div style="display:flex; gap:8px;">
-                        <button class="btn btn-sm" style="flex:1;" onclick="window.sendLiveDrawToChat()">📤 إرسال الرسمة بالشات</button>
-                        <button class="btn btn-sm btn-outline" onclick="window.clearLiveDrawCanvas()">🧹 مسح</button>
+                        <button class="btn btn-sm" style="flex:1;" onclick="window.sendLiveDrawToChat()">إرسال الرسمة بالشات</button>
+                        <button class="btn btn-sm btn-outline" onclick="window.clearLiveDrawCanvas()">مسح</button>
                     </div>
                 </div>`;
             document.body.appendChild(m);
         }
 
-        // نافذة كبسولة الزمن
         if (!document.getElementById("timeCapsuleModal")) {
             const m = document.createElement("div"); m.id = "timeCapsuleModal"; m.className = "modal-bg";
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="glass-card" style="max-width:400px;">
-                    <h3>⏳ كبسولة الزمن</h3>
+                    <h3>كبسولة الزمن</h3>
                     <p class="sub">رسالة مقفولة بعدّاد تنازلي — ما تنفتح إلا بالوقت اللي تحدده</p>
-                    <div class="form-group">
-                        <label>عنوان اختياري للكبسولة</label>
-                        <input type="text" id="capTitleInp" class="input" maxlength="40" placeholder="مثال: رسالة قبل الامتحان ✨">
-                    </div>
-                    <div class="form-group">
-                        <label>الرسالة السرية بالداخل</label>
-                        <textarea id="capTextInp" class="input" rows="3" placeholder="اكتب كلامك السري هنا..."></textarea>
-                    </div>
+                    <div class="form-group"><label>عنوان اختياري للكبسولة</label><input type="text" id="capTitleInp" class="input" maxlength="40" placeholder="مثال: رسالة قبل الامتحان"></div>
+                    <div class="form-group"><label>الرسالة السرية بالداخل</label><textarea id="capTextInp" class="input" rows="3" placeholder="اكتب كلامك السري هنا..."></textarea></div>
                     <div class="form-group">
                         <label>متى تنفتح الكبسولة؟</label>
                         <select id="capDelaySel" class="input">
-                            <option value="60000">بعد دقيقة واحدة (للتجربة ⚡)</option>
+                            <option value="60000">بعد دقيقة واحدة (للتجربة)</option>
                             <option value="300000">بعد 5 دقائق</option>
                             <option value="1800000">بعد نصف ساعة</option>
                             <option value="3600000">بعد ساعة واحدة</option>
                             <option value="21600000">بعد 6 ساعات</option>
-                            <option value="86400000" selected>بعد 24 ساعة (باچر نفس الوقت 🌙)</option>
+                            <option value="86400000" selected>بعد 24 ساعة (باچر نفس الوقت)</option>
                             <option value="259200000">بعد 3 أيام</option>
                         </select>
                     </div>
-                    <button class="btn" onclick="window.sendTimeCapsule()">إرسال الكبسولة المقفولة 🔒</button>
+                    <button class="btn" onclick="window.sendTimeCapsule()">إرسال الكبسولة المقفولة</button>
                 </div>`;
             document.body.appendChild(m);
         }
 
-        // نافذة الأغاني المطوّرة (بحث ومقترحات + رابط يوتيوب + رفع MP3 + قصّ المدة / تشغيل للنهاية)
         if (!document.getElementById("musicPickerModal")) {
             const m = document.createElement("div"); m.id = "musicPickerModal"; m.className = "modal-bg sheet-bg story-top-modal";
             m.onclick = e => { if (e.target === m) window.closeMusicPicker(); };
             m.innerHTML = `
                 <div class="bottom-sheet" style="max-height:88dvh; display:flex; flex-direction:column;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <h4 id="mpTitle">🎵 اختر أغنية</h4>
+                        <h4 id="mpTitle">اختر أغنية</h4>
                         <button class="icon-btn" style="width:32px; height:32px;" onclick="window.closeMusicPicker()">✕</button>
                     </div>
-
                     <div class="tabs" style="margin-bottom:9px;">
-                        <button class="tab-btn active" id="mpSrcSearch" onclick="window.switchMusicSourceTab('search')">🔍 بحث ومقترحات</button>
-                        <button class="tab-btn" id="mpSrcYt" onclick="window.switchMusicSourceTab('youtube')">🎬 رابط يوتيوب</button>
-                        <button class="tab-btn" id="mpSrcMp3" onclick="window.switchMusicSourceTab('mp3')">📁 رفع MP3</button>
+                        <button class="tab-btn active" id="mpSrcSearch" onclick="window.switchMusicSourceTab('search')">بحث ومقترحات</button>
+                        <button class="tab-btn" id="mpSrcYt" onclick="window.switchMusicSourceTab('youtube')">رابط يوتيوب</button>
+                        <button class="tab-btn" id="mpSrcMp3" onclick="window.switchMusicSourceTab('mp3')">رفع MP3</button>
                     </div>
-
-                    <!-- خطوة القصّ وتحديد المدة (تظهر بعد اختيار أغنية) -->
                     <div id="mpTrimStage" style="display:none; overflow-y:auto;"></div>
-
-                    <!-- التبويب 1: البحث والمقترحات -->
                     <div id="mpPaneSearch" style="display:flex; flex-direction:column; flex:1; min-height:0;">
                         <div style="display:flex; gap:7px; margin-bottom:8px;">
                             <input type="text" id="musicSearchInp" class="input" placeholder="ابحث عن أي أغنية أو مطرب..." onkeydown="if(event.key==='Enter'){event.preventDefault(); window.runMusicSearch();}">
@@ -760,31 +787,15 @@
                         </div>
                         <div id="musicResultsList" style="flex:1; overflow-y:auto; max-height:46dvh;"></div>
                     </div>
-
-                    <!-- التبويب 2: رابط يوتيوب للأغاني الكاملة -->
                     <div id="mpPaneYt" style="display:none; padding:4px 0;">
-                        <div class="form-group">
-                            <label>رابط أغنية يوتيوب كاملة (تشتغل من البداية للنهاية)</label>
-                            <input type="text" id="mpYtUrlInp" class="input" dir="ltr" placeholder="https://youtu.be/... أو youtube.com/watch?v=...">
-                        </div>
-                        <div class="form-group">
-                            <label>اسم الأغنية / المطرب</label>
-                            <input type="text" id="mpYtTitleInp" class="input" placeholder="مثال: كاظم الساهر - زيديني عشقاً">
-                        </div>
-                        <button class="btn" onclick="window.confirmYoutubeSongPick()">اعتماد أغنية اليوتيوب 🎬✨</button>
+                        <div class="form-group"><label>رابط أغنية يوتيوب كاملة</label><input type="text" id="mpYtUrlInp" class="input" dir="ltr" placeholder="https://youtu.be/... أو youtube.com/watch?v=..."></div>
+                        <div class="form-group"><label>اسم الأغنية / المطرب</label><input type="text" id="mpYtTitleInp" class="input" placeholder="مثال: كاظم الساهر - زيديني عشقاً"></div>
+                        <button class="btn" onclick="window.confirmYoutubeSongPick()">اعتماد أغنية اليوتيوب</button>
                     </div>
-
-                    <!-- التبويب 3: رفع ملف MP3 من الجهاز -->
                     <div id="mpPaneMp3" style="display:none; padding:4px 0;">
-                        <div class="form-group">
-                            <label>اختر ملف صوتي من جهازك (MP3 / M4A — حد أقصى 2.5 ميجابايت)</label>
-                            <input type="file" id="mpLocalFileInp" accept="audio/*" class="input" onchange="window.handleLocalMp3Upload(event)">
-                        </div>
-                        <div class="form-group">
-                            <label>اسم المقطع الصوتي (اختياري)</label>
-                            <input type="text" id="mpLocalTitleInp" class="input" placeholder="سيأخذ اسم الملف تلقائياً إن تركته فارغاً">
-                        </div>
-                        <div id="mpLocalStatus" style="font-size:12px; color:var(--text-dim); text-align:center; padding:8px;">اختر ملفاً صوتياً لتحديد مدته أو تشغيله بالكامل 🎧</div>
+                        <div class="form-group"><label>اختر ملف صوتي من جهازك (حد أقصى 2.5 ميجابايت)</label><input type="file" id="mpLocalFileInp" accept="audio/*" class="input" onchange="window.handleLocalMp3Upload(event)"></div>
+                        <div class="form-group"><label>اسم المقطع الصوتي (اختياري)</label><input type="text" id="mpLocalTitleInp" class="input" placeholder="سيأخذ اسم الملف تلقائياً"></div>
+                        <div id="mpLocalStatus" style="font-size:12px; color:var(--text-dim); text-align:center; padding:8px;">اختر ملفاً صوتياً لتحديد مدته أو تشغيله بالكامل</div>
                     </div>
                 </div>`;
             document.body.appendChild(m);
@@ -795,19 +806,13 @@
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="bottom-sheet">
-                    <h4 style="text-align:center; margin-bottom:4px;">💭 ملاحظة جديدة (24 ساعة)</h4>
-                    <div style="text-align:center; font-size:11.5px; color:var(--text-dim); margin-bottom:12px;">تظهر فوق صورتك مع أغنيتك المختارة نفس إنستگرام</div>
-                    <div class="form-group">
-                        <label>ملاحظتك (<span id="noteCharCnt">0</span>/60)</label>
-                        <input type="text" id="noteTextInput" class="input" maxlength="60" placeholder="شنو ابالك هسة؟..." oninput="document.getElementById('noteCharCnt').innerText=this.value.length" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.publishMyNote();}">
-                    </div>
-                    <div class="form-group">
-                        <label>🎵 أغنية الملاحظة (اختياري)</label>
-                        <div id="noteSongDraftSlot"></div>
-                    </div>
+                    <h4 style="text-align:center; margin-bottom:4px;">ملاحظة جديدة (24 ساعة)</h4>
+                    <div style="text-align:center; font-size:11.5px; color:var(--text-dim); margin-bottom:12px;">تظهر فوق صورتك مع أغنيتك المختارة</div>
+                    <div class="form-group"><label>ملاحظتك (<span id="noteCharCnt">0</span>/60)</label><input type="text" id="noteTextInput" class="input" maxlength="60" placeholder="شنو ابالك هسة؟..." oninput="document.getElementById('noteCharCnt').innerText=this.value.length" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.publishMyNote();}"></div>
+                    <div class="form-group"><label>أغنية الملاحظة (اختياري)</label><div id="noteSongDraftSlot"></div></div>
                     <div id="myNoteLikesBox" style="margin-bottom:10px;"></div>
                     <div style="display:flex; gap:8px;">
-                        <button class="btn" style="flex:1;" onclick="window.publishMyNote()">مشاركة الملاحظة ✨</button>
+                        <button class="btn" style="flex:1;" onclick="window.publishMyNote()">مشاركة الملاحظة</button>
                         <button class="btn btn-danger btn-sm" id="delMyNoteBtn" style="display:none;" onclick="window.deleteMyNote()">حذف</button>
                     </div>
                 </div>`;
@@ -829,10 +834,7 @@
                         </div>
                         <button class="icon-btn" style="width:32px; height:32px;" onclick="window.closeFriendNoteView()">✕</button>
                     </div>
-                    <div class="note-preview-card">
-                        <div class="note-preview-text" id="nvText"></div>
-                        <div id="nvMusicWrap"></div>
-                    </div>
+                    <div class="note-preview-card"><div class="note-preview-text" id="nvText"></div><div id="nvMusicWrap"></div></div>
                     <div class="note-quick-reacts" id="nvReactsRow"></div>
                     <div style="display:flex; gap:8px;">
                         <input type="text" id="nvReplyInput" class="input" placeholder="رد على الملاحظة..." onkeydown="if(event.key==='Enter'){event.preventDefault(); window.replyToViewedNote();}">
@@ -845,7 +847,7 @@
         const dbt = document.querySelector(".drawer-bottom-tabs");
         if (dbt && !dbt.querySelector('[data-dtab="premium"]')) {
             const btn = document.createElement("button");
-            btn.className = "dbt-btn"; btn.setAttribute("data-dtab", "premium"); btn.innerText = "✨ مميز";
+            btn.className = "dbt-btn"; btn.setAttribute("data-dtab", "premium"); btn.innerText = "مميز";
             btn.onclick = () => switchDrawerTab("premium");
             dbt.insertBefore(btn, dbt.querySelector(".dbt-close"));
         }
@@ -853,7 +855,7 @@
         const profBtnRow = document.querySelector("#view-profile .prof-av-row > div:last-child");
         if (profBtnRow && !document.getElementById("openPremProfileBtn")) {
             const b = document.createElement("button");
-            b.id = "openPremProfileBtn"; b.className = "btn btn-sm btn-gold"; b.innerText = "✨ مميز";
+            b.id = "openPremProfileBtn"; b.className = "btn btn-sm btn-gold"; b.innerText = "تخصيص";
             b.onclick = () => window.openPremiumModal();
             profBtnRow.insertBefore(b, profBtnRow.firstChild);
         }
@@ -863,23 +865,23 @@
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="glass-card" style="max-width:440px;">
-                    <h3>✨ تخصيص الحساب المميز</h3>
+                    <h3>تخصيص الحساب المميز</h3>
                     <p class="sub">مجاني بالكامل — يظهر لك ولكل أصدقائك فوراً</p>
-                    <div class="form-group"><label>1. إطار الصورة الشخصية الفخم:</label><div class="prem-color-grid" style="grid-template-columns:repeat(3,1fr);" id="premFrameGrid"></div></div>
-                    <div class="form-group"><label>2. رمز الحالة المتحرك بجانب اسمك:</label><div class="status-em-grid" id="premStatusGrid"></div></div>
-                    <div class="form-group"><label>3. لون الاسم والملف الشخصي وإطار الردود:</label><div class="prem-color-grid" id="premColorGrid"></div></div>
+                    <div class="form-group"><label>1. إطار الصورة الشخصية الفخم</label><div class="prem-color-grid" style="grid-template-columns:repeat(3,1fr);" id="premFrameGrid"></div></div>
+                    <div class="form-group"><label>2. رمز الحالة بجانب اسمك</label><div class="status-em-grid" id="premStatusGrid"></div></div>
+                    <div class="form-group"><label>3. لون الاسم والملف الشخصي وإطار الردود</label><div class="prem-color-grid" id="premColorGrid"></div></div>
                     <div class="form-group">
-                        <label>4. أغنية الملف الشخصي:</label>
+                        <label>4. أغنية الملف الشخصي</label>
                         <div style="display:flex; gap:8px;">
-                            <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('premiumModal').style.display='none'; window.pickMyProfileSong()">🎵 اختيار / قصّ الأغنية</button>
+                            <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('premiumModal').style.display='none'; window.pickMyProfileSong()">اختيار / قصّ الأغنية</button>
                             <button class="btn btn-sm btn-outline" onclick="window.removeMyProfileSong()">إزالة</button>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>5. صورة متحركة للملف الشخصي (فيديو قصير أو GIF):</label>
+                        <label>5. صورة متحركة للملف الشخصي (فيديو قصير أو GIF)</label>
                         <input type="file" id="premAnimAvInput" accept="video/mp4,video/webm,image/gif" style="display:none" onchange="window.handleAnimAvatarUpload(event)">
                         <div style="display:flex; gap:8px;">
-                            <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('premAnimAvInput').click()">🎬 رفع فيديو/GIF</button>
+                            <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('premAnimAvInput').click()">رفع فيديو / GIF</button>
                             <button class="btn btn-sm btn-outline" onclick="window.removeAnimAvatar()">إزالة</button>
                         </div>
                     </div>
@@ -893,12 +895,12 @@
             m.onclick = e => { if (e.target === m) m.style.display = "none"; };
             m.innerHTML = `
                 <div class="glass-card" style="max-width:410px;">
-                    <h3>🖼️ خلفية المحادثة لكلا الطرفين</h3>
+                    <h3>خلفية المحادثة لكلا الطرفين</h3>
                     <p class="sub">تتغير الخلفية عندك وعند شريكك بالمحادثة بنفس اللحظة</p>
                     <div class="swp-grid" id="sharedWpGrid"></div>
                     <input type="file" id="sharedWpFileInput" accept="image/*" style="display:none" onchange="window.handleSharedWpUpload(event)">
                     <div style="display:flex; gap:8px; margin-top:10px;">
-                        <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('sharedWpFileInput').click()">🖼️ رفع صورة لكليكما</button>
+                        <button class="btn btn-sm" style="flex:1;" onclick="document.getElementById('sharedWpFileInput').click()">رفع صورة لكليكما</button>
                         <button class="btn btn-sm btn-outline" onclick="window.setSharedWallpaper('')">استعادة الافتراضي</button>
                     </div>
                     <button class="btn btn-outline btn-sm" style="margin-top:10px; width:100%;" onclick="document.getElementById('sharedWpModal').style.display='none'">إغلاق</button>
@@ -912,7 +914,7 @@
             m.innerHTML = `
                 <div class="bottom-sheet" style="max-height:80dvh; display:flex; flex-direction:column;">
                     <div style="text-align:center; margin-bottom:10px;">
-                        <h4 id="sppTitle" style="font-size:16px;">🎭 حزمة ملصقات</h4>
+                        <h4 id="sppTitle" style="font-size:16px;">حزمة ملصقات</h4>
                         <div id="sppMeta" style="font-size:12px; color:var(--text-dim); margin-top:2px;">...</div>
                     </div>
                     <div id="sppGrid" class="sticker-grid" style="flex:1; overflow-y:auto; max-height:46dvh; padding:4px;"></div>
@@ -929,7 +931,7 @@
         }
     }
 
-    // ==================== 3. مشاهدة يوتيوب سوا لايف (Watch Together 📺) ====================
+    // ==================== 3. يوتيوب سوا + الذكريات + ثيم لكل شات ====================
     window.openYoutubeTogetherModal = function () {
         if (activeChatType !== "dm" || !activeRoomId) return;
         document.getElementById("ytTogetherUrlInp").value = "";
@@ -940,32 +942,18 @@
 
     window.startYoutubeTogetherSession = async function () {
         if (activeChatType !== "dm" || !activeRoomId || !me) return;
-        const url = document.getElementById("ytTogetherUrlInp").value.trim();
-        const ytId = extractYoutubeId(url);
+        const url = document.getElementById("ytTogetherUrlInp").value.trim(), ytId = extractYoutubeId(url);
         if (!ytId) { showToast("الرابط غير صحيح — الصق رابط فيديو يوتيوب صحيح"); return; }
-        const title = document.getElementById("ytTogetherTitleInp").value.trim() || "مشاهدة يوتيوب سوا 📺";
+        const title = document.getElementById("ytTogetherTitleInp").value.trim() || "مشاهدة يوتيوب سوا";
         document.getElementById("ytTogetherModal").style.display = "none";
         ytPlayerMinimized = false;
-        await db.ref(`chats/${activeRoomId}/yt_together`).set({
-            ytId, title, startedAt: Date.now(), offset: 0, by: me.name, rev: Date.now()
-        });
-        showToast("📺 تم تشغيل فيديو اليوتيوب لكليكما لايف!");
+        await db.ref(`chats/${activeRoomId}/yt_together`).set({ ytId, title, startedAt: Date.now(), offset: 0, by: me.name, rev: Date.now() });
+        showToast("تم تشغيل فيديو اليوتيوب لكليكما لايف");
     };
 
-    window.toggleYtMinimize = function () {
-        ytPlayerMinimized = !ytPlayerMinimized;
-        renderYtTogetherBar(currentYtData);
-    };
-
-    window.syncYtTogetherNow = async function () {
-        if (!activeRoomId || !currentYtData) return;
-        await db.ref(`chats/${activeRoomId}/yt_together`).update({ startedAt: Date.now(), offset: 0, rev: Date.now(), by: me.name });
-        showToast("🔄 تمت إعادة مزامنة الفيديو للطرفين");
-    };
-
-    window.stopYoutubeTogether = async function () {
-        if (activeChatType === "dm" && activeRoomId) await db.ref(`chats/${activeRoomId}/yt_together`).remove();
-    };
+    window.toggleYtMinimize = () => { ytPlayerMinimized = !ytPlayerMinimized; renderYtTogetherBar(currentYtData); };
+    window.syncYtTogetherNow = async () => { if (!activeRoomId || !currentYtData) return; await db.ref(`chats/${activeRoomId}/yt_together`).update({ startedAt: Date.now(), offset: 0, rev: Date.now(), by: me.name }); showToast("تمت إعادة مزامنة الفيديو"); };
+    window.stopYoutubeTogether = async () => { if (activeChatType === "dm" && activeRoomId) await db.ref(`chats/${activeRoomId}/yt_together`).remove(); };
 
     function renderYtTogetherBar(data) {
         const bar = document.getElementById("ytTogetherBar"); if (!bar) return;
@@ -975,39 +963,28 @@
         const embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(data.ytId)}?autoplay=1&start=${elapsed}&rel=0&playsinline=1`;
         bar.innerHTML = `
             <div class="yt-bar-head">
-                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📺 ${escapeHTML(data.title || "يوتيوب سوا")} <span style="color:var(--text-dim); font-weight:600;">(${escapeHTML(data.by || "")})</span></span>
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(data.title || "يوتيوب سوا")} <span style="color:var(--text-dim); font-weight:600;">(${escapeHTML(data.by || "")})</span></span>
                 <div style="display:flex; gap:5px; flex-shrink:0;">
-                    <button type="button" class="pack-mini-btn" onclick="window.syncYtTogetherNow()">🔄 مزامنة</button>
-                    <button type="button" class="pack-mini-btn" onclick="window.toggleYtMinimize()">${ytPlayerMinimized ? "⬇ فتح" : "⬆ تصغير"}</button>
+                    <button type="button" class="pack-mini-btn" onclick="window.syncYtTogetherNow()">مزامنة</button>
+                    <button type="button" class="pack-mini-btn" onclick="window.toggleYtMinimize()">${ytPlayerMinimized ? "فتح" : "تصغير"}</button>
                     <button type="button" class="pack-mini-btn danger" onclick="window.stopYoutubeTogether()">✕</button>
                 </div>
             </div>
             ${ytPlayerMinimized ? "" : `<div class="yt-frame-wrap"><iframe src="${embedUrl}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`}`;
     }
+    function detachYoutubeTogether() { if (ytTogetherRef) { ytTogetherRef.off(); ytTogetherRef = null; } currentYtData = null; ytPlayerMinimized = false; renderYtTogetherBar(null); }
 
-    function detachYoutubeTogether() {
-        if (ytTogetherRef) { ytTogetherRef.off(); ytTogetherRef = null; }
-        currentYtData = null; ytPlayerMinimized = false; renderYtTogetherBar(null);
-    }
-
-    // ==================== 4. لوحة المناسبات والذكريات (Memories & Countdown 🗓️) ====================
     function renderCountdownBanner(cd) {
         const bar = document.getElementById("countdownBanner"); if (!bar) return;
         if (!cd || !cd.title || !cd.date) { bar.classList.remove("open"); bar.innerHTML = ""; return; }
-        const targetMs = new Date(cd.date + "T00:00:00").getTime();
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const diffDaysVal = Math.round((targetMs - today.getTime()) / 86400000);
-        let badgeTxt = "";
-        if (diffDaysVal > 0) badgeTxt = `باقي ${diffDaysVal} يوم ⏳`;
-        else if (diffDaysVal === 0) badgeTxt = "اليوم هو الموعد! 🎉";
-        else badgeTxt = `مضى ${Math.abs(diffDaysVal)} يوم 💛`;
-
-        bar.classList.add("open");
-        bar.onclick = () => window.openMemoriesBoardModal();
-        bar.innerHTML = `<div class="cd-title">🗓️ ${escapeHTML(cd.title)}</div><span class="cd-days-pill">${badgeTxt}</span>`;
+        const targetMs = new Date(cd.date + "T00:00:00").getTime(), today = new Date(); today.setHours(0, 0, 0, 0);
+        const d = Math.round((targetMs - today.getTime()) / 86400000);
+        const badgeTxt = d > 0 ? `باقي ${d} يوم` : (d === 0 ? "اليوم هو الموعد!" : `مضى ${Math.abs(d)} يوم`);
+        bar.classList.add("open"); bar.onclick = () => window.openMemoriesBoardModal();
+        bar.innerHTML = `<div class="cd-title">${escapeHTML(cd.title)}</div><span class="cd-days-pill">${badgeTxt}</span>`;
     }
 
-    window.openMemoriesBoardModal = function () {
+    window.openMemoriesBoardModal = () => {
         if (activeChatType !== "dm" || !activeRoomId) return;
         document.getElementById("cdTitleInp").value = currentCountdownData?.title || "";
         document.getElementById("cdDateInp").value = currentCountdownData?.date || "";
@@ -1015,91 +992,55 @@
         renderMemoriesList();
         document.getElementById("memoriesBoardModal").style.display = "flex";
     };
-
-    window.saveChatCountdown = async function () {
+    window.saveChatCountdown = async () => {
         if (!activeRoomId) return;
-        const title = document.getElementById("cdTitleInp").value.trim();
-        const date = document.getElementById("cdDateInp").value;
+        const title = document.getElementById("cdTitleInp").value.trim(), date = document.getElementById("cdDateInp").value;
         if (!title || !date) { showToast("اكتب عنوان المناسبة واختر التاريخ"); return; }
         await db.ref(`chats/${activeRoomId}/countdown`).set({ title, date, by: me.name, ts: Date.now() });
-        showToast("تم تثبيت العدّاد براس المحادثة 🗓️✨");
+        showToast("تم تثبيت العدّاد براس المحادثة");
     };
-
-    window.clearChatCountdown = async function () {
-        if (!activeRoomId) return;
-        await db.ref(`chats/${activeRoomId}/countdown`).remove();
-        document.getElementById("cdTitleInp").value = ""; document.getElementById("cdDateInp").value = "";
-        showToast("تم إزالة العدّاد");
-    };
-
-    window.addSharedMemory = async function () {
-        const inp = document.getElementById("memNoteInp"), text = (inp?.value || "").trim();
-        if (!text || !activeRoomId) return;
-        inp.value = "";
-        const id = "mem_" + Date.now();
+    window.clearChatCountdown = async () => { if (!activeRoomId) return; await db.ref(`chats/${activeRoomId}/countdown`).remove(); document.getElementById("cdTitleInp").value = ""; document.getElementById("cdDateInp").value = ""; showToast("تم إزالة العدّاد"); };
+    window.addSharedMemory = async () => {
+        const inp = document.getElementById("memNoteInp"), text = (inp?.value || "").trim(); if (!text || !activeRoomId) return;
+        inp.value = ""; const id = "mem_" + Date.now();
         await db.ref(`chats/${activeRoomId}/memories/${id}`).set({ id, text, by: me.username, byName: me.name, ts: Date.now() });
-        playSendSound(); showToast("تم حفظ الذكرى بنجاح 💛");
+        playSendSound(); showToast("تم حفظ الذكرى بنجاح");
     };
-
-    window.deleteSharedMemory = async function (id) {
-        if (!activeRoomId) return;
-        await db.ref(`chats/${activeRoomId}/memories/${id}`).remove();
-    };
-
+    window.deleteSharedMemory = async id => { if (activeRoomId) await db.ref(`chats/${activeRoomId}/memories/${id}`).remove(); };
     function renderMemoriesList() {
         const box = document.getElementById("memoriesListEl"); if (!box) return;
         const list = Object.values(currentMemoriesData || {}).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        if (!list.length) { box.innerHTML = `<div style="text-align:center; padding:18px; color:var(--text-dim); font-size:12.5px;">لا توجد ذكريات محفوظة بعد — احفظ أول عبارة أو تاريخ حلو بينكم 💛</div>`; return; }
-        box.innerHTML = list.map(m => `
-            <div class="mem-item">
-                <div><strong>💛 ${escapeHTML(m.text)}</strong><span>${escapeHTML(m.byName || "")} • ${formatDateLabel(m.ts)}</span></div>
-                <button class="icon-btn danger" style="width:26px; height:26px; font-size:11px;" onclick="window.deleteSharedMemory('${escapeHTML(m.id)}')">✕</button>
-            </div>`).join("");
+        if (!list.length) { box.innerHTML = `<div style="text-align:center; padding:18px; color:var(--text-dim); font-size:12.5px;">لا توجد ذكريات محفوظة بعد</div>`; return; }
+        box.innerHTML = list.map(m => `<div class="mem-item"><div><strong>${escapeHTML(m.text)}</strong><span>${escapeHTML(m.byName || "")} • ${formatDateLabel(m.ts)}</span></div><button class="icon-btn danger" style="width:26px; height:26px; font-size:11px;" onclick="window.deleteSharedMemory('${escapeHTML(m.id)}')">✕</button></div>`).join("");
     }
+    function detachMemoriesAndCountdown() { if (countdownRef) { countdownRef.off(); countdownRef = null; } if (memoriesRef) { memoriesRef.off(); memoriesRef = null; } currentCountdownData = null; currentMemoriesData = {}; renderCountdownBanner(null); }
 
-    function detachMemoriesAndCountdown() {
-        if (countdownRef) { countdownRef.off(); countdownRef = null; }
-        if (memoriesRef) { memoriesRef.off(); memoriesRef = null; }
-        currentCountdownData = null; currentMemoriesData = {};
-        renderCountdownBanner(null);
-    }
-
-    // ==================== 5. ثيم خاص لكل محادثة لوحدها (Per-Chat Theme 🎨) ====================
     function applyChatThemeCss(themeId) {
         const pane = document.getElementById("chatPane"); if (!pane) return;
         const th = CHAT_THEMES.find(t => t.id === themeId);
         if (th && th.bg) pane.style.setProperty("--chat-me-bg", th.bg);
         else pane.style.removeProperty("--chat-me-bg");
     }
-
-    window.openChatThemeModal = function () {
+    window.openChatThemeModal = () => {
         if (activeChatType !== "dm" || !activeRoomId) return;
-        const grid = document.getElementById("chatThemeGrid");
-        grid.innerHTML = CHAT_THEMES.map(t =>
-            `<div class="prem-color-dot" style="background:${t.preview}" onclick="window.setActiveChatTheme('${t.id}')">${t.label}</div>`
-        ).join("");
+        document.getElementById("chatThemeGrid").innerHTML = CHAT_THEMES.map(t => `<div class="prem-color-dot" style="background:${t.preview}" onclick="window.setActiveChatTheme('${t.id}')">${t.label}</div>`).join("");
         document.getElementById("chatThemeModal").style.display = "flex";
     };
-
-    window.setActiveChatTheme = async function (themeId) {
+    window.setActiveChatTheme = async themeId => {
         if (activeChatType !== "dm" || !activeRoomId) return;
         await db.ref(`chats/${activeRoomId}/chat_theme`).set({ id: themeId || "", by: me.name, ts: Date.now() });
         document.getElementById("chatThemeModal").style.display = "none";
-        showToast(themeId ? "تم تغيير ثيم هذه المحادثة لكليكما 🎨✨" : "تمت استعادة اللون الافتراضي");
+        showToast(themeId ? "تم تغيير ثيم هذه المحادثة لكليكما" : "تمت استعادة اللون الافتراضي");
     };
+    function detachChatTheme() { if (chatThemeRef) { chatThemeRef.off(); chatThemeRef = null; } applyChatThemeCss(""); }
 
-    function detachChatTheme() {
-        if (chatThemeRef) { chatThemeRef.off(); chatThemeRef = null; }
-        applyChatThemeCss("");
-    }
-
-    // ==================== 6. رسالة الكشط + النبضة الحية + السؤال اليومي + الرسم + الكبسولة + المود ====================
+    // ==================== 4. الكشط + النبضة + السؤال اليومي + الرسم + الكبسولة + المود ====================
     window.toggleScratchMode = function () {
         scratchModeActive = !scratchModeActive;
-        const btn = document.getElementById("scratchModeBtn"), fxBtn = document.getElementById("fxToggleBtn");
+        const btn = document.getElementById("scratchModeBtn");
         if (btn) btn.classList.toggle("active", scratchModeActive);
-        if (fxBtn) { fxBtn.innerText = scratchModeActive ? "🪄" : (selectedMsgEffect ? MSG_EFFECTS[selectedMsgEffect].icon : "✨"); fxBtn.classList.toggle("accent", scratchModeActive || !!selectedMsgEffect); }
-        if (scratchModeActive) { if (typeof toggleChatExtras === "function") toggleChatExtras(false); showToast("🪄 وضع الكشط شغال — رسالتك الجاية تنكشف بمسح الإصبع!"); }
+        syncFxButtonState();
+        if (scratchModeActive) { if (typeof toggleChatExtras === "function") toggleChatExtras(false); showToast("وضع الكشط شغال — رسالتك الجاية تنكشف بمسح الإصبع"); }
     };
 
     function mountScratchCanvas(boxEl, secretHTML) {
@@ -1118,7 +1059,7 @@
             for (let i = 0; i < 24; i++) ctx.fillRect((i * 37) % w, (i * 19) % h, 2, 2);
             ctx.fillStyle = "#e2e8f0"; ctx.font = "bold 12px Tajawal, sans-serif";
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText("🪄 امسح بإصبعك لتكشف السر", w / 2, h / 2);
+            ctx.fillText("امسح بإصبعك لتكشف السر", w / 2, h / 2);
             initialized = true;
         };
         requestAnimationFrame(initLayer); setTimeout(initLayer, 180);
@@ -1142,18 +1083,18 @@
     window.sendLiveHeartbeatTo = async function (targetUser) {
         if (!targetUser || !me) return;
         const now = Date.now();
-        if (now - lastHeartbeatTs < 4000) { showToast("انتظر ثواني قبل إرسال نبضة جديدة 💓"); return; }
+        if (now - lastHeartbeatTs < 4000) { showToast("انتظر ثواني قبل إرسال نبضة جديدة"); return; }
         lastHeartbeatTs = now;
         await db.ref(`heartbeats/${targetUser}`).set({ from: me.username, fromName: me.name, ts: now });
         if (typeof triggerHaptic === "function") triggerHaptic([60, 50, 90]);
         window.playScreenEffect("hearts");
-        showToast(`💓 أرسلت نبضة حية إلى ${contactProfiles[targetUser]?.name || targetUser}`);
+        showToast(`أرسلت نبضة حية إلى ${contactProfiles[targetUser]?.name || targetUser}`);
     };
     window.sendLiveHeartbeat = () => { if (activeChatType === "dm" && activePartner) window.sendLiveHeartbeatTo(activePartner); };
 
     function showHeartbeatOverlay(fromName) {
         const ov = document.getElementById("heartbeatOverlay"), lbl = document.getElementById("hbOverlayText"); if (!ov || !lbl) return;
-        lbl.innerText = `💓 ${fromName} ببالك هسة`;
+        lbl.innerText = `${fromName} ببالك هسة`;
         ov.classList.remove("pulse"); void ov.offsetWidth; ov.classList.add("pulse");
         if (typeof triggerHaptic === "function") triggerHaptic([80, 60, 120, 60, 80]);
         playRecvSound(); setTimeout(() => ov.classList.remove("pulse"), 2650);
@@ -1175,9 +1116,9 @@
             const d = snap.val() || { question: defaultQ, answers: {} }, qText = d.question || defaultQ, answers = d.answers || {};
             const myAns = answers[me.username], partnerAns = answers[activePartner], both = !!(myAns && partnerAns), body = document.getElementById("dpBody"); if (!body) return;
             let html = `<div class="dp-q-box"><h4>${escapeHTML(qText)}</h4></div>`;
-            if (both) html += `<div class="dp-ans-card"><strong>💬 جوابك (${escapeHTML(me.name)}):</strong><p>${escapeHTML(myAns.text)}</p></div><div class="dp-ans-card" style="border-color:#f472b6;"><strong>💜 جواب ${escapeHTML(partnerName)}:</strong><p>${escapeHTML(partnerAns.text)}</p></div><div style="text-align:center; font-size:12px; color:var(--success); font-weight:800; margin-top:8px;">✨ انكشف الجوابان! نلتقي بسؤال جديد باچر 🌙</div>`;
-            else if (myAns) html += `<div class="dp-ans-card"><strong>💬 جوابك المحفوظ:</strong><p>${escapeHTML(myAns.text)}</p></div><div class="dp-ans-card" style="text-align:center; border-style:dashed;"><p style="color:var(--text-dim);">⏳ بانتظار <b>${escapeHTML(partnerName)}</b> يكتب جوابه حتى تنفتح الإجابات سوا!</p></div>`;
-            else html += `${partnerAns ? `<div style="background:rgba(16,185,129,0.16); border:1px solid var(--success); border-radius:14px; padding:9px 12px; font-size:12.5px; color:#6ee7b7; font-weight:700; text-align:center; margin-bottom:10px;">🔒 ${escapeHTML(partnerName)} جاوب بالفعل! اكتب جوابك هسة حتى ينفتح جوابه فوراً</div>` : ""}<textarea id="dpAnswerInp" class="input" rows="3" placeholder="اكتب جوابك بصراحة..."></textarea><button class="btn" style="margin-top:10px;" onclick="window.submitDailyPromptAnswer()">حفظ وكشف الجواب ✨</button>`;
+            if (both) html += `<div class="dp-ans-card"><strong>جوابك (${escapeHTML(me.name)}):</strong><p>${escapeHTML(myAns.text)}</p></div><div class="dp-ans-card" style="border-color:#f472b6;"><strong>جواب ${escapeHTML(partnerName)}:</strong><p>${escapeHTML(partnerAns.text)}</p></div><div style="text-align:center; font-size:12px; color:var(--success); font-weight:800; margin-top:8px;">انكشف الجوابان — نلتقي بسؤال جديد باچر</div>`;
+            else if (myAns) html += `<div class="dp-ans-card"><strong>جوابك المحفوظ:</strong><p>${escapeHTML(myAns.text)}</p></div><div class="dp-ans-card" style="text-align:center; border-style:dashed;"><p style="color:var(--text-dim);">بانتظار <b>${escapeHTML(partnerName)}</b> يكتب جوابه حتى تنفتح الإجابات سوا</p></div>`;
+            else html += `${partnerAns ? `<div style="background:rgba(16,185,129,0.16); border:1px solid var(--success); border-radius:14px; padding:9px 12px; font-size:12.5px; color:#6ee7b7; font-weight:700; text-align:center; margin-bottom:10px;">${escapeHTML(partnerName)} جاوب بالفعل — اكتب جوابك هسة حتى ينفتح جوابه فوراً</div>` : ""}<textarea id="dpAnswerInp" class="input" rows="3" placeholder="اكتب جوابك بصراحة..."></textarea><button class="btn" style="margin-top:10px;" onclick="window.submitDailyPromptAnswer()">حفظ وكشف الجواب</button>`;
             body.innerHTML = html;
         });
     };
@@ -1187,7 +1128,7 @@
         await db.ref(`chats/${activeRoomId}/daily_prompts/${dayKey}`).update({ question: DAILY_PROMPTS_BANK[getTodayPromptIndex()] });
         await db.ref(`chats/${activeRoomId}/daily_prompts/${dayKey}/answers/${me.username}`).set({ text: txt, name: me.name, ts: Date.now() });
         sendNotification(activePartner, `جاوب ${me.name} على سؤال اليوم السري — افتحه وجاوب لتكشفه!`, "💌");
-        window.playScreenEffect("hearts"); showToast("تم حفظ جوابك السري 💌✨");
+        window.playScreenEffect("hearts"); showToast("تم حفظ جوابك السري");
     };
 
     const DRAW_PALETTE = ["#38bdf8", "#f472b6", "#fbbf24", "#34d399", "#a78bfa", "#fb7185", "#ffffff"];
@@ -1205,9 +1146,9 @@
         document.getElementById("liveDrawModal").style.display = "flex";
         document.getElementById("liveDrawColors").innerHTML = DRAW_PALETTE.map(c => `<div class="draw-dot ${c === liveDrawColor ? 'active' : ''}" style="background:${c}" onclick="window.setLiveDrawColor('${c}', this)"></div>`).join("");
         const canvas = document.getElementById("liveDrawCanvas"); canvas.width = 520; canvas.height = 390;
-        drawCtx = canvas.getContext("2d"); drawCtx.fillStyle = "#070c18"; drawCtx.fillRect(0, 0, canvas.width, canvas.height); renderedStrokeIds.clear();
-        if (!canvas._boundV11) {
-            canvas._boundV11 = true;
+        drawCtx = canvas.getContext("2d"); drawCtx.fillStyle = "#070b14"; drawCtx.fillRect(0, 0, canvas.width, canvas.height); renderedStrokeIds.clear();
+        if (!canvas._boundV12) {
+            canvas._boundV12 = true;
             const getNorm = e => { const r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))]; };
             canvas.addEventListener("pointerdown", e => { isPointerDrawing = true; canvas.setPointerCapture?.(e.pointerId); currentStrokePts = [getNorm(e)]; });
             canvas.addEventListener("pointermove", e => {
@@ -1229,22 +1170,22 @@
         if (liveDrawRef) liveDrawRef.off();
         liveDrawRef = db.ref(`chats/${activeRoomId}/live_draw`);
         liveDrawRef.on("child_added", s => { if (renderedStrokeIds.has(s.key)) return; renderedStrokeIds.add(s.key); drawStrokeOnCtx(drawCtx, s.val(), canvas.width, canvas.height); });
-        liveDrawRef.on("value", s => { if (!s.exists()) { renderedStrokeIds.clear(); drawCtx.fillStyle = "#070c18"; drawCtx.fillRect(0, 0, canvas.width, canvas.height); } });
+        liveDrawRef.on("value", s => { if (!s.exists()) { renderedStrokeIds.clear(); drawCtx.fillStyle = "#070b14"; drawCtx.fillRect(0, 0, canvas.width, canvas.height); } });
     };
     window.setLiveDrawColor = (c, el) => { liveDrawColor = c; document.querySelectorAll("#liveDrawColors .draw-dot").forEach(d => d.classList.remove("active")); if (el) el.classList.add("active"); };
     window.clearLiveDrawCanvas = async () => { if (activeRoomId) await db.ref(`chats/${activeRoomId}/live_draw`).remove(); };
-    window.sendLiveDrawToChat = async () => { const c = document.getElementById("liveDrawCanvas"); if (!c || !activeRoomId) return; const d = c.toDataURL("image/jpeg", 0.80); window.closeLiveDrawModal(); await pushMessageSafe("image", d, "🎨 رسمة مشتركة لايف"); showToast("تم إرسال الرسمة بالمحادثة 🎨✨"); };
+    window.sendLiveDrawToChat = async () => { const c = document.getElementById("liveDrawCanvas"); if (!c || !activeRoomId) return; const d = c.toDataURL("image/jpeg", 0.80); window.closeLiveDrawModal(); await pushMessageSafe("image", d, "رسمة مشتركة لايف"); showToast("تم إرسال الرسمة بالمحادثة"); };
 
     window.openTimeCapsuleModal = () => { if (!activeRoomId) return; document.getElementById("capTitleInp").value = ""; document.getElementById("capTextInp").value = ""; document.getElementById("timeCapsuleModal").style.display = "flex"; setTimeout(() => document.getElementById("capTextInp").focus(), 80); };
     window.sendTimeCapsule = async () => {
         const title = (document.getElementById("capTitleInp").value || "").trim(), text = (document.getElementById("capTextInp").value || "").trim(), delayMs = parseInt(document.getElementById("capDelaySel").value || "86400000", 10);
         if (!text) { showToast("اكتب الرسالة داخل الكبسولة أولاً"); return; }
         document.getElementById("timeCapsuleModal").style.display = "none";
-        await pushMessageSafe("capsule", text, "⏳ كبسولة زمن مقفولة", { unlockAt: Date.now() + delayMs, capTitle: title || "كبسولة زمن سرية" });
-        showToast("تم إرسال كبسولة الزمن 🔒⏳");
+        await pushMessageSafe("capsule", text, "كبسولة زمن مقفولة", { unlockAt: Date.now() + delayMs, capTitle: title || "كبسولة زمن سرية" });
+        showToast("تم إرسال كبسولة الزمن");
     };
     function formatCountdown(ms) {
-        if (ms <= 0) return "جاهزة للفتح! 🔓";
+        if (ms <= 0) return "جاهزة للفتح";
         const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
         return d > 0 ? `${d} يوم و ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
     }
@@ -1252,7 +1193,7 @@
         document.querySelectorAll(".capsule-card[data-unlock]").forEach(card => {
             if (card.getAttribute("data-opened") === "1") return;
             const left = parseInt(card.getAttribute("data-unlock") || "0", 10) - Date.now(), tm = card.querySelector(".capsule-timer"), sub = card.querySelector(".capsule-sub");
-            if (left <= 0) { card.classList.add("unlocked"); if (tm) tm.innerText = "🔓 حان وقت الفتح!"; if (sub) sub.innerText = "اضغط الآن لفتح كبسولة الزمن ✨"; }
+            if (left <= 0) { card.classList.add("unlocked"); if (tm) tm.innerText = "حان وقت الفتح"; if (sub) sub.innerText = "اضغط الآن لفتح كبسولة الزمن"; }
             else if (tm) tm.innerText = formatCountdown(left);
         });
     }
@@ -1264,28 +1205,21 @@
     }
     window.setMyQuickMood = async val => { if (!me) return; await db.ref(`users/${me.username}/moodText`).set(val || ""); me.moodText = val || ""; renderMyMoodBar(); showToast(val ? `حالتك الآن: ${val}` : "تمت إزالة حالة المود"); };
 
-    // ==================== 7. نافذة الأغاني المطوّرة (بحث + يوتيوب + MP3 + قصّ المدة / تشغيل للنهاية) ====================
+    // ==================== 5. نافذة الأغاني المطوّرة ====================
     window.openMusicPicker = function (title, onSelect, opts = {}) {
         musicPickerCallback = onSelect;
         musicPickerAllowTrim = opts.allowTrim !== false;
-        musicPreviewIdx = -1;
-        pendingTrimSong = null;
-        document.getElementById("mpTitle").innerText = title || "🎵 اختر أغنية";
+        musicPreviewIdx = -1; pendingTrimSong = null;
+        document.getElementById("mpTitle").innerText = title || "اختر أغنية";
         document.getElementById("musicSearchInp").value = "";
         document.getElementById("mpTrimStage").style.display = "none";
         document.getElementById("musicPickerModal").style.display = "flex";
         window.switchMusicSourceTab("search");
         window.selectMusicCategory(activeMusicCat || "iraqi");
     };
-
-    window.closeMusicPicker = function () {
-        PremAudio.stop("preview"); musicPreviewIdx = -1; pendingTrimSong = null;
-        document.getElementById("musicPickerModal").style.display = "none";
-    };
-
-    window.switchMusicSourceTab = function (tab) {
-        activeMusicSourceTab = tab;
-        PremAudio.stop("preview");
+    window.closeMusicPicker = () => { PremAudio.stop("preview"); musicPreviewIdx = -1; pendingTrimSong = null; document.getElementById("musicPickerModal").style.display = "none"; };
+    window.switchMusicSourceTab = tab => {
+        activeMusicSourceTab = tab; PremAudio.stop("preview");
         document.getElementById("mpTrimStage").style.display = "none";
         document.getElementById("mpSrcSearch").classList.toggle("active", tab === "search");
         document.getElementById("mpSrcYt").classList.toggle("active", tab === "youtube");
@@ -1297,28 +1231,17 @@
 
     function openTrimStageForSong(song) {
         PremAudio.stop("preview");
-        pendingTrimSong = {
-            ...song,
-            playFull: true,
-            startSec: 0,
-            endSec: Math.round(song.durationSec || 30)
-        };
+        pendingTrimSong = { ...song, playFull: true, startSec: 0, endSec: Math.round(song.durationSec || 30) };
         document.getElementById("mpPaneSearch").style.display = "none";
         document.getElementById("mpPaneYt").style.display = "none";
         document.getElementById("mpPaneMp3").style.display = "none";
-
-        const stage = document.getElementById("mpTrimStage");
-        stage.style.display = "block";
-
-        // جلب المدة الحقيقية للصوت إن أمكن
+        document.getElementById("mpTrimStage").style.display = "block";
         if (song.url) {
             const probe = new Audio(song.url);
             probe.addEventListener("loadedmetadata", () => {
                 if (isFinite(probe.duration) && probe.duration > 1 && pendingTrimSong) {
                     const dur = Math.max(5, Math.floor(probe.duration));
-                    pendingTrimSong.durationSec = dur;
-                    pendingTrimSong.endSec = dur;
-                    renderTrimStageUI();
+                    pendingTrimSong.durationSec = dur; pendingTrimSong.endSec = dur; renderTrimStageUI();
                 }
             }, { once: true });
         }
@@ -1328,128 +1251,70 @@
     function renderTrimStageUI() {
         const stage = document.getElementById("mpTrimStage"), s = pendingTrimSong;
         if (!stage || !s) return;
-        const maxDur = Math.max(5, Math.round(s.durationSec || 30));
-        const isYt = !!s.ytId && !s.url;
+        const maxDur = Math.max(5, Math.round(s.durationSec || 30)), isYt = !!s.ytId && !s.url;
         const isPlaying = PremAudio.context === "preview" && !PremAudio.el.paused;
-
         stage.innerHTML = `
             <div class="trim-card">
                 <div class="song-card-inline" style="margin-top:0; margin-bottom:10px;">
                     <img class="song-cover round ${isPlaying ? 'spin' : ''}" src="${escapeHTML(s.cover || '')}" onerror="this.style.display='none'">
-                    <div class="song-meta">
-                        <strong>${escapeHTML(s.title)}</strong>
-                        <span>${escapeHTML(s.artist || (isYt ? "أغنية يوتيوب كاملة" : "ملف صوتي"))} • ${isYt ? "كاملة" : (maxDur + " ثانية")}</span>
-                    </div>
+                    <div class="song-meta"><strong>${escapeHTML(s.title)}</strong><span>${escapeHTML(s.artist || (isYt ? "يوتيوب كامل" : "ملف صوتي"))} • ${isYt ? "كاملة" : (maxDur + " ثانية")}</span></div>
                     ${s.url ? `<button type="button" class="song-play-btn" onclick="window.previewTrimmedSong()">${isPlaying ? "⏸" : "▶"}</button>` : ""}
                 </div>
-
                 <label class="trim-toggle" onclick="window.toggleTrimPlayFull()">
-                    <span>♾️ تشغيل الأغنية للنهاية (بدون قصّ)</span>
-                    <span style="color:${s.playFull ? 'var(--success)' : 'var(--text-dim)'};">${s.playFull ? "مفعّل ✓" : "مخصص ✂️"}</span>
+                    <span>تشغيل الأغنية للنهاية (بدون قصّ)</span>
+                    <span style="color:${s.playFull ? 'var(--success)' : 'var(--text-dim)'};">${s.playFull ? "مفعّل ✓" : "قصّ مخصص"}</span>
                 </label>
-
                 ${(!s.playFull && !isYt) ? `
-                    <div class="trim-range-row">
-                        <span style="min-width:68px;">البداية: ${s.startSec}ث</span>
-                        <input type="range" min="0" max="${Math.max(1, maxDur - 3)}" value="${s.startSec}" oninput="window.updateTrimRange('start', this.value)">
-                    </div>
-                    <div class="trim-range-row">
-                        <span style="min-width:68px;">النهاية: ${s.endSec}ث</span>
-                        <input type="range" min="3" max="${maxDur}" value="${s.endSec}" oninput="window.updateTrimRange('end', this.value)">
-                    </div>
-                    <div style="text-align:center; font-size:11.5px; color:var(--accent); font-weight:700;">المدة المختارة: ${Math.max(3, s.endSec - s.startSec)} ثانية ✂️</div>
-                ` : (!s.playFull && isYt) ? `
-                    <div class="trim-range-row">
-                        <span style="min-width:82px;">ابدأ من (ث):</span>
-                        <input type="number" class="input" min="0" max="600" value="${s.startSec}" oninput="window.updateTrimRange('start', this.value)">
-                    </div>
-                ` : ""}
+                    <div class="trim-range-row"><span style="min-width:68px;">البداية: ${s.startSec}ث</span><input type="range" min="0" max="${Math.max(1, maxDur - 3)}" value="${s.startSec}" oninput="window.updateTrimRange('start', this.value)"></div>
+                    <div class="trim-range-row"><span style="min-width:68px;">النهاية: ${s.endSec}ث</span><input type="range" min="3" max="${maxDur}" value="${s.endSec}" oninput="window.updateTrimRange('end', this.value)"></div>
+                    <div style="text-align:center; font-size:11.5px; color:var(--accent); font-weight:700;">المدة المختارة: ${Math.max(3, s.endSec - s.startSec)} ثانية</div>
+                ` : (!s.playFull && isYt) ? `<div class="trim-range-row"><span style="min-width:82px;">ابدأ من (ث):</span><input type="number" class="input" min="0" max="600" value="${s.startSec}" oninput="window.updateTrimRange('start', this.value)"></div>` : ""}
             </div>
             <div style="display:flex; gap:8px;">
-                <button class="btn" style="flex:1;" onclick="window.confirmTrimmedSongSelection()">اعتماد الأغنية ✅</button>
+                <button class="btn" style="flex:1;" onclick="window.confirmTrimmedSongSelection()">اعتماد الأغنية</button>
                 <button class="btn btn-outline btn-sm" onclick="window.switchMusicSourceTab(activeMusicSourceTab)">رجوع</button>
             </div>`;
     }
-
-    window.toggleTrimPlayFull = function () {
+    window.toggleTrimPlayFull = () => { if (!pendingTrimSong) return; pendingTrimSong.playFull = !pendingTrimSong.playFull; if (!pendingTrimSong.playFull) { const m = Math.max(6, Math.round(pendingTrimSong.durationSec || 30)); pendingTrimSong.startSec = 0; pendingTrimSong.endSec = Math.min(m, 15); } renderTrimStageUI(); };
+    window.updateTrimRange = (which, val) => {
         if (!pendingTrimSong) return;
-        pendingTrimSong.playFull = !pendingTrimSong.playFull;
-        if (!pendingTrimSong.playFull) {
-            const maxDur = Math.max(6, Math.round(pendingTrimSong.durationSec || 30));
-            pendingTrimSong.startSec = 0;
-            pendingTrimSong.endSec = Math.min(maxDur, 15);
-        }
+        const n = Math.max(0, parseInt(val || "0", 10)), m = Math.max(5, Math.round(pendingTrimSong.durationSec || 30));
+        if (which === "start") { pendingTrimSong.startSec = Math.min(n, m - 3); if (pendingTrimSong.endSec <= pendingTrimSong.startSec + 2) pendingTrimSong.endSec = Math.min(m, pendingTrimSong.startSec + 3); }
+        else pendingTrimSong.endSec = Math.max(pendingTrimSong.startSec + 3, Math.min(n, m));
         renderTrimStageUI();
     };
-
-    window.updateTrimRange = function (which, val) {
-        if (!pendingTrimSong) return;
-        const n = Math.max(0, parseInt(val || "0", 10));
-        const maxDur = Math.max(5, Math.round(pendingTrimSong.durationSec || 30));
-        if (which === "start") {
-            pendingTrimSong.startSec = Math.min(n, maxDur - 3);
-            if (pendingTrimSong.endSec <= pendingTrimSong.startSec + 2) pendingTrimSong.endSec = Math.min(maxDur, pendingTrimSong.startSec + 3);
-        } else {
-            pendingTrimSong.endSec = Math.max(pendingTrimSong.startSec + 3, Math.min(n, maxDur));
-        }
-        renderTrimStageUI();
-    };
-
-    window.previewTrimmedSong = async function () {
+    window.previewTrimmedSong = async () => {
         if (!pendingTrimSong?.url) return;
-        if (PremAudio.context === "preview" && !PremAudio.el.paused) {
-            PremAudio.stop("preview"); renderTrimStageUI(); return;
-        }
-        await PremAudio.play(pendingTrimSong.url, "preview", {
-            loop: false,
-            clipStart: pendingTrimSong.playFull ? 0 : pendingTrimSong.startSec,
-            clipEnd: pendingTrimSong.playFull ? 0 : pendingTrimSong.endSec,
-            playFull: pendingTrimSong.playFull
-        });
+        if (PremAudio.context === "preview" && !PremAudio.el.paused) { PremAudio.stop("preview"); renderTrimStageUI(); return; }
+        await PremAudio.play(pendingTrimSong.url, "preview", { loop: false, clipStart: pendingTrimSong.playFull ? 0 : pendingTrimSong.startSec, clipEnd: pendingTrimSong.playFull ? 0 : pendingTrimSong.endSec, playFull: pendingTrimSong.playFull });
         renderTrimStageUI();
     };
-
-    window.confirmTrimmedSongSelection = function () {
-        const song = pendingTrimSong, cb = musicPickerCallback;
-        window.closeMusicPicker();
-        if (song && typeof cb === "function") cb(song);
-    };
-
-    window.confirmYoutubeSongPick = function () {
-        const url = document.getElementById("mpYtUrlInp").value.trim();
-        const ytId = extractYoutubeId(url);
+    window.confirmTrimmedSongSelection = () => { const s = pendingTrimSong, cb = musicPickerCallback; window.closeMusicPicker(); if (s && typeof cb === "function") cb(s); };
+    window.confirmYoutubeSongPick = () => {
+        const ytId = extractYoutubeId(document.getElementById("mpYtUrlInp").value.trim());
         if (!ytId) { showToast("الرابط غير صحيح — الصق رابط يوتيوب صحيح"); return; }
         const title = document.getElementById("mpYtTitleInp").value.trim() || "أغنية يوتيوب كاملة";
-        const song = {
-            title, artist: "YouTube كامل 🎬",
-            cover: `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`,
-            ytId, url: "", source: "youtube", playFull: true, startSec: 0, durationSec: 60
-        };
+        const song = { title, artist: "YouTube كامل", cover: `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`, ytId, url: "", source: "youtube", playFull: true, startSec: 0, durationSec: 60 };
         if (musicPickerAllowTrim) openTrimStageForSong(song);
         else { const cb = musicPickerCallback; window.closeMusicPicker(); if (typeof cb === "function") cb(song); }
     };
-
-    window.handleLocalMp3Upload = function (e) {
+    window.handleLocalMp3Upload = e => {
         const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-        if (f.size > 2.6 * 1024 * 1024) { showToast("الحد الأقصى للملف الصوتي 2.5 ميجابايت حتى يفتح بسرعة"); return; }
-        const stEl = document.getElementById("mpLocalStatus");
-        if (stEl) stEl.innerText = "⏳ جاري تجهيز الملف الصوتي...";
+        if (f.size > 2.6 * 1024 * 1024) { showToast("الحد الأقصى للملف الصوتي 2.5 ميجابايت"); return; }
+        const stEl = document.getElementById("mpLocalStatus"); if (stEl) stEl.innerText = "جاري تجهيز الملف الصوتي...";
         const r = new FileReader();
         r.onload = ev => {
             const customTitle = (document.getElementById("mpLocalTitleInp")?.value || "").trim();
-            const cleanName = customTitle || f.name.replace(/\.[^.]+$/, "").slice(0, 42);
-            const song = { title: cleanName, artist: "ملف MP3 مخصص 🎧", cover: "", url: ev.target.result, source: "mp3", playFull: true, startSec: 0, durationSec: 30 };
-            openTrimStageForSong(song);
+            openTrimStageForSong({ title: customTitle || f.name.replace(/\.[^.]+$/, "").slice(0, 42), artist: "ملف MP3 مخصص", cover: "", url: ev.target.result, source: "mp3", playFull: true, startSec: 0, durationSec: 30 });
         };
         r.readAsDataURL(f);
     };
-
-    window.selectMusicCategory = async function (catId) {
+    window.selectMusicCategory = async catId => {
         activeMusicCat = catId;
         document.querySelectorAll("#musicCatsBar .pack-tab-pill").forEach(b => b.classList.toggle("active", b.getAttribute("data-mcat") === catId));
         PremAudio.stop("preview"); musicPreviewIdx = -1;
         const box = document.getElementById("musicResultsList");
-        if (!musicCatCache[catId]) box.innerHTML = `<div style="text-align:center; padding:26px; color:var(--text-dim); font-size:13px;">⏳ جاري جلب الاقتراحات الموسيقية...</div>`;
+        if (!musicCatCache[catId]) box.innerHTML = `<div style="text-align:center; padding:26px; color:var(--text-dim); font-size:13px;">جاري جلب الاقتراحات الموسيقية...</div>`;
         try {
             const list = await loadSuggestedCategory(catId);
             if (activeMusicCat !== catId) return;
@@ -1458,14 +1323,12 @@
             renderMusicSearchResults();
         } catch { box.innerHTML = `<div style="text-align:center; padding:24px; color:#fb7185; font-size:13px;">تأكد من اتصال النت وحاول مرة ثانية</div>`; }
     };
-
-    window.runMusicSearch = async function () {
-        const q = (document.getElementById("musicSearchInp").value || "").trim();
-        const box = document.getElementById("musicResultsList");
+    window.runMusicSearch = async () => {
+        const q = (document.getElementById("musicSearchInp").value || "").trim(), box = document.getElementById("musicResultsList");
         if (!q) { window.selectMusicCategory(activeMusicCat || "iraqi"); return; }
         document.querySelectorAll("#musicCatsBar .pack-tab-pill").forEach(b => b.classList.remove("active"));
         PremAudio.stop("preview"); musicPreviewIdx = -1;
-        box.innerHTML = `<div style="text-align:center; padding:26px; color:var(--text-dim); font-size:13px;">⏳ جاري البحث عن «${escapeHTML(q)}»...</div>`;
+        box.innerHTML = `<div style="text-align:center; padding:26px; color:var(--text-dim); font-size:13px;">جاري البحث عن «${escapeHTML(q)}»...</div>`;
         try {
             const list = await searchItunesSongs(q, 14);
             lastMusicResults = list;
@@ -1473,7 +1336,6 @@
             renderMusicSearchResults();
         } catch { box.innerHTML = `<div style="text-align:center; padding:26px; color:#fb7185; font-size:13px;">تعذر البحث حالياً</div>`; }
     };
-
     function renderMusicSearchResults() {
         const box = document.getElementById("musicResultsList"); if (!box) return;
         box.innerHTML = lastMusicResults.map((s, i) => {
@@ -1482,25 +1344,21 @@
         }).join("");
     }
     window.previewMusicResult = async idx => { const s = lastMusicResults[idx]; if (!s) return; if (musicPreviewIdx === idx && PremAudio.context === "preview" && !PremAudio.el.paused) { PremAudio.stop("preview"); musicPreviewIdx = -1; renderMusicSearchResults(); return; } musicPreviewIdx = idx; await PremAudio.play(s.url, "preview"); renderMusicSearchResults(); };
-    window.pickMusicResult = idx => {
-        const s = lastMusicResults[idx]; if (!s) return;
-        if (musicPickerAllowTrim) openTrimStageForSong(s);
-        else { const cb = musicPickerCallback; window.closeMusicPicker(); if (typeof cb === "function") cb({ ...s, playFull: true, startSec: 0 }); }
-    };
+    window.pickMusicResult = idx => { const s = lastMusicResults[idx]; if (!s) return; if (musicPickerAllowTrim) openTrimStageForSong(s); else { const cb = musicPickerCallback; window.closeMusicPicker(); if (typeof cb === "function") cb({ ...s, playFull: true, startSec: 0 }); } };
 
-    // ==================== 8. أغنية البروفايل + نسمع سوا + الشعلة + المختفي + الملاحظات ====================
+    // ==================== 6. أغنية البروفايل + نسمع سوا + الشعلة + المختفي + الملاحظات ====================
     function songBadgeMeta(song) {
         if (!song) return "";
-        if (song.ytId && !song.url) return "🎬 يوتيوب كامل";
-        if (song.playFull) return "♾️ كاملة";
-        if (typeof song.startSec === "number" && typeof song.endSec === "number") return `✂️ ${song.startSec}ث–${song.endSec}ث`;
+        if (song.ytId && !song.url) return "يوتيوب كامل";
+        if (song.playFull) return "كاملة";
+        if (typeof song.startSec === "number" && typeof song.endSec === "number") return `${song.startSec}ث–${song.endSec}ث`;
         return "";
     }
 
     function renderSongCardInto(containerId, song, ctxKey, isMine) {
         const box = document.getElementById(containerId); if (!box) return;
         if (!song || (!song.url && !song.ytId)) {
-            box.innerHTML = isMine ? `<button type="button" class="btn btn-sm btn-outline" style="width:100%; margin:4px 0 8px; border-style:dashed;" onclick="window.pickMyProfileSong()">🎵 إضافة أغنيتك المفضلة للبروفايل</button>` : "";
+            box.innerHTML = isMine ? `<button type="button" class="btn btn-sm btn-outline" style="width:100%; margin:4px 0 8px; border-style:dashed;" onclick="window.pickMyProfileSong()">إضافة أغنيتك المفضلة للبروفايل</button>` : "";
             box._songObj = null; return;
         }
         const isYtOnly = !!song.ytId && !song.url;
@@ -1520,54 +1378,38 @@
         box._songObj = song;
     }
 
-    window.openProfileYtEmbed = function (containerId) {
+    window.openProfileYtEmbed = containerId => {
         const box = document.getElementById(containerId), s = box?._songObj, slot = document.getElementById(containerId + "_ytSlot");
         if (!s?.ytId || !slot) return;
         if (slot.innerHTML) { slot.innerHTML = ""; return; }
-        const st = Math.max(0, s.startSec || 0);
-        slot.innerHTML = `<div class="yt-frame-wrap" style="margin-top:8px;"><iframe src="https://www.youtube.com/embed/${encodeURIComponent(s.ytId)}?autoplay=1&start=${st}&rel=0&playsinline=1" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>`;
+        slot.innerHTML = `<div class="yt-frame-wrap" style="margin-top:8px;"><iframe src="https://www.youtube.com/embed/${encodeURIComponent(s.ytId)}?autoplay=1&start=${Math.max(0, s.startSec || 0)}&rel=0&playsinline=1" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>`;
     };
-
     window.toggleProfileSongPlay = async (ctxKey, containerId) => {
         const b = document.getElementById(containerId), s = b?._songObj; if (!s?.url) return;
-        await PremAudio.toggle(s.url, ctxKey, {
-            loop: true,
-            clipStart: s.playFull ? 0 : (s.startSec || 0),
-            clipEnd: s.playFull ? 0 : (s.endSec || 0),
-            playFull: s.playFull !== false
-        });
+        await PremAudio.toggle(s.url, ctxKey, { loop: true, clipStart: s.playFull ? 0 : (s.startSec || 0), clipEnd: s.playFull ? 0 : (s.endSec || 0), playFull: s.playFull !== false });
         renderSongCardInto(containerId, s, ctxKey, containerId === "myProfileSongSlot");
     };
-    window.pickMyProfileSong = () => window.openMusicPicker("🎵 اختر أغنية لبروفايلك", async s => { if (!me) return; await db.ref(`users/${me.username}/profileSong`).set(s); me.profileSong = s; renderSongCardInto("myProfileSongSlot", s, "profile_me", true); showToast(`تم تثبيت «${s.title}» 🎵✨`); });
+    window.pickMyProfileSong = () => window.openMusicPicker("اختر أغنية لبروفايلك", async s => { if (!me) return; await db.ref(`users/${me.username}/profileSong`).set(s); me.profileSong = s; renderSongCardInto("myProfileSongSlot", s, "profile_me", true); showToast(`تم تثبيت «${s.title}»`); });
     window.removeMyProfileSong = async () => { if (!me) return; PremAudio.stop("profile_me"); await db.ref(`users/${me.username}/profileSong`).remove(); me.profileSong = null; renderSongCardInto("myProfileSongSlot", null, "profile_me", true); showToast("تمت الإزالة"); };
 
     window.startListenTogetherPicker = () => {
         if (activeChatType !== "dm" || !activeRoomId) return;
-        window.openMusicPicker("🎧 اختر أغنية نسمعها سوا", async song => {
+        window.openMusicPicker("اختر أغنية نسمعها سوا", async song => {
             if (activeChatType !== "dm" || !activeRoomId) return;
             if (song.ytId && !song.url) {
-                // إذا اختار رابط يوتيوب كامل -> يشغّله بميزة يوتيوب سوا لايف فوراً
                 ytPlayerMinimized = false;
                 await db.ref(`chats/${activeRoomId}/yt_together`).set({ ytId: song.ytId, title: song.title, startedAt: Date.now(), offset: song.startSec || 0, by: me.name, rev: Date.now() });
-                showToast(`📺 تم تشغيل الأغنية الكاملة: ${song.title}`);
-                return;
+                showToast(`تم تشغيل: ${song.title}`); return;
             }
             const now = Date.now();
             await db.ref(`chats/${activeRoomId}/listen_together`).set({
                 title: song.title, artist: song.artist, cover: song.cover || "", url: song.url,
                 playing: true, startedAt: now, offset: song.playFull ? 0 : (song.startSec || 0),
-                clipStart: song.playFull ? 0 : (song.startSec || 0),
-                clipEnd: song.playFull ? 0 : (song.endSec || 0),
+                clipStart: song.playFull ? 0 : (song.startSec || 0), clipEnd: song.playFull ? 0 : (song.endSec || 0),
                 playFull: song.playFull !== false, by: me.name, byUser: me.username, ts: now
             });
-            PremAudio.play(song.url, "listen", {
-                loop: true,
-                startAt: song.playFull ? 0 : (song.startSec || 0),
-                clipStart: song.playFull ? 0 : (song.startSec || 0),
-                clipEnd: song.playFull ? 0 : (song.endSec || 0),
-                playFull: song.playFull !== false
-            });
-            showToast(`🎧 بدأت جلسة استماع: ${song.title}`);
+            PremAudio.play(song.url, "listen", { loop: true, startAt: song.playFull ? 0 : (song.startSec || 0), clipStart: song.playFull ? 0 : (song.startSec || 0), clipEnd: song.playFull ? 0 : (song.endSec || 0), playFull: song.playFull !== false });
+            showToast(`بدأت جلسة استماع: ${song.title}`);
         });
     };
 
@@ -1584,8 +1426,7 @@
     };
     window.syncListenTogetherTap = () => {
         if (!currentListenData?.url) return;
-        const d = currentListenData;
-        const el = d.playing ? Math.max(0, (Date.now() - (d.startedAt || Date.now())) / 1000) : 0;
+        const d = currentListenData, el = d.playing ? Math.max(0, (Date.now() - (d.startedAt || Date.now())) / 1000) : 0;
         PremAudio.play(d.url, "listen", { loop: true, startAt: (d.offset || 0) + el, clipStart: d.clipStart || 0, clipEnd: d.clipEnd || 0, playFull: d.playFull !== false }).then(ok => { if (ok) renderListenTogetherBar(d, false); });
     };
     window.stopListenTogether = async () => { PremAudio.stop("listen"); if (activeChatType === "dm" && activeRoomId) await db.ref(`chats/${activeRoomId}/listen_together`).remove(); };
@@ -1596,7 +1437,7 @@
         const isPlaying = data.playing && PremAudio.context === "listen" && !PremAudio.el.paused;
         if (pane) pane.classList.toggle("music-glow-on", isPlaying);
         bar.classList.add("open");
-        bar.innerHTML = `<img class="song-cover round ${isPlaying ? 'spin' : ''}" style="width:36px; height:36px;" src="${escapeHTML(data.cover || '')}" onerror="this.style.display='none'"><div class="lt-info"><strong><span class="eq-bars ${isPlaying ? 'on' : ''}"><i></i><i></i><i></i></span> ${escapeHTML(data.title)}</strong><span>🎧 نسمع سوا • ${escapeHTML(data.artist || "")} (${escapeHTML(data.by || "")})</span></div>${needsTap ? `<button type="button" class="lt-sync-pill" onclick="window.syncListenTogetherTap()">▶ استمع الآن</button>` : `<button type="button" class="lt-btn" onclick="window.toggleListenTogetherPlay()">${data.playing ? "⏸" : "▶"}</button>`}<button type="button" class="lt-btn" onclick="window.startListenTogetherPicker()">🎵</button><button type="button" class="lt-btn" onclick="window.stopListenTogether()">✕</button>`;
+        bar.innerHTML = `<img class="song-cover round ${isPlaying ? 'spin' : ''}" style="width:36px; height:36px;" src="${escapeHTML(data.cover || '')}" onerror="this.style.display='none'"><div class="lt-info"><strong><span class="eq-bars ${isPlaying ? 'on' : ''}"><i></i><i></i><i></i></span> ${escapeHTML(data.title)}</strong><span>نسمع سوا • ${escapeHTML(data.artist || "")} (${escapeHTML(data.by || "")})</span></div>${needsTap ? `<button type="button" class="lt-sync-pill" onclick="window.syncListenTogetherTap()">استمع الآن</button>` : `<button type="button" class="lt-btn" onclick="window.toggleListenTogetherPlay()">${data.playing ? "⏸" : "▶"}</button>`}<button type="button" class="lt-btn" onclick="window.startListenTogetherPicker()">♪</button><button type="button" class="lt-btn" onclick="window.stopListenTogether()">✕</button>`;
     }
     function detachListenTogether() { if (listenRef) { listenRef.off(); listenRef = null; } currentListenData = null; PremAudio.stop("listen"); renderListenTogetherBar(null); }
 
@@ -1608,7 +1449,7 @@
         const today = getLocalDayKey(), cur = allStreaksMap[roomId];
         if (!cur?.lastDay) { await db.ref(`chat_streaks/${roomId}`).set({ count: 1, lastDay: today, updatedAt: Date.now() }).catch(() => {}); return; }
         const gap = diffDays(cur.lastDay, today);
-        if (gap === 1) { const next = (cur.count || 1) + 1; await db.ref(`chat_streaks/${roomId}`).set({ count: next, lastDay: today, updatedAt: Date.now() }).catch(() => {}); showToast(`🔥 شعلة التواصل وصلت ${next} أيام!`); }
+        if (gap === 1) { const next = (cur.count || 1) + 1; await db.ref(`chat_streaks/${roomId}`).set({ count: next, lastDay: today, updatedAt: Date.now() }).catch(() => {}); showToast(`شعلة التواصل وصلت ${next} أيام 🔥`); }
         else if (gap > 1) await db.ref(`chat_streaks/${roomId}`).set({ count: 1, lastDay: today, updatedAt: Date.now() }).catch(() => {});
     }
 
@@ -1618,21 +1459,25 @@
         if (pane) pane.classList.toggle("vanish-on", isVanishActive);
         if (banner) banner.classList.toggle("open", isVanishActive);
         if (menuBtn) menuBtn.classList.toggle("vanish-active", isVanishActive);
-        if (item) item.innerHTML = isVanishActive ? "👻 &nbsp; إيقاف الوضع المختفي" : "👻 &nbsp; تفعيل الوضع المختفي";
+        if (item) {
+            const lbl = item.querySelector("span:last-child");
+            if (lbl) lbl.innerText = isVanishActive ? "إيقاف المختفي" : "الوضع المختفي";
+            item.classList.toggle("active-tile", isVanishActive);
+        }
     }
     window.toggleVanishMode = async () => {
         if (activeChatType !== "dm" || !activeRoomId) return;
         const rc = activeRoomId, next = !isVanishActive;
         await db.ref(`chats/${rc}/vanish_mode`).set({ active: next, by: me.name, ts: Date.now() });
-        if (!next) { await cleanupVanishMessages(rc, true); showToast("تم إيقاف الوضع المختفي ومسح رسائله 👻"); }
-        else showToast("👻 تم تفعيل الوضع المختفي لكليكما");
+        if (!next) { await cleanupVanishMessages(rc, true); showToast("تم إيقاف الوضع المختفي ومسح رسائله"); }
+        else showToast("تم تفعيل الوضع المختفي لكليكما");
     };
     async function cleanupVanishMessages(roomId, delAll) {
         if (!roomId || !me) return;
         try {
             const snap = await db.ref(`chats/${roomId}/messages`).once("value"), upd = {}; let c = 0;
             snap.forEach(ch => { const m = ch.val(); if (m?.vanish && (delAll || m.seen || m.sender !== me.username)) { upd[ch.key] = null; c++; } });
-            if (c > 0) { await db.ref(`chats/${roomId}/messages`).update(upd); await db.ref(`chat_meta/${roomId}/lastMsg`).set("👻 اختفت رسائل الوضع المختفي").catch(() => {}); }
+            if (c > 0) { await db.ref(`chats/${roomId}/messages`).update(upd); await db.ref(`chat_meta/${roomId}/lastMsg`).set("اختفت رسائل الوضع المختفي").catch(() => {}); }
         } catch {}
     }
     function detachVanishMode(clean = false) { const rc = activeRoomId, was = isVanishActive; if (vanishRef) { vanishRef.off(); vanishRef = null; } applyVanishUI(false); if (clean && was && rc) cleanupVanishMessages(rc, false); }
@@ -1641,7 +1486,7 @@
     function renderNotesStrip() {
         const strip = document.getElementById("notesStrip"); if (!strip || !me) return;
         strip.innerHTML = "";
-        const bHTML = n => !n ? `<div class="note-bubble empty-note">ملاحظة...</div>` : `<div class="note-bubble">${n.text ? `<div class="note-bubble-txt">${escapeHTML(n.text)}</div>` : ""}${(n.song?.title || n.music) ? `<div class="note-music-mini">🎵 <span>${escapeHTML(n.song?.title || n.music)}</span></div>` : ""}</div>`;
+        const bHTML = n => !n ? `<div class="note-bubble empty-note">ملاحظة...</div>` : `<div class="note-bubble">${n.text ? `<div class="note-bubble-txt">${escapeHTML(n.text)}</div>` : ""}${(n.song?.title || n.music) ? `<div class="note-music-mini">♪ <span>${escapeHTML(n.song?.title || n.music)}</span></div>` : ""}</div>`;
         const myNote = getActiveNote(me.username), myCnt = myNote?.likes ? Object.keys(myNote.likes).length : 0;
         const myItem = document.createElement("div"); myItem.className = "note-item"; myItem.onclick = () => window.openMyNoteCompose();
         const mySlot = document.createElement("div"); mySlot.className = "note-bubble-slot"; mySlot.innerHTML = bHTML(myNote);
@@ -1664,9 +1509,9 @@
     }
     function renderNoteSongDraft() {
         const s = document.getElementById("noteSongDraftSlot"); if (!s) return;
-        s.innerHTML = !draftNoteSong ? `<button type="button" class="btn btn-sm btn-outline" style="width:100%; border-style:dashed;" onclick="window.pickNoteSong()">🎵 اختيار أغنية للملاحظة (مع القصّ / MP3)</button>` : `<div class="song-card-inline" style="margin-top:0;"><img class="song-cover" src="${escapeHTML(draftNoteSong.cover || '')}" onerror="this.style.display='none'"><div class="song-meta"><strong>${escapeHTML(draftNoteSong.title)}</strong><span>${escapeHTML(draftNoteSong.artist || "")} ${songBadgeMeta(draftNoteSong) ? "• " + songBadgeMeta(draftNoteSong) : ""}</span></div><button type="button" class="pack-mini-btn danger" onclick="window.clearNoteSongDraft()">✕</button></div>`;
+        s.innerHTML = !draftNoteSong ? `<button type="button" class="btn btn-sm btn-outline" style="width:100%; border-style:dashed;" onclick="window.pickNoteSong()">اختيار أغنية للملاحظة</button>` : `<div class="song-card-inline" style="margin-top:0;"><img class="song-cover" src="${escapeHTML(draftNoteSong.cover || '')}" onerror="this.style.display='none'"><div class="song-meta"><strong>${escapeHTML(draftNoteSong.title)}</strong><span>${escapeHTML(draftNoteSong.artist || "")} ${songBadgeMeta(draftNoteSong) ? "• " + songBadgeMeta(draftNoteSong) : ""}</span></div><button type="button" class="pack-mini-btn danger" onclick="window.clearNoteSongDraft()">✕</button></div>`;
     }
-    window.pickNoteSong = () => window.openMusicPicker("🎵 اختر أغنية لملاحظتك", s => { draftNoteSong = s; renderNoteSongDraft(); });
+    window.pickNoteSong = () => window.openMusicPicker("اختر أغنية لملاحظتك", s => { draftNoteSong = s; renderNoteSongDraft(); });
     window.clearNoteSongDraft = () => { draftNoteSong = null; renderNoteSongDraft(); };
     window.openMyNoteCompose = () => {
         if (!me) return;
@@ -1683,7 +1528,7 @@
         if (!me) return; const text = document.getElementById("noteTextInput").value.trim().slice(0, 60);
         if (!text && !draftNoteSong) { showToast("اكتب ملاحظتك أو اختر أغنية"); return; }
         await db.ref(`notes/${me.username}`).set({ text, music: draftNoteSong ? `${draftNoteSong.title} - ${draftNoteSong.artist}` : "", song: draftNoteSong || null, ts: Date.now(), expiresAt: Date.now() + 86400000 });
-        document.getElementById("noteComposeModal").style.display = "none"; playSendSound(); showToast("تم نشر ملاحظتك لمدة 24 ساعة ✨");
+        document.getElementById("noteComposeModal").style.display = "none"; playSendSound(); showToast("تم نشر ملاحظتك لمدة 24 ساعة");
     };
     window.deleteMyNote = async () => { if (!me) return; await db.ref(`notes/${me.username}`).remove(); document.getElementById("noteComposeModal").style.display = "none"; showToast("تم الحذف"); };
     window.closeFriendNoteView = () => { PremAudio.stop("note"); document.getElementById("noteViewModal").style.display = "none"; };
@@ -1693,12 +1538,12 @@
         setAvatarStyle(document.getElementById("nvAvatar"), u, true);
         document.getElementById("nvName").innerHTML = `${renderStyledUserName(u)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}`;
         document.getElementById("nvTime").innerText = "نُشرت الساعة " + formatTime(n.ts);
-        document.getElementById("nvText").innerText = n.text || "🎵 يشاركك هذه الأغنية";
+        document.getElementById("nvText").innerText = n.text || "يشاركك هذه الأغنية";
         const mWrap = document.getElementById("nvMusicWrap");
         if (n.song && (n.song.url || n.song.ytId)) {
             if (!skipAuto && n.song.url) PremAudio.play(n.song.url, "note", { loop: true, clipStart: n.song.playFull ? 0 : (n.song.startSec || 0), clipEnd: n.song.playFull ? 0 : (n.song.endSec || 0), playFull: n.song.playFull !== false });
             renderSongCardInto("nvMusicWrap", n.song, "note", false);
-        } else if (n.music) mWrap.innerHTML = `<div style="display:inline-flex; margin-top:8px; padding:4px 12px; border-radius:99px; background:rgba(56,189,248,0.14); color:var(--accent); font-size:12px; font-weight:700;">🎵 ${escapeHTML(n.music)}</div>`;
+        } else if (n.music) mWrap.innerHTML = `<div style="display:inline-flex; margin-top:8px; padding:4px 12px; border-radius:99px; background:rgba(56,189,248,0.14); color:var(--accent); font-size:12px; font-weight:700;">♪ ${escapeHTML(n.music)}</div>`;
         else mWrap.innerHTML = "";
         const myEm = n.likes?.[me.username]?.em || "";
         document.getElementById("nvReactsRow").innerHTML = ["❤️", "🔥", "😂", "😍", "🥺"].map(em => `<button type="button" class="note-qr-btn ${myEm === em ? 'mine' : ''}" onclick="window.reactToViewedNote('${em}')">${em}</button>`).join("");
@@ -1717,22 +1562,21 @@
         await db.ref(`chats/${rId}/messages/${mId}`).set({
             id: mId, sender: me.username, senderName: me.name, type: "text",
             content: enc.e2e ? "" : txt, e2e: enc.e2e, encContent: enc.e2e ? enc.data : "", seen: false, ts: now,
-            replyTo: { sender: viewingNoteUser, senderName: u.name, preview: "💭 ملاحظة: " + (n?.text || n?.song?.title || "") }
+            replyTo: { sender: viewingNoteUser, senderName: u.name, preview: "ملاحظة: " + (n?.text || n?.song?.title || "") }
         });
         await db.ref(`user_contacts/${viewingNoteUser}/${me.username}`).update({ addedAt: now });
         await db.ref(`chat_meta/${rId}`).set({ lastMsg: encPrev.e2e ? "🔒 رسالة مشفّرة" : ("رد على ملاحظتك: " + txt), lastMsgEnc: encPrev.e2e ? encPrev.data : "", lastSender: me.username, lastTs: now, unreadFor: viewingNoteUser });
-        bumpDmStreak(rId); sendNotification(viewingNoteUser, `ردّ ${me.name} على ملاحظتك: "${txt.slice(0, 30)}"`, "💭");
-        inp.value = ""; window.closeFriendNoteView(); playSendSound(); showToast("تم إرسال ردك للخاص ✅");
+        bumpDmStreak(rId); sendNotification(viewingNoteUser, `ردّ ${me.name} على ملاحظتك: "${txt.slice(0, 30)}"`, "💬");
+        inp.value = ""; window.closeFriendNoteView(); playSendSound(); showToast("تم إرسال ردك للخاص");
     };
 
-    // موسيقى الستوري المطوّرة (مع القصّ والتشغيل للنهاية ويوتيوب)
     function renderStorySongDraft() {
         const s = document.getElementById("storyMusicDraftSlot"); if (!s) return;
         s.innerHTML = !draftStorySong
-            ? `<button type="button" class="btn btn-sm btn-outline" style="width:100%; border-style:dashed;" onclick="window.pickStorySong()">🎵 إضافة أغنية للستوري (قصّ المدة أو للنهاية)</button>`
+            ? `<button type="button" class="btn btn-sm btn-outline" style="width:100%; border-style:dashed;" onclick="window.pickStorySong()">إضافة أغنية للستوري (قصّ المدة أو للنهاية)</button>`
             : `<div class="song-card-inline" style="margin-top:0;"><img class="song-cover" src="${escapeHTML(draftStorySong.cover || '')}" onerror="this.style.display='none'"><div class="song-meta"><strong>${escapeHTML(draftStorySong.title)}</strong><span>${escapeHTML(draftStorySong.artist || "")} • ${songBadgeMeta(draftStorySong)}</span></div><button type="button" class="pack-mini-btn danger" onclick="window.clearStorySongDraft()">✕</button></div>`;
     }
-    window.pickStorySong = () => window.openMusicPicker("🎵 اختر أغنية لقصتك", s => { draftStorySong = s; renderStorySongDraft(); });
+    window.pickStorySong = () => window.openMusicPicker("اختر أغنية لقصتك", s => { draftStorySong = s; renderStorySongDraft(); });
     window.clearStorySongDraft = () => { draftStorySong = null; renderStorySongDraft(); };
     window.toggleStoryMusicMute = e => {
         if (e) e.stopPropagation();
@@ -1746,30 +1590,29 @@
         if (btn) btn.innerText = storyMusicMuted ? "🔇" : "🔊";
     };
 
-    // ==================== 9. التأثيرات، التخصيص (مع إطارات الصور)، الخلفية وحزم الملصقات ====================
+    // ==================== 7. التأثيرات، التخصيص، الخلفية وحزم الملصقات ====================
     window.playScreenEffect = function (fxKey) {
         const fx = MSG_EFFECTS[fxKey], stage = document.getElementById("fxStage"); if (!fx || !stage) return;
         const fromTop = fxKey === "snow" || fxKey === "confetti", frag = document.createDocumentFragment(), nodes = [];
-        for (let i = 0; i < 18; i++) {
+        for (let i = 0; i < 16; i++) {
             const p = document.createElement("span"); p.className = "fx-p"; p.innerText = fx.items[i % fx.items.length];
             p.style.left = (8 + Math.random() * 84) + "vw"; p.style.top = (fromTop ? (-6 - Math.random() * 14) : (78 + Math.random() * 18)) + "vh";
-            p.style.fontSize = (22 + Math.random() * 15) + "px"; p.style.animationDelay = (Math.random() * 0.32) + "s";
+            p.style.fontSize = (22 + Math.random() * 14) + "px"; p.style.animationDelay = (Math.random() * 0.3) + "s";
             p.style.setProperty("--dx", ((Math.random() - 0.5) * 140).toFixed(0) + "px");
             p.style.setProperty("--dy", (fromTop ? (window.innerHeight * 0.92) : -(window.innerHeight * (0.55 + Math.random() * 0.35))).toFixed(0) + "px");
             p.style.setProperty("--rot", ((Math.random() - 0.5) * 90).toFixed(0) + "deg");
-            p.style.setProperty("--dur", (1.6 + Math.random() * 0.9).toFixed(2) + "s");
+            p.style.setProperty("--dur", (1.6 + Math.random() * 0.85).toFixed(2) + "s");
             frag.appendChild(p); nodes.push(p);
         }
-        stage.appendChild(frag); setTimeout(() => nodes.forEach(n => n.remove()), 2900);
+        stage.appendChild(frag); setTimeout(() => nodes.forEach(n => n.remove()), 2800);
     };
 
     window.toggleEffectPicker = force => { if (typeof toggleChatExtras === "function") toggleChatExtras(force); };
     window.selectMsgEffect = fxKey => {
         selectedMsgEffect = fxKey || "";
         document.querySelectorAll("#effectPickerRow .fx-opt-btn").forEach(b => b.classList.toggle("active", b.getAttribute("data-fx") === selectedMsgEffect));
-        const btn = document.getElementById("fxToggleBtn");
-        if (btn) { btn.innerText = selectedMsgEffect ? MSG_EFFECTS[selectedMsgEffect].icon : (scratchModeActive ? "🪄" : "✨"); btn.classList.toggle("accent", !!selectedMsgEffect || scratchModeActive); }
-        if (selectedMsgEffect) { window.playScreenEffect(selectedMsgEffect); if (typeof toggleChatExtras === "function") toggleChatExtras(false); showToast(`تأثير ${MSG_EFFECTS[selectedMsgEffect].label} جاهز ✨`); }
+        syncFxButtonState();
+        if (selectedMsgEffect) { window.playScreenEffect(selectedMsgEffect); if (typeof toggleChatExtras === "function") toggleChatExtras(false); showToast(`تأثير ${MSG_EFFECTS[selectedMsgEffect].label} جاهز`); }
     };
 
     window.openPremiumModal = () => {
@@ -1780,9 +1623,9 @@
         document.getElementById("premColorGrid").innerHTML = Object.entries(ACCENT_PALETTES).map(([k, p]) => `<div class="prem-color-dot ${col === k ? 'active' : ''}" style="background:${p.grad}" onclick="window.setMyAccentColor('${k}')">${p.label}</div>`).join("");
         document.getElementById("premiumModal").style.display = "flex";
     };
-    window.setMyAvatarFrame = async fr => { if (!me) return; await db.ref(`users/${me.username}/avatarFrame`).set(fr || ""); me.avatarFrame = fr || ""; window.openPremiumModal(); renderMyProfilePage(); showToast(fr ? "تم تفعيل إطار الصورة الفخم ✨" : "تمت إزالة الإطار"); };
+    window.setMyAvatarFrame = async fr => { if (!me) return; await db.ref(`users/${me.username}/avatarFrame`).set(fr || ""); me.avatarFrame = fr || ""; window.openPremiumModal(); renderMyProfilePage(); showToast(fr ? "تم تفعيل إطار الصورة الفخم" : "تمت إزالة الإطار"); };
     window.setMyStatusEmoji = async em => { if (!me) return; await db.ref(`users/${me.username}/statusEmoji`).set(em); me.statusEmoji = em; window.openPremiumModal(); showToast(em ? `تم تعيين رمز الحالة ${em}` : "تمت الإزالة"); };
-    window.setMyAccentColor = async k => { if (!me || !ACCENT_PALETTES[k]) return; await db.ref(`users/${me.username}/accentColor`).set(k); me.accentColor = k; window.openPremiumModal(); renderMyProfilePage(); showToast(`تم تحديث لونك إلى ${ACCENT_PALETTES[k].label} 🎨`); };
+    window.setMyAccentColor = async k => { if (!me || !ACCENT_PALETTES[k]) return; await db.ref(`users/${me.username}/accentColor`).set(k); me.accentColor = k; window.openPremiumModal(); renderMyProfilePage(); showToast(`تم تحديث لونك إلى ${ACCENT_PALETTES[k].label}`); };
     window.handleAnimAvatarUpload = e => {
         const f = e.target.files[0]; e.target.value = ""; if (!f || !me) return;
         if (f.size > 1.85 * 1024 * 1024) { showToast("الحد الأقصى 1.8 ميجابايت"); return; }
@@ -1791,7 +1634,7 @@
         r.onload = async ev => {
             if (f.type === "image/gif") await db.ref(`users/${me.username}`).update({ avatarImg: ev.target.result, avatarVideo: "" });
             else await db.ref(`users/${me.username}`).update({ avatarVideo: ev.target.result });
-            showToast("تم التفعيل 🎬✨");
+            showToast("تم التفعيل بنجاح");
         };
         r.readAsDataURL(f);
     };
@@ -1804,11 +1647,10 @@
         else { area.style.backgroundImage = wpVal; area.style.backgroundSize = "cover"; }
     }
     window.openSharedWpModal = () => { if (activeChatType !== "dm" || !activeRoomId) return; document.getElementById("sharedWpGrid").innerHTML = SHARED_WP_PRESETS.map(p => `<div class="swp-tile" style="background:${p.css || 'var(--bg-card)'}" onclick="window.setSharedWallpaper('${p.css}')">${p.label}</div>`).join(""); document.getElementById("sharedWpModal").style.display = "flex"; };
-    window.setSharedWallpaper = async v => { if (activeChatType !== "dm" || !activeRoomId) return; await db.ref(`chats/${activeRoomId}/shared_wp`).set({ value: v || "", by: me.name, ts: Date.now() }); document.getElementById("sharedWpModal").style.display = "none"; showToast(v ? "تم تغيير الخلفية لكليكما 🎨✨" : "تمت الاستعادة"); };
+    window.setSharedWallpaper = async v => { if (activeChatType !== "dm" || !activeRoomId) return; await db.ref(`chats/${activeRoomId}/shared_wp`).set({ value: v || "", by: me.name, ts: Date.now() }); document.getElementById("sharedWpModal").style.display = "none"; showToast(v ? "تم تغيير الخلفية لكليكما" : "تمت الاستعادة"); };
     window.handleSharedWpUpload = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; showToast("جاري التطبيق..."); await window.setSharedWallpaper(await compressImageFile(f, 880, 0.70)); };
     function detachSharedWp() { if (sharedWpRef) { sharedWpRef.off(); sharedWpRef = null; } }
 
-    // حزم الملصقات
     async function fetchPackOnce(pid, force = false) {
         if (!pid) return null; if (!force && allStickerPacks[pid]) return allStickerPacks[pid]; if (loadingPacksSet.has(pid)) return allStickerPacks[pid] || null;
         loadingPacksSet.add(pid);
@@ -1829,7 +1671,7 @@
         const pid = "pk_" + me.username + "_" + Date.now(), obj = { id: pid, name: n.trim(), owner: me.username, ownerName: me.name, ts: Date.now(), stickers: {} };
         await db.ref(`tg_packs/${pid}`).set(obj); await db.ref(`user_sticker_packs/${me.username}/${pid}`).set(true);
         allStickerPacks[pid] = obj; activeSelectedPackId = pid; activePackVisibleCount = 12; uploadTargetPackId = pid;
-        showToast(`تم إنشاء حزمة «${n.trim()}» ✨`); document.getElementById("tgStickerUploadInput").click();
+        showToast(`تم إنشاء حزمة «${n.trim()}»`); document.getElementById("tgStickerUploadInput").click();
     };
     window.triggerAddStickerToPack = p => { uploadTargetPackId = p; document.getElementById("tgStickerUploadInput").click(); };
     window.handleUploadStickersToPack = async e => {
@@ -1850,50 +1692,50 @@
             if (!allStickerPacks[pid].stickers) allStickerPacks[pid].stickers = {};
             allStickerPacks[pid].stickers[stId] = stObj; up++;
         }
-        if (up) { activeSelectedPackId = pid; showToast(`تمت إضافة ${up} ملصق ✅`); const b = document.getElementById("drawerBody"); if (b && activeDrawerTab === "premium" && document.getElementById("stickerDrawer").style.display === "flex") renderPremiumDrawerTab(b); }
+        if (up) { activeSelectedPackId = pid; showToast(`تمت إضافة ${up} ملصق`); const b = document.getElementById("drawerBody"); if (b && activeDrawerTab === "premium" && document.getElementById("stickerDrawer").style.display === "flex") renderPremiumDrawerTab(b); }
     };
     window.sendPremBigSticker = id => { const ps = PREM_BIG_STICKERS.find(x => x.id === id); if (!ps) return; pushMessageSafe("prem_sticker", ps.id, `${ps.em} ${ps.cap}`, { effect: ps.fx }); window.playScreenEffect(ps.fx); toggleStickerDrawer(false); };
-    window.sendPackSticker = (p, s) => { const pk = allStickerPacks[p], st = pk?.stickers?.[s]; if (!st) return; pushMessageSafe("tg_sticker", st.src, `🎭 ملصق (${pk.name})`, { mediaType: st.mediaType || "image", packId: pk.id, packName: pk.name }); toggleStickerDrawer(false); };
+    window.sendPackSticker = (p, s) => { const pk = allStickerPacks[p], st = pk?.stickers?.[s]; if (!st) return; pushMessageSafe("tg_sticker", st.src, `ملصق (${pk.name})`, { mediaType: st.mediaType || "image", packId: pk.id, packName: pk.name }); toggleStickerDrawer(false); };
     window.deleteStickerFromPack = async (p, s) => { if (!confirm("حذف الملصق؟")) return; await db.ref(`tg_packs/${p}/stickers/${s}`).remove(); if (allStickerPacks[p]?.stickers) delete allStickerPacks[p].stickers[s]; const b = document.getElementById("drawerBody"); if (b && activeDrawerTab === "premium") renderPremiumDrawerTab(b); };
     window.removePackFromMyList = async p => { const pk = allStickerPacks[p]; if (pk?.owner === me.username) { if (!confirm(`حذف «${pk.name}»؟`)) return; await db.ref(`tg_packs/${p}`).remove(); delete allStickerPacks[p]; } await db.ref(`user_sticker_packs/${me.username}/${p}`).remove(); if (activeSelectedPackId === p) activeSelectedPackId = ""; window.closeStickerPackPreview(); showToast("تمت الإزالة"); };
-    window.addPackToMyList = async p => { if (!me || !p) return; await db.ref(`user_sticker_packs/${me.username}/${p}`).set(true); activeSelectedPackId = p; window.closeStickerPackPreview(); showToast(`تمت إضافة «${allStickerPacks[p]?.name || "الحزمة"}» ✅🎭`); };
+    window.addPackToMyList = async p => { if (!me || !p) return; await db.ref(`user_sticker_packs/${me.username}/${p}`).set(true); activeSelectedPackId = p; window.closeStickerPackPreview(); showToast(`تمت إضافة «${allStickerPacks[p]?.name || "الحزمة"}»`); };
     window.closeStickerPackPreview = () => { const g = document.getElementById("sppGrid"); if (g) { stopAndReleaseVideos(g); g.innerHTML = ""; } const m = document.getElementById("stickerPackPreviewModal"); if (m) m.style.display = "none"; };
     window.openStickerPackPreview = async (pid, fSrc, fMed) => {
         const m = document.getElementById("stickerPackPreviewModal"), g = document.getElementById("sppGrid"), act = document.getElementById("sppActionRow");
-        if (pid && !allStickerPacks[pid]) { document.getElementById("sppTitle").innerText = "⏳ جاري فتح الحزمة..."; document.getElementById("sppMeta").innerText = ""; g.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim);">جاري التحميل...</div>`; act.innerHTML = `<button class="btn btn-sm btn-outline" style="width:100%;" onclick="window.closeStickerPackPreview()">إغلاق</button>`; m.style.display = "flex"; await fetchPackOnce(pid, true); }
+        if (pid && !allStickerPacks[pid]) { document.getElementById("sppTitle").innerText = "جاري فتح الحزمة..."; document.getElementById("sppMeta").innerText = ""; g.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim);">جاري التحميل...</div>`; act.innerHTML = `<button class="btn btn-sm btn-outline" style="width:100%;" onclick="window.closeStickerPackPreview()">إغلاق</button>`; m.style.display = "flex"; await fetchPackOnce(pid, true); }
         const pk = pid ? allStickerPacks[pid] : null;
         if (!pk) { window.closeStickerPackPreview(); if (fSrc && fMed !== "video") openLightbox(toBlobUrl(fSrc)); return; }
         const list = Object.values(pk.stickers || {}), hasIt = !!mySavedPacks[pk.id], isOwner = pk.owner === me.username;
-        document.getElementById("sppTitle").innerText = `🎭 ${pk.name}`; document.getElementById("sppMeta").innerText = `${list.length} ملصق • بواسطة ${pk.ownerName || pk.owner}`;
+        document.getElementById("sppTitle").innerText = pk.name; document.getElementById("sppMeta").innerText = `${list.length} ملصق • بواسطة ${pk.ownerName || pk.owner}`;
         stopAndReleaseVideos(g);
-        g.innerHTML = list.length ? list.slice(0, 24).map(st => { const u = toBlobUrl(st.src); return `<div class="sticker-tile tg-tile" style="position:relative;" onclick="if('${hasIt}'==='true'){ window.sendPackSticker('${escapeHTML(pk.id)}','${escapeHTML(st.id)}'); window.closeStickerPackPreview(); }">${st.mediaType === "video" ? `<video class="tg-lazy-vid" data-vsrc="${u}" preload="metadata" loop muted playsinline></video><span class="tg-vid-dot">🎬</span>` : `<img src="${u}" loading="lazy" decoding="async">`}</div>`; }).join("") : `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim);">الحزمة فارغة</div>`;
+        g.innerHTML = list.length ? list.slice(0, 24).map(st => { const u = toBlobUrl(st.src); return `<div class="sticker-tile tg-tile" style="position:relative;" onclick="if('${hasIt}'==='true'){ window.sendPackSticker('${escapeHTML(pk.id)}','${escapeHTML(st.id)}'); window.closeStickerPackPreview(); }">${st.mediaType === "video" ? `<video class="tg-lazy-vid" data-vsrc="${u}" preload="metadata" loop muted playsinline></video><span class="tg-vid-dot">فيديو</span>` : `<img src="${u}" loading="lazy" decoding="async">`}</div>`; }).join("") : `<div style="grid-column:1/-1; text-align:center; padding:24px; color:var(--text-dim);">الحزمة فارغة</div>`;
         attachLazyVideos(g);
-        act.innerHTML = hasIt ? `${isOwner ? `<button class="btn btn-sm" style="flex:1;" onclick="window.closeStickerPackPreview(); window.triggerAddStickerToPack('${escapeHTML(pk.id)}')">➕ إضافة</button>` : `<button class="btn btn-sm btn-success" style="flex:1;" disabled>✓ مضافة لديك</button>`}<button class="btn btn-sm btn-danger" onclick="window.removePackFromMyList('${escapeHTML(pk.id)}')">${isOwner ? 'حذف' : 'إزالة'}</button><button class="btn btn-sm btn-outline" onclick="window.closeStickerPackPreview()">إغلاق</button>` : `<button class="btn" style="flex:1;" onclick="window.addPackToMyList('${escapeHTML(pk.id)}')">➕ إضافة الحزمة لملصقاتي (${list.length})</button><button class="btn btn-outline btn-sm" onclick="window.closeStickerPackPreview()">إغلاق</button>`;
+        act.innerHTML = hasIt ? `${isOwner ? `<button class="btn btn-sm" style="flex:1;" onclick="window.closeStickerPackPreview(); window.triggerAddStickerToPack('${escapeHTML(pk.id)}')">+ إضافة</button>` : `<button class="btn btn-sm btn-success" style="flex:1;" disabled>✓ مضافة لديك</button>`}<button class="btn btn-sm btn-danger" onclick="window.removePackFromMyList('${escapeHTML(pk.id)}')">${isOwner ? 'حذف' : 'إزالة'}</button><button class="btn btn-sm btn-outline" onclick="window.closeStickerPackPreview()">إغلاق</button>` : `<button class="btn" style="flex:1;" onclick="window.addPackToMyList('${escapeHTML(pk.id)}')">إضافة الحزمة لملصقاتي (${list.length})</button><button class="btn btn-outline btn-sm" onclick="window.closeStickerPackPreview()">إغلاق</button>`;
         m.style.display = "flex";
     };
 
     async function renderPremiumDrawerTab(body) {
         stopAndReleaseVideos(body);
         const saved = Object.keys(mySavedPacks || {}).filter(p => mySavedPacks[p]);
-        if (saved.some(p => !allStickerPacks[p])) { body.innerHTML = `<div style="text-align:center; padding:34px; color:var(--text-dim);">⏳ جاري التجهيز...</div>`; await ensureMyPacksLoaded(); if (activeDrawerTab !== "premium" || document.getElementById("stickerDrawer").style.display !== "flex") return; }
+        if (saved.some(p => !allStickerPacks[p])) { body.innerHTML = `<div style="text-align:center; padding:34px; color:var(--text-dim);">جاري التجهيز...</div>`; await ensureMyPacksLoaded(); if (activeDrawerTab !== "premium" || document.getElementById("stickerDrawer").style.display !== "flex") return; }
         else await ensureMyPacksLoaded();
         const myP = saved.filter(p => allStickerPacks[p]);
-        let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"><span class="st-sec-title" style="margin:0;">🎭 حزم ملصقاتي (${myP.length})</span><button type="button" class="pack-mini-btn" onclick="window.createNewStickerPack()">➕ حزمة جديدة</button></div>`;
-        if (!myP.length) html += `<div style="background:var(--glass-inner); border:1px dashed var(--border-bright); border-radius:14px; padding:12px; text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:12px;">ما عندك حزم بعد — اضغط <b>«➕ حزمة جديدة»</b> أو اضغط على أي ملصق يدزه صديقك!</div>`;
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"><span class="st-sec-title" style="margin:0;">حزم ملصقاتي (${myP.length})</span><button type="button" class="pack-mini-btn" onclick="window.createNewStickerPack()">+ حزمة جديدة</button></div>`;
+        if (!myP.length) html += `<div style="background:var(--glass-inner); border:1px dashed var(--border-bright); border-radius:14px; padding:12px; text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:12px;">ما عندك حزم بعد — اضغط <b>«+ حزمة جديدة»</b> أو اضغط على أي ملصق يدزه صديقك</div>`;
         else {
-            html += `<div class="pack-tabs-bar">${myP.map(pid => `<button type="button" class="pack-tab-pill ${pid === activeSelectedPackId ? 'active' : ''}" onclick="window.selectStickerPackTab('${escapeHTML(pid)}')">📦 ${escapeHTML(allStickerPacks[pid].name)} (${Object.keys(allStickerPacks[pid].stickers || {}).length})</button>`).join("")}</div>`;
+            html += `<div class="pack-tabs-bar">${myP.map(pid => `<button type="button" class="pack-tab-pill ${pid === activeSelectedPackId ? 'active' : ''}" onclick="window.selectStickerPackTab('${escapeHTML(pid)}')">${escapeHTML(allStickerPacks[pid].name)} (${Object.keys(allStickerPacks[pid].stickers || {}).length})</button>`).join("")}</div>`;
             const pk = allStickerPacks[activeSelectedPackId] || allStickerPacks[myP[0]];
             if (pk) {
                 const isO = pk.owner === me.username, ents = Object.entries(pk.stickers || {});
-                html += `<div class="pack-head-row"><span class="pack-head-title">${escapeHTML(pk.name)} (${ents.length})</span><div class="pack-head-acts">${isO ? `<button type="button" class="pack-mini-btn" onclick="window.triggerAddStickerToPack('${escapeHTML(pk.id)}')">＋ إضافة</button>` : ""}<button type="button" class="pack-mini-btn danger" onclick="window.removePackFromMyList('${escapeHTML(pk.id)}')">${isO ? 'حذف' : 'إزالة'}</button></div></div><div class="sticker-grid">`;
+                html += `<div class="pack-head-row"><span class="pack-head-title">${escapeHTML(pk.name)} (${ents.length})</span><div class="pack-head-acts">${isO ? `<button type="button" class="pack-mini-btn" onclick="window.triggerAddStickerToPack('${escapeHTML(pk.id)}')">+ إضافة</button>` : ""}<button type="button" class="pack-mini-btn danger" onclick="window.removePackFromMyList('${escapeHTML(pk.id)}')">${isO ? 'حذف' : 'إزالة'}</button></div></div><div class="sticker-grid">`;
                 if (!ents.length) html += `<div class="sticker-tile sticker-create-tile" onclick="window.triggerAddStickerToPack('${escapeHTML(pk.id)}')"><span>＋</span><span>رفع ملصق</span></div>`;
-                else ents.slice(0, activePackVisibleCount).forEach(([sid, st]) => { if (!st?.src) return; const u = toBlobUrl(st.src); html += `<div class="sticker-tile tg-tile" style="position:relative;" onclick="window.sendPackSticker('${escapeHTML(pk.id)}','${escapeHTML(sid)}')">${st.mediaType === "video" ? `<video class="tg-lazy-vid" data-vsrc="${u}" preload="metadata" loop muted playsinline></video><span class="tg-vid-dot">🎬</span>` : `<img src="${u}" loading="lazy" decoding="async">`}${isO ? `<button type="button" onclick="event.stopPropagation(); window.deleteStickerFromPack('${escapeHTML(pk.id)}','${escapeHTML(sid)}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.72); color:#fff; font-size:10px; cursor:pointer;">✕</button>` : ""}</div>`; });
+                else ents.slice(0, activePackVisibleCount).forEach(([sid, st]) => { if (!st?.src) return; const u = toBlobUrl(st.src); html += `<div class="sticker-tile tg-tile" style="position:relative;" onclick="window.sendPackSticker('${escapeHTML(pk.id)}','${escapeHTML(sid)}')">${st.mediaType === "video" ? `<video class="tg-lazy-vid" data-vsrc="${u}" preload="metadata" loop muted playsinline></video><span class="tg-vid-dot">فيديو</span>` : `<img src="${u}" loading="lazy" decoding="async">`}${isO ? `<button type="button" onclick="event.stopPropagation(); window.deleteStickerFromPack('${escapeHTML(pk.id)}','${escapeHTML(sid)}')" style="position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; border:none; background:rgba(0,0,0,0.72); color:#fff; font-size:10px; cursor:pointer;">✕</button>` : ""}</div>`; });
                 html += `</div>`;
                 if (ents.length > activePackVisibleCount) html += `<button type="button" class="btn btn-sm btn-outline" style="width:100%; margin-bottom:12px;" onclick="window.showMorePackStickers()">عرض المزيد (+${ents.length - activePackVisibleCount})</button>`;
             }
         }
-        html += `<div class="st-sec-title">✨ رموز تعبيرية متحركة</div><div class="emoji-grid" style="margin-bottom:10px;">${ANIM_EMOJIS.map(a => `<button type="button" class="emoji-cell" onclick="insertEmojiToInput('[[${a.em}]]')"><span class="anim-em ${a.anim}">${a.em}</span></button>`).join("")}</div>`;
-        html += `<div class="st-sec-title">🌟 ملصقات مميزة بتأثيرات</div><div class="sticker-grid">${PREM_BIG_STICKERS.map(ps => `<div class="sticker-tile" style="background:${ps.bg}; border-color:rgba(255,255,255,0.2);" onclick="window.sendPremBigSticker('${ps.id}')"><span class="st-em">${ps.em}</span><span class="st-cap" style="color:#fff;">${escapeHTML(ps.cap)}</span></div>`).join("")}</div>`;
+        html += `<div class="st-sec-title">رموز تعبيرية متحركة</div><div class="emoji-grid" style="margin-bottom:10px;">${ANIM_EMOJIS.map(a => `<button type="button" class="emoji-cell" onclick="insertEmojiToInput('[[${a.em}]]')"><span class="anim-em ${a.anim}">${a.em}</span></button>`).join("")}</div>`;
+        html += `<div class="st-sec-title">ملصقات مميزة بتأثيرات</div><div class="sticker-grid">${PREM_BIG_STICKERS.map(ps => `<div class="sticker-tile" style="background:${ps.bg}; border-color:rgba(255,255,255,0.2);" onclick="window.sendPremBigSticker('${ps.id}')"><span class="st-em">${ps.em}</span><span class="st-cap" style="color:#fff;">${escapeHTML(ps.cap)}</span></div>`).join("")}</div>`;
         body.innerHTML = html; attachLazyVideos(body);
     }
 
@@ -1905,7 +1747,7 @@
         if (ctx === "preview" && pendingTrimSong) renderTrimStageUI();
     };
 
-    // ==================== 10. ربط كل المميزات مع محرّك V11 ====================
+    // ==================== 8. ربط كل المميزات مع محرّك V12 ====================
     function installHooks() {
         const _origRenderStories = window.renderStoriesStrip;
         window.renderStoriesStrip = function () { if (_origRenderStories) _origRenderStories(); renderNotesStrip(); };
@@ -1967,12 +1809,11 @@
                 window.playScreenEffect(eff);
             }
             if (scratchModeActive && type === "text" && !extra.isAi) {
-                extra = { ...extra, scratch: true }; previewLabel = "🪄 رسالة مخفية (امسح لتكشفها)"; scratchModeActive = false;
+                extra = { ...extra, scratch: true }; previewLabel = "رسالة مخفية (امسح لتكشفها)"; scratchModeActive = false;
                 const sBtn = document.getElementById("scratchModeBtn"); if (sBtn) sBtn.classList.remove("active");
             }
-            const fxBtn = document.getElementById("fxToggleBtn");
-            if (fxBtn && !selectedMsgEffect && !scratchModeActive) { fxBtn.innerText = "✨"; fxBtn.classList.remove("accent"); }
-            if (activeChatType === "dm" && isVanishActive && !extra.isAi) { extra = { ...extra, vanish: true }; previewLabel = "👻 رسالة مختفية"; }
+            syncFxButtonState();
+            if (activeChatType === "dm" && isVanishActive && !extra.isAi) { extra = { ...extra, vanish: true }; previewLabel = "رسالة مختفية"; }
             const dmRoom = activeChatType === "dm" ? activeRoomId : null;
             const res = await _origPush(type, content, previewLabel, extra);
             if (dmRoom && !extra.isAi) bumpDmStreak(dmRoom);
@@ -1992,12 +1833,12 @@
             } else if (m.type === "capsule" && slot) {
                 const unlockAt = m.unlockAt || 0, left = unlockAt - Date.now(), card = document.createElement("div");
                 card.className = "capsule-card" + (left <= 0 ? " unlocked" : ""); card.setAttribute("data-unlock", String(unlockAt));
-                card.innerHTML = `<div style="font-size:12px; font-weight:800; color:#e9d5ff;">⏳ ${escapeHTML(m.capTitle || "كبسولة زمن")}</div><div class="capsule-timer">${formatCountdown(left)}</div><div class="capsule-sub">${left <= 0 ? "اضغط الآن لفتح كبسولة الزمن ✨" : "مقفولة حتى انتهاء العدّاد 🔒"}</div>`;
+                card.innerHTML = `<div style="font-size:12px; font-weight:800; color:#e9d5ff;">${escapeHTML(m.capTitle || "كبسولة زمن")}</div><div class="capsule-timer">${formatCountdown(left)}</div><div class="capsule-sub">${left <= 0 ? "اضغط الآن لفتح كبسولة الزمن" : "مقفولة حتى انتهاء العدّاد"}</div>`;
                 card.onclick = e => {
                     e.stopPropagation();
-                    if (Date.now() < unlockAt) { card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake"); triggerHaptic(20); showToast(`🔒 مقفولة! المتبقي: ${formatCountdown(unlockAt - Date.now())}`); return; }
+                    if (Date.now() < unlockAt) { card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake"); triggerHaptic(20); showToast(`مقفولة! المتبقي: ${formatCountdown(unlockAt - Date.now())}`); return; }
                     card.setAttribute("data-opened", "1"); card.classList.add("unlocked");
-                    card.innerHTML = `<div style="font-size:11.5px; color:#6ee7b7; font-weight:800; margin-bottom:5px;">🔓 ${escapeHTML(m.capTitle || "كبسولة الزمن")}</div><div class="msg-text" style="text-align:right;">${formatRichText(m.content)}</div>`;
+                    card.innerHTML = `<div style="font-size:11.5px; color:#6ee7b7; font-weight:800; margin-bottom:5px;">${escapeHTML(m.capTitle || "كبسولة الزمن")}</div><div class="msg-text" style="text-align:right;">${formatRichText(m.content)}</div>`;
                     window.playScreenEffect("confetti"); triggerHaptic([20, 40, 30]);
                 };
                 slot.innerHTML = ""; slot.appendChild(card);
@@ -2009,7 +1850,7 @@
                 if (bubble) bubble.classList.add("sticker-bubble");
                 const url = toBlobUrl(m.content), stWrap = document.createElement("div"); stWrap.className = "tg-st-wrap";
                 stWrap.innerHTML = m.mediaType === "video" ? `<video class="tg-st-media tg-lazy-vid" data-vsrc="${url}" preload="metadata" loop muted playsinline></video>` : `<img class="tg-st-media" src="${url}" loading="lazy" decoding="async">`;
-                if (m.packId) { const h = document.createElement("span"); h.className = "tg-st-hint"; h.innerText = "📦 الحزمة"; stWrap.appendChild(h); }
+                if (m.packId) { const h = document.createElement("span"); h.className = "tg-st-hint"; h.innerText = "الحزمة"; stWrap.appendChild(h); }
                 stWrap.onclick = e => { e.stopPropagation(); window.openStickerPackPreview(m.packId || "", m.content, m.mediaType || "image"); };
                 slot.innerHTML = ""; slot.appendChild(stWrap); attachLazyVideos(stWrap);
             }
@@ -2026,7 +1867,7 @@
             if (m.effect && MSG_EFFECTS[m.effect]) {
                 const fx = MSG_EFFECTS[m.effect], foot = wrap.querySelector(".msg-footer");
                 if (foot) {
-                    const pill = document.createElement("button"); pill.className = "fx-msg-pill"; pill.innerHTML = `✨ ${fx.icon}`;
+                    const pill = document.createElement("button"); pill.className = "fx-msg-pill"; pill.innerHTML = fx.icon;
                     pill.onclick = e => { e.stopPropagation(); window.playScreenEffect(m.effect); };
                     foot.insertBefore(pill, foot.firstChild);
                 }
@@ -2035,7 +1876,6 @@
             return wrap;
         };
 
-        // موسيقى الستوري (تدعم القصّ + التشغيل للنهاية + يوتيوب)
         const _origOpenCreateStory = window.openCreateStoryModal;
         window.openCreateStoryModal = () => { draftStorySong = null; if (_origOpenCreateStory) _origOpenCreateStory(); renderStorySongDraft(); };
         const _origSwitchStoryType = window.switchStoryType;
@@ -2060,13 +1900,8 @@
                         }
                     }
                     if (m.url) {
-                        PremAudio.play(m.url, "story", {
-                            loop: !m.playFull,
-                            muted: storyMusicMuted,
-                            clipStart: m.playFull ? 0 : (m.startSec || 0),
-                            clipEnd: m.playFull ? 0 : (m.endSec || 0),
-                            playFull: m.playFull !== false
-                        }).then(ok => { const b = document.getElementById("svMuteBtn"); if (!ok && b) b.innerText = "▶ شغّل"; });
+                        PremAudio.play(m.url, "story", { loop: !m.playFull, muted: storyMusicMuted, clipStart: m.playFull ? 0 : (m.startSec || 0), clipEnd: m.playFull ? 0 : (m.endSec || 0), playFull: m.playFull !== false })
+                            .then(ok => { const b = document.getElementById("svMuteBtn"); if (!ok && b) b.innerText = "▶ شغّل"; });
                     }
                 }
             } catch {}
@@ -2076,7 +1911,6 @@
         const _origCloseStory = window.closeStoryViewer;
         window.closeStoryViewer = () => { PremAudio.stop("story"); if (_origCloseStory) _origCloseStory(); };
 
-        // ربط صفحتي الشخصية + صفحة البروفايل الكامل للأصدقاء (V11 Full-Screen)
         const _origRenderMyProf = window.renderMyProfilePage;
         window.renderMyProfilePage = () => {
             if (_origRenderMyProf) _origRenderMyProf(); if (!me) return;
@@ -2103,6 +1937,9 @@
                 stSlot.innerHTML = st ? `<span class="streak-pill" style="font-size:12.5px; padding:4px 10px;">🔥 شعلة ${st.count} أيام</span>` : "";
             }
         };
+
+        const _origOpenSettings = window.openSettingsModal;
+        window.openSettingsModal = () => { if (_origOpenSettings) _origOpenSettings(); updateNotifToggleUI(); };
 
         const _origStartCall = window.startCall; window.startCall = (v, t) => { PremAudio.stop(); return _origStartCall(v, t); };
         const _origAnswerCall = window.answerIncomingCall; window.answerIncomingCall = () => { PremAudio.stop(); return _origAnswerCall(); };
@@ -2136,12 +1973,7 @@
             countdownRef.on("value", s => { if (tokCopy === activeRoomToken) { currentCountdownData = s.val(); renderCountdownBanner(currentCountdownData); } });
 
             memoriesRef = db.ref(`chats/${roomCopy}/memories`);
-            memoriesRef.on("value", s => {
-                if (tokCopy === activeRoomToken) {
-                    currentMemoriesData = s.val() || {};
-                    if (document.getElementById("memoriesBoardModal").style.display === "flex") renderMemoriesList();
-                }
-            });
+            memoriesRef.on("value", s => { if (tokCopy === activeRoomToken) { currentMemoriesData = s.val() || {}; if (document.getElementById("memoriesBoardModal").style.display === "flex") renderMemoriesList(); } });
 
             listenRef = db.ref(`chats/${roomCopy}/listen_together`);
             listenRef.on("value", s => {
@@ -2192,6 +2024,13 @@
                 if (!hb || !hb.ts || (Date.now() - hb.ts) > 15000) return;
                 showHeartbeatOverlay(hb.fromName || hb.from);
                 db.ref(`heartbeats/${me.username}`).remove().catch(() => {});
+            });
+
+            // مستمع خفيف للإشعارات الاختيارية (يعمل فقط إذا المستخدم فعّلها بنفسه من الإعدادات)
+            db.ref(`notifications/${me.username}`).limitToLast(1).on("child_added", s => {
+                const n = s.val();
+                if (!n || !n.ts || n.ts < sessionStartTs) return;
+                dispatchOptionalNotification("nt_" + s.key, "مفكرة السادس العلمي", n.text);
             });
 
             if (!capsuleInterval) capsuleInterval = setInterval(refreshAllCapsuleCountdowns, 1000);
