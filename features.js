@@ -1,9 +1,9 @@
-// ==================== 1. نظام التثبيت وفاحص الجاهزية (PWA V6) ====================
+// ==================== 1. نظام التثبيت وفاحص الجاهزية (PWA V9) ====================
 let deferredInstallPrompt = null;
 
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=6").then(reg => {
+        navigator.serviceWorker.register("./sw.js?v=9").then(reg => {
             reg.update().catch(() => {});
         }).catch(() => {});
     });
@@ -110,7 +110,7 @@ async function clearAllNotifications() {
     showToast("تم تنظيف الإشعارات");
 }
 
-// ==================== 3. لوحة تليگرام السفلية (رموز + صور متحركة + ملصقات + إنشاء ملصق) ====================
+// ==================== 3. لوحة تليگرام السفلية ====================
 const EMOJI_LIST = [
     { em: "😂", k: "ضحك" }, { em: "🤣", k: "ضحك" }, { em: "❤️", k: "حب قلب" }, { em: "😘", k: "بوسة حب" },
     { em: "😍", k: "حب اعجاب" }, { em: "🥰", k: "حب عمري" }, { em: "👍", k: "تمام لايك" }, { em: "😊", k: "ابتسامة" },
@@ -170,9 +170,7 @@ function findGifById(id) {
     return GIF_CARDS.find(g => g.id === id) || { em: "✨", cap: "متحرك", bg: GRADIENTS[0] };
 }
 
-function initStickerDrawer() {
-    renderDrawerContent();
-}
+function initStickerDrawer() { renderDrawerContent(); }
 
 function switchDrawerTab(tab) {
     activeDrawerTab = tab;
@@ -280,14 +278,21 @@ function toggleStickerDrawer(force) {
     const show = typeof force === "boolean" ? force : d.style.display !== "flex";
     d.style.display = show ? "flex" : "none";
     document.getElementById("stickerBtn").classList.toggle("accent", show);
-    if (show) { toggleMediaMenu(false); renderDrawerContent(); }
+    if (show) {
+        toggleMediaMenu(false);
+        if (typeof toggleChatExtras === "function") toggleChatExtras(false);
+        renderDrawerContent();
+    }
 }
 
 function toggleMediaMenu(force) {
     const m = document.getElementById("mediaMenu");
     const show = typeof force === "boolean" ? force : m.style.display !== "block";
     m.style.display = show ? "block" : "none";
-    if (show) toggleStickerDrawer(false);
+    if (show) {
+        toggleStickerDrawer(false);
+        if (typeof toggleChatExtras === "function") toggleChatExtras(false);
+    }
 }
 
 // ==================== 4. الوسائط والبصمة والعرض لمرة واحدة ====================
@@ -331,7 +336,6 @@ function handleSendVideo(e) {
     r.readAsDataURL(f);
 }
 
-// تسجيل البصمات الصوتية بجودة خفيفة وسريعة على النت الضعيف
 let mediaRec = null, recChunks = [], recStream = null, recSec = 0, recTimer = null, cancelRec = false;
 async function startRecording() {
     stopAnyVoicePlayback();
@@ -405,7 +409,7 @@ async function toggleChannelReaction(msgId, rKey, currentlyMine) {
     playSendSound();
 }
 
-// ==================== 6. الستوري (نص + صورة + فيديو + المشاهدون فوق الستوري مباشرة) ====================
+// ==================== 6. الستوري (مع حفظ الأغنية مباشرة بقلب القصة بدون أي تأخير) ====================
 let createStoryType = "text";
 
 function getActiveStoriesFor(username) {
@@ -500,7 +504,14 @@ async function publishStory() {
         payload.caption = document.getElementById("storyVidCaption").value.trim();
     }
 
+    // إرفاق الأغنية المختارة مباشرة داخل القصة قبل الرفع (حل جذري لصوت الستوري)
+    if (payload.type !== "video" && typeof window.__getDraftStorySong === "function") {
+        const song = window.__getDraftStorySong();
+        if (song && song.url) payload.music = song;
+    }
+
     await db.ref(`stories/${me.username}/${id}`).set(payload);
+    if (typeof window.__clearDraftStorySong === "function") window.__clearDraftStorySong();
     document.getElementById("createStoryModal").style.display = "none";
     showToast("تم نشر قصتك بنجاح ✨");
 }
@@ -595,12 +606,14 @@ function renderCurrentStorySlide() {
     }
 
     if (liveItem.type !== "video") {
+        const hasMusic = !!(liveItem.music && liveItem.music.url);
         let pct = 0;
+        const step = hasMusic ? 0.9 : 1.8; // مدة أطول (12 ثانية) إذا الستوري بيه أغنية حتى تسمعوها براحتكم
         svTimer = setInterval(() => {
             if (svPaused) return;
-            pct += 1.8;
+            pct += step;
             const el = document.getElementById("svFill_" + svIndex);
-            if (el) el.style.width = pct + "%";
+            if (el) el.style.width = Math.min(100, pct) + "%";
             if (pct >= 100) { svIndex++; renderCurrentStorySlide(); }
         }, 110);
     }
@@ -615,6 +628,7 @@ function pauseStoryMedia(paused) {
 }
 
 function handleStoryTap(e) {
+    if (e.target.closest(".sv-music-pill")) return;
     if (e.clientX < window.innerWidth * 0.35) { svIndex++; renderCurrentStorySlide(); }
     else { svIndex = Math.max(0, svIndex - 1); renderCurrentStorySlide(); }
 }
@@ -740,7 +754,7 @@ async function publishHighlight() {
     showToast("تمت إضافة الهايلايت 🌟");
 }
 
-// ==================== 8. المنشورات بتصميم إنستگرام الاحترافي (تحديث موضعي بدون رمش) ====================
+// ==================== 8. المنشورات بتصميم إنستگرام ====================
 let activeCommentPostId = null;
 
 function openCreatePostModal() {
@@ -851,8 +865,7 @@ function syncFeedPostCard(pid, p) {
     if (cont.querySelector(`.ig-post[data-pid="${pid}"]`)) return;
     const empty = cont.querySelector(".feed-empty");
     if (empty) empty.remove();
-    const card = buildIgPostCard(p);
-    cont.insertBefore(card, cont.firstChild);
+    cont.insertBefore(buildIgPostCard(p), cont.firstChild);
 }
 
 function updatePostCardInPlace(pid, p) {
@@ -995,7 +1008,7 @@ async function createSpace() {
     const obj = {
         id, type: createSpaceType, name, handle, desc,
         avatarColor: GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
-        owner: me.username, verified: "", createdAt: Date.now(),
+        owner: me.username, verified: "", createdAt: Date.now(), lastTs: Date.now(),
         members: { [me.username]: "owner" }
     };
     await db.ref(`spaces/${id}`).set(obj);
@@ -1012,14 +1025,14 @@ async function joinAndOpenSpace(spaceId) {
 
 function renderSpacesList() {
     const box = document.getElementById("spacesListEl");
-    if (!me) return;
+    if (!me || !box) return;
     const mySpaces = Object.values(allSpaces)
         .filter(s => s.members && s.members[me.username])
-        .sort((a, b) => b.createdAt - a.createdAt);
+        .sort((a, b) => (b.lastTs || b.createdAt || 0) - (a.lastTs || a.createdAt || 0));
 
     box.innerHTML = "";
     if (mySpaces.length === 0) {
-        box.innerHTML = `<div style="text-align:center; padding:40px 16px; color:var(--text-dim); font-size:13px;">لم تنضم لأي قناة أو مجموعة بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button></div>`;
+        box.innerHTML = `<div style="text-align:center; padding:28px 16px; color:var(--text-dim); font-size:13px;">لم تنضم لأي قناة أو مجموعة بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button></div>`;
         return;
     }
     mySpaces.forEach(s => {
