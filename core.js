@@ -1,10 +1,13 @@
-// ==================== الإعدادات والتهيئة الأساسية (V6 Ultra-Smooth) ====================
+// ==================== المحرّك الرئيسي فائق السرعة (V9 Pro — فتح فوري + قنوات موحدة + قابل للتوسعة) ====================
 const DB_URL = "https://notes-app-c738e-default-rtdb.firebaseio.com";
 const DEFAULT_PIN = "2007H";
 const ADMIN_PIN = "9988";
 
 firebase.initializeApp({ databaseURL: DB_URL });
 const db = firebase.database();
+
+// سجل الإضافات والأقسام المستقبلية (مثل reels.js أو study.js مستقبلاً)
+window.AppModules = window.AppModules || {};
 
 const GRADIENTS = [
     "linear-gradient(135deg, #0ea5e9, #3b82f6)",
@@ -37,15 +40,17 @@ let allPosts = {};
 let allSpaces = {};
 let myHighlights = {};
 let myNotifications = {};
+let sidebarFilter = "all"; // "all" | "dm" | "spaces"
 
-// المحادثة النشطة مع التحديث الموضعي الذكي
+// المحادثة النشطة + الكاش الفوري للفتح السريع
 let activeChatType = null; // "dm" | "saved" | "group" | "channel"
 let activePartner = null;
 let activeRoomId = null;
 let activeSpaceObj = null;
 let activeRoomToken = 0;
-let activeRoomLimit = 45;
+let activeRoomLimit = 25;
 let activeMsgsMap = {};
+const roomMsgsCache = {}; // كاش محلي بذاكرة الصفحة لفتح فوري بدون انتظار
 let roomQueryRef = null;
 let typingRef = null, pinnedRef = null, blockCheckRef = null;
 let contactListeners = {};
@@ -89,7 +94,7 @@ db.ref("sys_config").on("value", snap => {
     if (document.getElementById("adminScreen").style.display === "block") updateAdminButtons();
 });
 
-// مراقبة الشبكة وإرسال الطابور تلقائياً عند تحسن الاتصال
+// مراقبة الشبكة وإرسال الطابور تلقائياً
 function updateNetBanner(connected) {
     isDbConnected = connected;
     const b = document.getElementById("netBanner");
@@ -98,6 +103,18 @@ function updateNetBanner(connected) {
 }
 window.addEventListener("offline", () => updateNetBanner(false));
 window.addEventListener("online", () => flushOfflineQueue());
+
+// إغلاق القوائم المنسدلة عند الضغط خارجها
+document.addEventListener("click", ev => {
+    const dd = document.getElementById("chatToolsDropdown");
+    if (dd && dd.classList.contains("open") && !ev.target.closest("#chatToolsDropdown") && !ev.target.closest("#btnChatToolsMenu")) {
+        dd.classList.remove("open");
+    }
+    const mm = document.getElementById("mediaMenu");
+    if (mm && mm.style.display === "block" && !ev.target.closest("#mediaMenu") && !ev.target.closest("[onclick*='toggleMediaMenu']")) {
+        mm.style.display = "none";
+    }
+});
 
 function saveOfflineQueue() {
     try { localStorage.setItem("offline_msg_queue", JSON.stringify(offlineQueue.slice(-25))); } catch {}
@@ -117,6 +134,8 @@ async function flushOfflineQueue() {
                 await db.ref(`chat_meta/${item.roomId}`).set({
                     lastMsg: item.previewLabel, lastSender: me.username, lastTs: cleanPayload.ts, unreadFor: item.partner
                 });
+            } else if ((item.chatType === "channel" || item.chatType === "group") && item.roomId) {
+                await db.ref(`spaces/${item.roomId}`).update({ lastMsg: item.previewLabel, lastTs: cleanPayload.ts }).catch(() => {});
             }
             offlineQueue = offlineQueue.filter(q => q.payload.id !== cleanPayload.id);
             saveOfflineQueue();
@@ -241,6 +260,7 @@ function escapeHTML(s) {
 
 function showToast(txt) {
     const t = document.getElementById("toastBox");
+    if (!t) return;
     t.innerText = txt;
     t.classList.add("show");
     clearTimeout(t._tm);
@@ -320,34 +340,65 @@ function renderSelfDestructScreen() {
     document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8;"><h1 style="color:#f43f5e; font-size:52px; font-weight:800;">503</h1><h3 style="color:#fff;">Service Temporarily Unavailable</h3><p style="font-size:13px; margin-top:8px;">تم حظر الجلسة ومسح البيانات تلقائياً لأسباب أمنية.</p></div>`;
 }
 
-// ==================== تنسيق النصوص الاحترافي (نفس تليگرام) ====================
+// ==================== بوابة الأقسام والإضافات المستقبلية ====================
+function openFutureModule(modId) {
+    if (window.AppModules && typeof window.AppModules[modId] === "function") {
+        window.AppModules[modId]();
+        return;
+    }
+    if (modId === "music_hub" && typeof window.openMusicPicker === "function") {
+        window.openMusicPicker("🎵 مكتبة ومقترحات الأغاني", song => {
+            if (me && confirm(`تثبيت «${song.title}» كأغنية لبروفايلك؟`)) {
+                db.ref(`users/${me.username}/profileSong`).set(song).then(() => {
+                    me.profileSong = song;
+                    showToast(`تم تثبيت «${song.title}» ببروفايلك 🎵✨`);
+                });
+            }
+        });
+        return;
+    }
+    const labels = {
+        reels: "🎬 قسم الريلز (تيك توك وإنستا) جاهز للإضافة بتحديثنا الجاي!",
+        study: "⏱️ غرفة المراجعة الجماعية جاهزة للتفعيل قريباً!",
+        archive: "🗂️ مساحة إضافية محجوزة لأي ميزة نضيفها مستقبلاً!"
+    };
+    showToast(labels[modId] || "هذا القسم جاهز للتوسعة المستقبلية ✨");
+}
+
+// ==================== تنسيق النصوص + الأدوات الموحدة ====================
 function formatRichText(raw) {
     let s = escapeHTML(raw || "");
-    // روابط بصيغة [نص](رابط)
     s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, `<a class="msg-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>`);
-    // تشويش ||نص||
     s = s.replace(/\|\|([^|]+)\|\|/g, `<span class="spoiler-txt" onclick="event.stopPropagation(); this.classList.toggle('revealed')">$1</span>`);
-    // رمز `نص`
     s = s.replace(/`([^`]+)`/g, `<code class="msg-code-inline">$1</code>`);
-    // عريض **نص**
     s = s.replace(/\*\*([^*]+)\*\*/g, `<strong>$1</strong>`);
-    // تسطير ++نص++
     s = s.replace(/\+\+([^+]+)\+\+/g, `<u>$1</u>`);
-    // مائل __نص__
     s = s.replace(/__([^_]+)__/g, `<em>$1</em>`);
-    // مشطوب ~~نص~~
     s = s.replace(/~~([^~]+)~~/g, `<s>$1</s>`);
-    // اقتباس بسطر يبدأ بـ >
     s = s.replace(/^&gt;\s?(.*)$/gm, `<span class="msg-quote-block">$1</span>`);
     return s;
 }
 
-function toggleFormatBar(force) {
-    const bar = document.getElementById("formatBar");
-    const btn = document.getElementById("formatBtn");
-    const show = typeof force === "boolean" ? force : !bar.classList.contains("open");
-    bar.classList.toggle("open", show);
-    if (btn) btn.classList.toggle("accent", show);
+function toggleChatExtras(force) {
+    const tray = document.getElementById("chatExtrasTray");
+    const btn = document.getElementById("fxToggleBtn");
+    if (!tray) return;
+    const show = typeof force === "boolean" ? force : !tray.classList.contains("open");
+    tray.classList.toggle("open", show);
+    if (btn) btn.classList.toggle("accent", show || (btn.innerText !== "✨"));
+    if (show) {
+        toggleStickerDrawer(false);
+        toggleMediaMenu(false);
+    }
+}
+
+function toggleFormatBar(force) { toggleChatExtras(force); }
+
+function toggleChatToolsMenu(force) {
+    const dd = document.getElementById("chatToolsDropdown");
+    if (!dd) return;
+    const show = typeof force === "boolean" ? force : !dd.classList.contains("open");
+    dd.classList.toggle("open", show);
 }
 
 function applyTextFormat(type) {
@@ -577,7 +628,6 @@ function enterMainApp(userData) {
         if (document.getElementById("view-profile").classList.contains("active")) renderMyProfilePage();
     });
 
-    // تحميل المنشورات بتحديثات موضعية بدون تصفير الشاشة عند التفاعل
     const postsRef = db.ref("posts");
     postsRef.on("child_added", s => {
         allPosts[s.key] = s.val();
@@ -600,6 +650,7 @@ function enterMainApp(userData) {
     db.ref("spaces").on("value", snap => {
         allSpaces = snap.val() || {};
         renderSpacesList();
+        renderChatsSidebar(); // تحديث القنوات والمجموعات داخل قائمة المحادثات الرئيسية أيضاً
         if ((activeChatType === "group" || activeChatType === "channel") && activeRoomId && allSpaces[activeRoomId]) {
             activeSpaceObj = allSpaces[activeRoomId];
             updateActiveHeader();
@@ -648,7 +699,15 @@ function setupPresence() {
     });
 }
 
-// ==================== 3. البحث الموحد وقائمة المحادثات ====================
+// ==================== 3. البحث الموحد وقائمة المحادثات الموحدة (حسابات + قنوات + مجموعات) ====================
+function setSidebarFilter(f) {
+    sidebarFilter = f || "all";
+    document.querySelectorAll("#chatFilterBar .cf-pill").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-cf") === sidebarFilter);
+    });
+    renderChatsSidebar();
+}
+
 function openUnifiedSearchModal() {
     document.getElementById("unifiedSearchInput").value = "";
     document.getElementById("unifiedSearchResult").innerHTML = "";
@@ -713,17 +772,14 @@ async function addAndOpenContact(targetUsername) {
 }
 
 function renderChatsSidebar() {
-    const q = (document.getElementById("localFilterInput").value || "").trim().toLowerCase();
+    const q = (document.getElementById("localFilterInput")?.value || "").trim().toLowerCase();
     const list = document.getElementById("chatsListEl");
-    if (!me) return;
-
-    const friends = Object.values(contactProfiles).filter(u => u && u.username !== me.username && !u.banned);
-    const filtered = friends.filter(u => u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q));
-    filtered.sort((a, b) => (allMeta[getRoomId(me.username, b.username)]?.lastTs || 0) - (allMeta[getRoomId(me.username, a.username)]?.lastTs || 0));
+    if (!me || !list) return;
 
     list.innerHTML = "";
 
-    if (!q || "الرسائل المحفوظة".includes(q)) {
+    // 1) الرسائل المحفوظة (تظهر بالكل والخاص)
+    if (sidebarFilter !== "spaces" && (!q || "الرسائل المحفوظة".includes(q))) {
         const savedRow = document.createElement("div");
         savedRow.className = "chat-row" + (activeChatType === "saved" ? " active" : "");
         savedRow.onclick = () => openSavedMessages();
@@ -736,44 +792,98 @@ function renderChatsSidebar() {
         list.appendChild(savedRow);
     }
 
-    if (filtered.length === 0) {
+    // 2) تجميع الحسابات الخاصة + القنوات والمجموعات وترتيبهم حسب آخر نشاط
+    const combined = [];
+
+    if (sidebarFilter !== "spaces") {
+        Object.values(contactProfiles)
+            .filter(u => u && u.username !== me.username && !u.banned)
+            .filter(u => !q || u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q))
+            .forEach(u => {
+                const rId = getRoomId(me.username, u.username);
+                const meta = allMeta[rId];
+                combined.push({ kind: "dm", sortTs: meta?.lastTs || 0, user: u, meta, rId });
+            });
+    }
+
+    if (sidebarFilter !== "dm") {
+        Object.values(allSpaces)
+            .filter(s => s && s.members && s.members[me.username])
+            .filter(s => !q || s.name.toLowerCase().includes(q) || (s.handle || "").toLowerCase().includes(q))
+            .forEach(s => {
+                combined.push({ kind: "space", sortTs: s.lastTs || s.createdAt || 0, space: s });
+            });
+    }
+
+    combined.sort((a, b) => b.sortTs - a.sortTs);
+
+    if (combined.length === 0) {
         const empty = document.createElement("div");
         empty.style.cssText = "text-align:center; padding:26px 14px; color:var(--text-dim); font-size:13px;";
-        empty.innerHTML = `لا توجد محادثات أخرى.<br><br><button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>`;
+        empty.innerHTML = sidebarFilter === "spaces"
+            ? `ما عندك قنوات أو مجموعات بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button>`
+            : `لا توجد محادثات أخرى.<br><br><button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>`;
         list.appendChild(empty);
         return;
     }
 
-    filtered.forEach(u => {
-        const rId = getRoomId(me.username, u.username);
-        const meta = allMeta[rId];
-        const isUnread = meta && meta.unreadFor === me.username && !(activeChatType === "dm" && activePartner === u.username);
+    combined.forEach(item => {
+        if (item.kind === "dm") {
+            const u = item.user;
+            const meta = item.meta;
+            const isUnread = meta && meta.unreadFor === me.username && !(activeChatType === "dm" && activePartner === u.username);
 
-        const row = document.createElement("div");
-        row.className = "chat-row" + (activeChatType === "dm" && activePartner === u.username ? " active" : "");
-        row.onclick = () => openDM(u.username);
+            const row = document.createElement("div");
+            row.className = "chat-row" + (activeChatType === "dm" && activePartner === u.username ? " active" : "");
+            row.setAttribute("data-dm-user", u.username);
+            row.onclick = () => openDM(u.username);
 
-        const av = document.createElement("div");
-        av.className = "avatar";
-        setAvatarStyle(av, u);
+            const av = document.createElement("div");
+            av.className = "avatar";
+            setAvatarStyle(av, u);
 
-        const info = document.createElement("div");
-        info.className = "chat-row-info";
-        const prev = myBlocked[u.username] ? "🚫 محظور" : (meta?.lastMsg || u.bio || getDisplayTag(u));
-        info.innerHTML = `
-            <div class="chat-row-top">
-                <span class="chat-row-name">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}</span>
-                <span class="chat-row-time">${meta?.lastTs ? formatTime(meta.lastTs) : ""}</span>
-            </div>
-            <div class="chat-row-bottom">
-                <span class="chat-row-preview" style="${isUnread ? 'color:var(--text);font-weight:700;' : ''}">${escapeHTML(prev)}</span>
-                ${isUnread ? '<span class="unread-dot"></span>' : ''}
-            </div>`;
-        row.appendChild(av); row.appendChild(info); list.appendChild(row);
+            const info = document.createElement("div");
+            info.className = "chat-row-info";
+            const prev = myBlocked[u.username] ? "🚫 محظور" : (meta?.lastMsg || u.bio || getDisplayTag(u));
+            info.innerHTML = `
+                <div class="chat-row-top">
+                    <span class="chat-row-name">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}</span>
+                    <span class="chat-row-time">${meta?.lastTs ? formatTime(meta.lastTs) : ""}</span>
+                </div>
+                <div class="chat-row-bottom">
+                    <span class="chat-row-preview" style="${isUnread ? 'color:var(--text);font-weight:700;' : ''}">${escapeHTML(prev)}</span>
+                    ${isUnread ? '<span class="unread-dot"></span>' : ''}
+                </div>`;
+            row.appendChild(av); row.appendChild(info); list.appendChild(row);
+        } else {
+            const s = item.space;
+            const isAct = (activeChatType === "channel" || activeChatType === "group") && activeRoomId === s.id;
+            const row = document.createElement("div");
+            row.className = "chat-row" + (isAct ? " active" : "");
+            row.onclick = () => openSpaceRoom(s.id);
+
+            const av = document.createElement("div");
+            av.className = "avatar";
+            setAvatarStyle(av, { name: s.name, avatarColor: s.avatarColor }, false);
+
+            const cnt = Object.keys(s.members || {}).length;
+            const prev = s.lastMsg || `@${s.handle} • ${cnt} مشترك`;
+            const info = document.createElement("div");
+            info.className = "chat-row-info";
+            info.innerHTML = `
+                <div class="chat-row-top">
+                    <span class="chat-row-name">${escapeHTML(s.name)} ${getVerifiedBadgeHTML(s.verified)} <span class="space-badge ${s.type === 'group' ? 'grp' : ''}">${s.type === 'channel' ? 'قناة' : 'مجموعة'}</span></span>
+                    <span class="chat-row-time">${s.lastTs ? formatTime(s.lastTs) : ""}</span>
+                </div>
+                <div class="chat-row-bottom">
+                    <span class="chat-row-preview">${escapeHTML(prev)}</span>
+                </div>`;
+            row.appendChild(av); row.appendChild(info); list.appendChild(row);
+        }
     });
 }
 
-// ==================== 4. محرّك المحادثة الموضعي (صفر رمش + 60fps) ====================
+// ==================== 4. محرّك المحادثة الفائق (orderByKey + كاش فوري — حل جذري لـ جاري الفتح) ====================
 function stopAnyVoicePlayback() {
     if (currentPlayingAudio) {
         try { currentPlayingAudio.pause(); } catch {}
@@ -794,20 +904,48 @@ function detachRoomListeners() {
     if (typingRef) { typingRef.off(); typingRef = null; }
     if (pinnedRef) { pinnedRef.off(); pinnedRef = null; }
     if (blockCheckRef) { blockCheckRef.off(); blockCheckRef = null; }
+    toggleChatToolsMenu(false);
 }
 
-function resetMessagesStage() {
+function updateChatToolsVisibility(type) {
+    const menuBtn = document.getElementById("btnChatToolsMenu");
+    if (menuBtn) menuBtn.style.display = type === "saved" ? "none" : "inline-flex";
+    document.querySelectorAll("#chatToolsDropdown .dm-only-tool").forEach(el => {
+        el.style.display = type === "dm" ? "flex" : "none";
+    });
+    document.querySelectorAll("#chatToolsDropdown .space-only-tool").forEach(el => {
+        el.style.display = (type === "channel" || type === "group") ? "flex" : "none";
+    });
+}
+
+function resetMessagesStage(dbPath) {
     activeMsgsMap = {};
     const area = document.getElementById("messagesList");
-    if (area) area.innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:12.5px;">جاري الفتح...</div>`;
     document.getElementById("pinnedBar").style.display = "none";
+    if (!area) return;
+
+    // إذا الغرفة مفتوحة سابقاً نعرض رسائلها فوراً من الكاش (صفر انتظار!)
+    const cached = dbPath && roomMsgsCache[dbPath];
+    if (cached && Object.keys(cached).length > 0) {
+        area.innerHTML = "";
+        Object.entries(cached)
+            .filter(([, m]) => m && !(m.deletedFor && m.deletedFor[me.username]))
+            .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0))
+            .forEach(([id, m]) => {
+                activeMsgsMap[id] = m;
+                appendMessageWithDateSep(area, id, m);
+            });
+        area.scrollTop = area.scrollHeight;
+    } else {
+        area.innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:12.5px;">جاري الفتح...</div>`;
+    }
 }
 
 function openSavedMessages() {
     detachRoomListeners();
     const myToken = activeRoomToken;
-    activeRoomLimit = 45;
-    resetMessagesStage();
+    activeRoomLimit = 25;
+    const dbPath = `saved_msgs/${me.username}`;
 
     activeChatType = "saved";
     activePartner = null;
@@ -816,7 +954,8 @@ function openSavedMessages() {
     seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
-    toggleFormatBar(false);
+    toggleChatExtras(false);
+    resetMessagesStage(dbPath);
 
     switchMainTab("chats");
     document.getElementById("chatEmptyState").style.display = "none";
@@ -825,21 +964,20 @@ function openSavedMessages() {
     document.getElementById("btnVoiceCall").style.display = "none";
     document.getElementById("btnVideoCall").style.display = "none";
     document.getElementById("btnPollCreate").style.display = "none";
-    document.getElementById("btnClearLocal").style.display = "none";
     document.getElementById("voAttachBtn").style.display = "none";
     document.getElementById("pollAttachBtn").style.display = "none";
+    updateChatToolsVisibility("saved");
 
     updateActiveHeader();
     updateChatInputLockState();
     renderChatsSidebar();
-    attachIncrementalMessages(`saved_msgs/${me.username}`, myToken);
+    attachIncrementalMessages(dbPath, myToken);
 }
 
 function openDM(partnerUsername) {
     detachRoomListeners();
     const myToken = activeRoomToken;
-    activeRoomLimit = 45;
-    resetMessagesStage();
+    activeRoomLimit = 25;
 
     activeChatType = "dm";
     activePartner = partnerUsername;
@@ -849,7 +987,10 @@ function openDM(partnerUsername) {
     seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
-    toggleFormatBar(false);
+    toggleChatExtras(false);
+
+    const dbPath = `chats/${activeRoomId}/messages`;
+    resetMessagesStage(dbPath);
 
     document.getElementById("chatEmptyState").style.display = "none";
     document.getElementById("activeChatView").style.display = "flex";
@@ -857,9 +998,9 @@ function openDM(partnerUsername) {
     document.getElementById("btnVoiceCall").style.display = "inline-flex";
     document.getElementById("btnVideoCall").style.display = "inline-flex";
     document.getElementById("btnPollCreate").style.display = "none";
-    document.getElementById("btnClearLocal").style.display = "inline-flex";
     document.getElementById("voAttachBtn").style.display = "flex";
     document.getElementById("pollAttachBtn").style.display = "none";
+    updateChatToolsVisibility("dm");
 
     updateActiveHeader();
     renderChatsSidebar();
@@ -883,7 +1024,7 @@ function openDM(partnerUsername) {
     pinnedRef = db.ref(`chats/${roomIdCopy}/pinned`);
     pinnedRef.on("value", s => { if (myToken === activeRoomToken) renderPinnedBar(s.val()); });
 
-    attachIncrementalMessages(`chats/${roomIdCopy}/messages`, myToken);
+    attachIncrementalMessages(dbPath, myToken);
 }
 
 function openSpaceRoom(spaceId) {
@@ -891,8 +1032,7 @@ function openSpaceRoom(spaceId) {
     if (!sp) return;
     detachRoomListeners();
     const myToken = activeRoomToken;
-    activeRoomLimit = 45;
-    resetMessagesStage();
+    activeRoomLimit = 25;
 
     activeChatType = sp.type;
     activePartner = null;
@@ -901,7 +1041,10 @@ function openSpaceRoom(spaceId) {
     seenMarkedSet.clear();
     cancelReplyOrEdit();
     toggleStickerDrawer(false);
-    toggleFormatBar(false);
+    toggleChatExtras(false);
+
+    const dbPath = `space_msgs/${spaceId}`;
+    resetMessagesStage(dbPath);
 
     switchMainTab("chats");
     document.getElementById("chatEmptyState").style.display = "none";
@@ -909,8 +1052,8 @@ function openSpaceRoom(spaceId) {
     document.getElementById("chatPane").classList.add("open");
     document.getElementById("btnVoiceCall").style.display = "none";
     document.getElementById("btnVideoCall").style.display = "none";
-    document.getElementById("btnClearLocal").style.display = "none";
     document.getElementById("voAttachBtn").style.display = "none";
+    updateChatToolsVisibility(sp.type);
 
     const canPost = sp.type === "group" || sp.owner === me.username;
     document.getElementById("btnPollCreate").style.display = canPost ? "inline-flex" : "none";
@@ -918,16 +1061,17 @@ function openSpaceRoom(spaceId) {
 
     updateActiveHeader();
     updateChatInputLockState();
+    renderChatsSidebar();
 
     pinnedRef = db.ref(`spaces/${spaceId}/pinned`);
     pinnedRef.on("value", s => { if (myToken === activeRoomToken) renderPinnedBar(s.val()); });
 
-    attachIncrementalMessages(`space_msgs/${spaceId}`, myToken);
+    attachIncrementalMessages(dbPath, myToken);
 }
 
 function loadOlderMessages() {
     if (!activeRoomId) return;
-    activeRoomLimit += 45;
+    activeRoomLimit += 25;
     const basePath = getActiveRoomBasePath();
     if (roomQueryRef) { roomQueryRef.off(); roomQueryRef = null; }
     const token = activeRoomToken;
@@ -939,12 +1083,22 @@ function loadOlderMessages() {
 function attachIncrementalMessages(dbPath, token, keepScroll = false) {
     const area = document.getElementById("messagesList");
     let initialDone = false;
-    let addedCount = 0;
+    if (!roomMsgsCache[dbPath]) roomMsgsCache[dbPath] = {};
 
-    // أولاً فحص سريع إذا كانت الغرفة فارغة
-    roomQueryRef = db.ref(dbPath).orderByChild("ts").limitToLast(activeRoomLimit);
+    // استخدام orderByKey().limitToLast() — مفهرس بالسيرفر فينسحب آخر 25 رسالة فقط بسرعة الصاروخ!
+    roomQueryRef = db.ref(dbPath).orderByKey().limitToLast(activeRoomLimit);
+
+    // صمّام أمان: إزالة "جاري الفتح..." حتى لو النت بطيء جداً
+    const safetyTimer = setTimeout(() => {
+        if (token !== activeRoomToken) return;
+        const hint = area.querySelector(".empty-room-hint");
+        if (hint && hint.innerText.includes("جاري الفتح")) {
+            hint.innerHTML = isDbConnected ? "لا توجد رسائل بعد 🔒" : "📡 النت ضعيف — جاري انتظار الاتصال...";
+        }
+    }, 4500);
 
     roomQueryRef.once("value", snap => {
+        clearTimeout(safetyTimer);
         if (token !== activeRoomToken) return;
         initialDone = true;
         const hint = area.querySelector(".empty-room-hint");
@@ -969,10 +1123,10 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         const m = snap.val();
         if (!m || (m.deletedFor && m.deletedFor[me.username])) return;
 
+        roomMsgsCache[dbPath][id] = m;
         const hint = area.querySelector(".empty-room-hint");
         if (hint) hint.remove();
 
-        // إذا كانت موجودة مسبقاً كرسالة مؤقتة بالطابور، حدّثها بمكانها بدون تكرار
         activeMsgsMap[id] = m;
         const existing = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
         if (existing) {
@@ -982,8 +1136,6 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
 
         const nearBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 160;
         appendMessageWithDateSep(area, id, m);
-        addedCount++;
-
         scheduleSeenMark(id, m, token);
 
         if (initialDone && m.sender !== me.username) playRecvSound();
@@ -992,7 +1144,6 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         }
     });
 
-    // عند التفاعل أو التعديل أو القراءة: نحدّث الرسالة بمكانها فقط (صفر إعادة تحميل)
     roomQueryRef.on("child_changed", snap => {
         if (token !== activeRoomToken) return;
         const id = snap.key;
@@ -1002,9 +1153,11 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
             const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
             if (el) el.remove();
             delete activeMsgsMap[id];
+            delete roomMsgsCache[dbPath][id];
             return;
         }
         activeMsgsMap[id] = m;
+        roomMsgsCache[dbPath][id] = m;
         const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
         if (el) updateMessageNodeInPlace(el, id, m);
     });
@@ -1013,11 +1166,11 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         if (token !== activeRoomToken) return;
         const id = snap.key;
         delete activeMsgsMap[id];
+        delete roomMsgsCache[dbPath][id];
         const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`);
         if (el) el.remove();
     });
 
-    // إظهار الرسائل المعلقة بالطابور (في حال النت مقطوع)
     offlineQueue.filter(q => q.dbPath === dbPath && q.owner === me.username).forEach(q => {
         if (!area.querySelector(`.msg-wrap[data-mid="${q.payload.id}"]`)) {
             const hint = area.querySelector(".empty-room-hint");
@@ -1063,7 +1216,7 @@ function appendMessageWithDateSep(area, id, m) {
     area.appendChild(buildMessageNode(id, m));
 }
 
-// ==================== بناء مشغّل البصمة والفيديو الخاص بالمنصة ====================
+// ==================== مشغّل البصمة والفيديو الخاص بالمنصة ====================
 function buildVoicePlayer(src, msgId) {
     const wrap = document.createElement("div");
     wrap.className = "voice-player";
@@ -1083,8 +1236,7 @@ function buildVoicePlayer(src, msgId) {
     for (let i = 0; i < 24; i++) {
         const b = document.createElement("div");
         b.className = "vp-bar";
-        const h = 28 + ((seed * (i + 3) * 17) % 70);
-        b.style.height = h + "%";
+        b.style.height = (28 + ((seed * (i + 3) * 17) % 70)) + "%";
         wave.appendChild(b);
         bars.push(b);
     }
@@ -1105,15 +1257,13 @@ function buildVoicePlayer(src, msgId) {
     let rate = 1;
     const fmt = sec => {
         if (!isFinite(sec)) return "00:00";
-        const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-        return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
     };
 
     aud.addEventListener("loadedmetadata", () => { timeEl.innerText = fmt(aud.duration); });
     aud.addEventListener("timeupdate", () => {
         if (!aud.duration) return;
-        const ratio = aud.currentTime / aud.duration;
-        const lit = Math.floor(ratio * bars.length);
+        const lit = Math.floor((aud.currentTime / aud.duration) * bars.length);
         bars.forEach((b, idx) => b.classList.toggle("played", idx <= lit));
         timeEl.innerText = fmt(aud.currentTime);
     });
@@ -1143,8 +1293,7 @@ function buildVoicePlayer(src, msgId) {
         e.stopPropagation();
         if (!aud.duration) return;
         const rect = wave.getBoundingClientRect();
-        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        aud.currentTime = pct * aud.duration;
+        aud.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * aud.duration;
     };
 
     speedBtn.onclick = e => {
@@ -1174,9 +1323,7 @@ function openFullVideoModal(src) {
     const playBtn = document.getElementById("fullVidPlayBtn");
     const seek = document.getElementById("fullVidSeek");
     const timeEl = document.getElementById("fullVidTime");
-    vid.src = src;
-    seek.value = 0;
-    timeEl.innerText = "00:00";
+    vid.src = src; seek.value = 0; timeEl.innerText = "00:00";
     document.getElementById("videoFullModal").style.display = "flex";
     vid.play().catch(() => {});
     playBtn.innerText = "⏸";
@@ -1184,32 +1331,20 @@ function openFullVideoModal(src) {
     vid.ontimeupdate = () => {
         if (!vid.duration) return;
         seek.value = Math.round((vid.currentTime / vid.duration) * 100);
-        const m = Math.floor(vid.currentTime / 60), s = Math.floor(vid.currentTime % 60);
-        timeEl.innerText = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        timeEl.innerText = `${String(Math.floor(vid.currentTime / 60)).padStart(2, "0")}:${String(Math.floor(vid.currentTime % 60)).padStart(2, "0")}`;
     };
     vid.onended = () => { playBtn.innerText = "▶"; };
 }
 
 function toggleFullVidPlay() {
-    const vid = document.getElementById("fullVidEl");
-    const btn = document.getElementById("fullVidPlayBtn");
+    const vid = document.getElementById("fullVidEl"), btn = document.getElementById("fullVidPlayBtn");
     if (vid.paused) { vid.play().catch(() => {}); btn.innerText = "⏸"; }
     else { vid.pause(); btn.innerText = "▶"; }
 }
+function seekFullVid(val) { const vid = document.getElementById("fullVidEl"); if (vid.duration) vid.currentTime = (val / 100) * vid.duration; }
+function closeFullVideoModal() { const vid = document.getElementById("fullVidEl"); vid.pause(); vid.src = ""; document.getElementById("videoFullModal").style.display = "none"; }
 
-function seekFullVid(val) {
-    const vid = document.getElementById("fullVidEl");
-    if (vid.duration) vid.currentTime = (val / 100) * vid.duration;
-}
-
-function closeFullVideoModal() {
-    const vid = document.getElementById("fullVidEl");
-    vid.pause();
-    vid.src = "";
-    document.getElementById("videoFullModal").style.display = "none";
-}
-
-// ==================== بناء وتحديث فقاعة الرسالة بمكانها ====================
+// ==================== بناء وتحديث فقاعة الرسالة ====================
 function buildReactChipHTML(em, usersList) {
     const mine = usersList.includes(me.username);
     const avHTML = usersList.slice(0, 2).map(u => {
@@ -1232,23 +1367,18 @@ function buildReactionsHTML(id, m, isChannel) {
                 pills += `<button class="ch-pill ${mine ? 'mine' : ''}" onclick="event.stopPropagation(); toggleChannelReaction('${id}','${r.k}',${mine})">${r.em} <span>${cnt}</span></button>`;
             }
         });
-        // زر سريع لإضافة أي تفاعل بأسلوب تليگرام المرتب
         pills += `<button class="ch-add-react" title="إضافة تفاعل" onclick="event.stopPropagation(); openMsgActions('${id}', activeMsgsMap['${id}'])">+</button>`;
         return pills;
     }
     if (!m.reactions) return "";
     const grouped = {};
-    Object.entries(m.reactions).forEach(([u, em]) => {
-        if (!grouped[em]) grouped[em] = [];
-        grouped[em].push(u);
-    });
+    Object.entries(m.reactions).forEach(([u, em]) => { if (!grouped[em]) grouped[em] = []; grouped[em].push(u); });
     return Object.entries(grouped).map(([em, uList]) => buildReactChipHTML(em, uList)).join("");
 }
 
 function buildFooterHTML(m, isMe, isChannel) {
     if (isChannel) {
-        const vCount = Object.keys(m.views || {}).length;
-        return `<span>👁️ ${vCount}</span><span>${formatTime(m.ts)}</span>`;
+        return `<span>👁️ ${Object.keys(m.views || {}).length}</span><span>${formatTime(m.ts)}</span>`;
     }
     const tick = isMe && activeChatType === "dm"
         ? (m._pending ? `<span class="ticks pending">🕒</span>` : `<span class="ticks ${m.seen ? 'seen' : ''}">${m.seen ? '✓✓' : '✓'}</span>`)
@@ -1264,12 +1394,7 @@ function buildPollInnerHTML(id, poll) {
     (poll.options || []).forEach((optText, idx) => {
         const optCount = Object.values(votes).filter(v => v === idx).length;
         const pct = totalVotes > 0 ? Math.round((optCount / totalVotes) * 100) : 0;
-        html += `
-            <div class="poll-opt ${myVote === idx ? 'voted' : ''}" onclick="event.stopPropagation(); voteInPoll('${id}', ${idx})">
-                <div class="poll-bar" style="width:${pct}%"></div>
-                <span>${myVote === idx ? '✓ ' : ''}${escapeHTML(optText)}</span>
-                <span>${pct}%</span>
-            </div>`;
+        html += `<div class="poll-opt ${myVote === idx ? 'voted' : ''}" onclick="event.stopPropagation(); voteInPoll('${id}', ${idx})"><div class="poll-bar" style="width:${pct}%"></div><span>${myVote === idx ? '✓ ' : ''}${escapeHTML(optText)}</span><span>${pct}%</span></div>`;
     });
     html += `<div class="poll-meta">إجمالي الأصوات: ${totalVotes}</div>`;
     return html;
@@ -1334,13 +1459,10 @@ function buildMessageNode(id, m) {
         contentBox.appendChild(box);
     } else if (m.type === "img_sticker") {
         const img = document.createElement("img"); img.className = "sticker-img-render"; img.src = m.content;
-        img.onclick = () => openLightbox(m.content);
-        contentBox.appendChild(img);
+        img.onclick = () => openLightbox(m.content); contentBox.appendChild(img);
     } else if (m.type === "gif_card") {
         const gc = findGifById(m.content);
-        const box = document.createElement("div");
-        box.className = "sticker-render";
-        box.style.cssText = `background:${gc.bg}; width:175px; height:112px;`;
+        const box = document.createElement("div"); box.className = "sticker-render"; box.style.cssText = `background:${gc.bg}; width:175px; height:112px;`;
         box.innerHTML = `<div style="font-size:44px;">${gc.em}</div><div style="font-size:13px; font-weight:800; color:#fff;">${escapeHTML(gc.cap)}</div>`;
         contentBox.appendChild(box);
     } else if (m.type === "image") {
@@ -1352,98 +1474,76 @@ function buildMessageNode(id, m) {
         vo.className = "vo-card" + (opened ? " opened" : "");
         if (opened) vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
         else if (isMe) vo.innerHTML = `<span>💣</span><span>صورة عرض لمرة واحدة (بانتظار الفتح)</span>`;
-        else {
-            vo.innerHTML = `<span>💣</span><span>اضغط لفتح الصورة لمرة واحدة</span>`;
-            vo.onclick = () => openViewOnce(id, m.content);
-        }
+        else { vo.innerHTML = `<span>💣</span><span>اضغط لفتح الصورة لمرة واحدة</span>`; vo.onclick = () => openViewOnce(id, m.content); }
         contentBox.appendChild(vo);
     } else if (m.type === "audio") {
         contentBox.appendChild(buildVoicePlayer(m.content, id));
     } else if (m.type === "video") {
         contentBox.appendChild(buildCustomVideoCard(m.content));
     } else if (m.type === "poll" && m.poll) {
-        const pb = document.createElement("div");
-        pb.className = "poll-box";
-        pb.innerHTML = buildPollInnerHTML(id, m.poll);
-        contentBox.appendChild(pb);
+        const pb = document.createElement("div"); pb.className = "poll-box";
+        pb.innerHTML = buildPollInnerHTML(id, m.poll); contentBox.appendChild(pb);
     }
     bubble.appendChild(contentBox);
 
     if (isChannel) {
-        const chBar = document.createElement("div");
-        chBar.className = "ch-reactions";
-        chBar.innerHTML = buildReactionsHTML(id, m, true);
-        bubble.appendChild(chBar);
-
-        const footer = document.createElement("div");
-        footer.className = "msg-footer";
-        footer.style.marginTop = "6px";
-        footer.innerHTML = buildFooterHTML(m, isMe, true);
-        bubble.appendChild(footer);
+        const chBar = document.createElement("div"); chBar.className = "ch-reactions";
+        chBar.innerHTML = buildReactionsHTML(id, m, true); bubble.appendChild(chBar);
+        const footer = document.createElement("div"); footer.className = "msg-footer"; footer.style.marginTop = "6px";
+        footer.innerHTML = buildFooterHTML(m, isMe, true); bubble.appendChild(footer);
     } else {
-        const bottomRow = document.createElement("div");
-        bottomRow.className = "msg-bottom-row";
-
-        const reactSlot = document.createElement("div");
-        reactSlot.className = "in-bubble-reacts";
+        const bottomRow = document.createElement("div"); bottomRow.className = "msg-bottom-row";
+        const reactSlot = document.createElement("div"); reactSlot.className = "in-bubble-reacts";
         reactSlot.innerHTML = buildReactionsHTML(id, m, false);
         reactSlot.onclick = ev => {
-            const chip = ev.target.closest(".react-chip");
-            if (!chip) return;
-            ev.stopPropagation();
-            selectedMsg = { id, data: activeMsgsMap[id] || m };
-            reactToSelected(chip.getAttribute("data-em"));
+            const chip = ev.target.closest(".react-chip"); if (!chip) return;
+            ev.stopPropagation(); selectedMsg = { id, data: activeMsgsMap[id] || m }; reactToSelected(chip.getAttribute("data-em"));
         };
-
-        const footer = document.createElement("div");
-        footer.className = "msg-footer";
+        const footer = document.createElement("div"); footer.className = "msg-footer";
         footer.innerHTML = buildFooterHTML(m, isMe, false);
-
-        bottomRow.appendChild(reactSlot);
-        bottomRow.appendChild(footer);
-        bubble.appendChild(bottomRow);
+        bottomRow.appendChild(reactSlot); bottomRow.appendChild(footer); bubble.appendChild(bottomRow);
     }
 
     wrap.appendChild(bubble);
     return wrap;
 }
 
-// التحديث الموضعي الذكي — يحدّث التفاعل والوقت والـ poll فقط بدون لمس الصوت أو الفيديو أو الشاشة!
 function updateMessageNodeInPlace(el, id, m) {
     const isMe = m.sender === me.username;
     const isChannel = activeChatType === "channel";
 
     if (m.type === "text") {
-        const txt = el.querySelector(".msg-text");
-        if (txt) txt.innerHTML = formatRichText(m.content);
+        const txt = el.querySelector(".msg-text"); if (txt) txt.innerHTML = formatRichText(m.content);
     } else if (m.type === "poll" && m.poll) {
-        const pb = el.querySelector(".poll-box");
-        if (pb) pb.innerHTML = buildPollInnerHTML(id, m.poll);
+        const pb = el.querySelector(".poll-box"); if (pb) pb.innerHTML = buildPollInnerHTML(id, m.poll);
     } else if (m.type === "view_once" && m.voOpened) {
         const vo = el.querySelector(".vo-card");
         if (vo && !vo.classList.contains("opened")) {
-            vo.classList.add("opened");
-            vo.onclick = null;
+            vo.classList.add("opened"); vo.onclick = null;
             vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
         }
     }
 
     if (isChannel) {
-        const chBar = el.querySelector(".ch-reactions");
-        if (chBar) chBar.innerHTML = buildReactionsHTML(id, m, true);
+        const chBar = el.querySelector(".ch-reactions"); if (chBar) chBar.innerHTML = buildReactionsHTML(id, m, true);
     } else {
-        const rSlot = el.querySelector(".in-bubble-reacts");
-        if (rSlot) rSlot.innerHTML = buildReactionsHTML(id, m, false);
+        const rSlot = el.querySelector(".in-bubble-reacts"); if (rSlot) rSlot.innerHTML = buildReactionsHTML(id, m, false);
     }
 
     const foot = el.querySelector(".msg-footer");
-    if (foot) foot.innerHTML = buildFooterHTML(m, isMe, isChannel);
+    if (foot) {
+        // الحفاظ على أزرار التأثير والوضع المختفي داخل التذييل عند التحديث الموضعي
+        const preserved = Array.from(foot.querySelectorAll(".fx-msg-pill, .vanish-tag"));
+        foot.innerHTML = buildFooterHTML(m, isMe, isChannel);
+        preserved.reverse().forEach(n => foot.insertBefore(n, foot.firstChild));
+    }
 }
 
 function closeActiveChat() {
     document.getElementById("chatPane").classList.remove("open");
     if (activeChatType === "dm" && activeRoomId) db.ref(`chats/${activeRoomId}/typing/${me.username}`).set(false);
     detachRoomListeners();
+    toggleChatExtras(false);
     activeChatType = null; activePartner = null; activeRoomId = null; activeSpaceObj = null;
     document.getElementById("messagesList").innerHTML = "";
     renderChatsSidebar();
@@ -1490,8 +1590,7 @@ function updateActiveHeader() {
         if (!p) return;
         setAvatarStyle(av, p);
         nm.innerHTML = `${escapeHTML(p.name)} ${getVerifiedBadgeHTML(p.verified)} ${getDevBadgeHTML(p)}`;
-        const roomCopy = activeRoomId;
-        const partnerCopy = activePartner;
+        const roomCopy = activeRoomId, partnerCopy = activePartner;
         db.ref(`chats/${roomCopy}/typing/${partnerCopy}`).once("value", s => {
             if (activeRoomId !== roomCopy) return;
             if (s.val() === true) { st.innerText = "يكتب الآن..."; st.className = "status-typing"; }
@@ -1524,10 +1623,22 @@ function getActiveRoomBasePath() {
     return `space_msgs/${activeRoomId}`;
 }
 
+// التبديل الذكي بين زر المايك وزر الإرسال لتوسيع خانة الكتابة (نفس تليگرام)
+function updateSendMicToggle() {
+    const inp = document.getElementById("msgInput");
+    const mic = document.getElementById("micBtn");
+    const snd = document.getElementById("sendBtn");
+    if (!inp || !mic || !snd) return;
+    const hasText = inp.value.trim().length > 0 || !!editingMsgId;
+    mic.style.display = hasText ? "none" : "inline-flex";
+    snd.style.display = hasText ? "flex" : "none";
+}
+
 function handleMsgInputResize(el) {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    updateSendMicToggle();
 }
 
 function handleMsgKeydown(e) {
@@ -1546,40 +1657,32 @@ function handleTyping() {
     }, 1800);
 }
 
-// إرسال فوري + دعم النت الضعيف (تظهر الرسالة فوراً بـ 🕒 وتصل تلقائياً)
 async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     if (!activeRoomId) return;
     const now = Date.now();
     const sig = `${activeRoomId}|${type}|${String(content).slice(0, 60)}`;
     if (sendLock || (sig === lastSentSig && now - lastSentTs < 950)) return;
 
-    sendLock = true;
-    lastSentSig = sig;
-    lastSentTs = now;
+    sendLock = true; lastSentSig = sig; lastSentTs = now;
 
     const msgId = "m_" + now + "_" + Math.random().toString(36).slice(2, 8);
     const dbPath = getActiveRoomBasePath();
-    const chatTypeCopy = activeChatType;
-    const partnerCopy = activePartner;
-    const roomIdCopy = activeRoomId;
+    const chatTypeCopy = activeChatType, partnerCopy = activePartner, roomIdCopy = activeRoomId;
 
-    const payload = {
-        id: msgId, sender: me.username, senderName: me.name,
-        type, content, seen: false, ts: now, ...extra
-    };
+    const payload = { id: msgId, sender: me.username, senderName: me.name, type, content, seen: false, ts: now, ...extra };
     if (replyTarget) { payload.replyTo = replyTarget; cancelReplyOrEdit(); }
 
-    // رسم فوري متفائل للشاشة حتى يشعر المستخدم بسرعة تليگرام حتى على نت ضعيف
     const area = document.getElementById("messagesList");
     const hint = area.querySelector(".empty-room-hint");
     if (hint) hint.remove();
     const pendingObj = { ...payload, _pending: true };
     activeMsgsMap[msgId] = pendingObj;
+    if (!roomMsgsCache[dbPath]) roomMsgsCache[dbPath] = {};
+    roomMsgsCache[dbPath][msgId] = pendingObj;
     appendMessageWithDateSep(area, msgId, pendingObj);
     area.scrollTop = area.scrollHeight;
     playSendSound();
 
-    // حفظ مؤقت في طابور النت الضعيف للرسائل النصية والملصقات
     const isLight = type === "text" || type === "sticker" || type === "gif_card" || type === "poll";
     if (isLight && (!navigator.onLine || !isDbConnected)) {
         offlineQueue.push({ owner: me.username, dbPath, chatType: chatTypeCopy, partner: partnerCopy, roomId: roomIdCopy, previewLabel, payload });
@@ -1593,13 +1696,14 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
         await db.ref(`${dbPath}/${msgId}`).set(payload);
         if (chatTypeCopy === "dm" && partnerCopy) {
             db.ref(`user_contacts/${partnerCopy}/${me.username}`).update({ addedAt: now }).catch(() => {});
-            db.ref(`chat_meta/${roomIdCopy}`).set({
-                lastMsg: previewLabel, lastSender: me.username, lastTs: now, unreadFor: partnerCopy
-            }).catch(() => {});
+            db.ref(`chat_meta/${roomIdCopy}`).set({ lastMsg: previewLabel, lastSender: me.username, lastTs: now, unreadFor: partnerCopy }).catch(() => {});
             db.ref(`chats/${roomIdCopy}/typing/${me.username}`).set(false).catch(() => {});
+        } else if ((chatTypeCopy === "channel" || chatTypeCopy === "group") && roomIdCopy) {
+            db.ref(`spaces/${roomIdCopy}`).update({ lastMsg: previewLabel, lastTs: now }).catch(() => {});
         }
         const el = area.querySelector(`.msg-wrap[data-mid="${msgId}"]`);
         activeMsgsMap[msgId] = payload;
+        roomMsgsCache[dbPath][msgId] = payload;
         if (el) updateMessageNodeInPlace(el, msgId, payload);
     } catch {
         if (isLight) {
@@ -1619,7 +1723,8 @@ async function sendTextMessage() {
     const txt = inp.value.trim();
     if (!txt) return;
     inp.value = "";
-    inp.style.height = "40px";
+    inp.style.height = "39px";
+    updateSendMicToggle();
 
     if (editingMsgId && activeRoomId) {
         const targetId = editingMsgId;
@@ -1695,6 +1800,7 @@ function startEditSelected() {
 function cancelReplyOrEdit() {
     replyTarget = null; editingMsgId = null;
     document.getElementById("replyPreviewBar").style.display = "none";
+    updateSendMicToggle();
 }
 
 async function pinSelectedMessage() {
@@ -1703,8 +1809,7 @@ async function pinSelectedMessage() {
     const txt = d.type === "text" ? d.content : (d.type === "image" ? "📷 صورة" : "🎤 بصمة صوتية");
     const pPath = activeChatType === "dm" ? `chats/${activeRoomId}/pinned` : `spaces/${activeRoomId}/pinned`;
     await db.ref(pPath).set({ id: selectedMsg.id, text: txt });
-    closeMsgActions();
-    showToast("تم التثبيت بالأعلى 📌");
+    closeMsgActions(); showToast("تم التثبيت بالأعلى 📌");
 }
 
 async function unpinMessage() {
@@ -1721,8 +1826,7 @@ function copySelectedText() {
 async function deleteSelectedForMe() {
     if (!selectedMsg || !activeRoomId) return;
     await db.ref(`${getActiveRoomBasePath()}/${selectedMsg.id}/deletedFor/${me.username}`).set(true);
-    closeMsgActions();
-    showToast("تم حذف الرسالة من عندك فقط 🙈");
+    closeMsgActions(); showToast("تم حذف الرسالة من عندك فقط 🙈");
 }
 
 async function deleteSelectedForEveryone() {
@@ -1731,8 +1835,7 @@ async function deleteSelectedForEveryone() {
     const isOwner = activeSpaceObj && activeSpaceObj.owner === me.username;
     if (!isMine && !isOwner && activeChatType !== "saved") { showToast("يمكنك حذف رسائلك فقط للجميع"); return; }
     await db.ref(`${getActiveRoomBasePath()}/${selectedMsg.id}`).remove();
-    closeMsgActions();
-    showToast("تم الحذف نهائياً للجميع 🗑️");
+    closeMsgActions(); showToast("تم الحذف نهائياً للجميع 🗑️");
 }
 
 async function clearChatForMe() {
@@ -1742,6 +1845,7 @@ async function clearChatForMe() {
     const updates = {};
     snap.forEach(ch => { updates[`${ch.key}/deletedFor/${me.username}`] = true; });
     if (Object.keys(updates).length > 0) await db.ref(`chats/${activeRoomId}/messages`).update(updates);
+    roomMsgsCache[`chats/${activeRoomId}/messages`] = {};
     showToast("تم التنظيف من عندك فقط");
 }
 
@@ -1870,8 +1974,7 @@ function attachCallStateWatchers(peerConn) {
 
 async function flushPendingRemoteIce() {
     while (pendingRemoteIce.length > 0 && pc && pc.currentRemoteDescription) {
-        const c = pendingRemoteIce.shift();
-        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+        try { await pc.addIceCandidate(new RTCIceCandidate(pendingRemoteIce.shift())); } catch {}
     }
 }
 function flushLocalIceQueue(subPath) {
