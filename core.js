@@ -1,4 +1,4 @@
-// ==================== المحرّك الرئيسي الفائق (V11 Turbo Shield — SHA-256 + AES-GCM + Targeted Listeners + Lazy Posts) ====================
+// ==================== المحرّك الرئيسي الفائق (V12 Signature — Infinite History + Message Grouping + SHA-256 + AES-GCM + 60fps) ====================
 const DB_URL = "https://notes-app-c738e-default-rtdb.firebaseio.com";
 
 firebase.initializeApp({ databaseURL: DB_URL });
@@ -65,7 +65,6 @@ async function verifyAdminPinInput(inputPin) {
     return verifyPinAgainstHashOrLegacy(inputPin, sysConfig.adminPinHash, null, _BOOT_ADM);
 }
 
-// تشفير AES-GCM للرسائل الخاصة مع كاش لفك التشفير لمنع تكرار المعالجة
 const e2eKeyCache = new Map();
 const metaCipherCache = new Map();
 
@@ -111,7 +110,7 @@ async function e2eDecrypt(roomId, cipherStr) {
         const data = bytes.slice(12);
         const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
         const plain = new TextDecoder().decode(dec);
-        if (metaCipherCache.size > 300) metaCipherCache.clear();
+        if (metaCipherCache.size > 400) metaCipherCache.clear();
         metaCipherCache.set(cacheKey, plain);
         return plain;
     } catch { return "🔒 [رسالة مشفّرة]"; }
@@ -128,7 +127,7 @@ async function hydrateMessageDecryption(m, roomId) {
     return copy;
 }
 
-// ==================== 2. متغيرات الحالة والكاش الفائق ====================
+// ==================== 2. متغيرات الحالة والكاش والسجل اللانهائي ====================
 let sysConfig = { pinHash: "", decoyPinHash: "", adminPinHash: "", locked: false, allowRegister: true, ai: { provider: "free", apiKey: "" } };
 let failedAttempts = parseInt(localStorage.getItem("sec_fails") || "0");
 let lockUntilTs = parseInt(localStorage.getItem("sec_lock_until") || "0");
@@ -161,7 +160,10 @@ let activePartnerTyping = false;
 let activeRoomId = null;
 let activeSpaceObj = null;
 let activeRoomToken = 0;
-let activeRoomLimit = 14;
+let activeRoomLimit = 30;
+let oldestLoadedKey = null;
+let hasMoreHistory = false;
+let isLoadingHistory = false;
 let activeMsgsMap = {};
 const roomMsgsCache = {};
 let roomQueryRef = null;
@@ -175,6 +177,7 @@ let pendingSeenBatch = {};
 let sidebarDebounceTimer = null;
 let storiesDebounceTimer = null;
 let bootCacheSaveTimer = null;
+let groupingRaf = null;
 let unreadWhileScrolled = 0;
 
 let selectedSelfDestructSec = 0;
@@ -194,7 +197,14 @@ let selectedMsg = null;
 let currentPlayingAudio = null;
 let currentPlayingBtn = null;
 
-// ==================== شاشة البداية + الاهتزازات + شرارات التفاعل ====================
+// ==================== نقاط بوابة الدخول + شاشة البداية + الاهتزاز ====================
+window.updateGatePinDots = function (val) {
+    const len = String(val || "").length;
+    document.querySelectorAll("#gatePinDots i").forEach((dot, idx) => {
+        dot.classList.toggle("filled", idx < len);
+    });
+};
+
 function dismissSplashScreen() {
     const sp = document.getElementById("splashScreen");
     if (!sp || sp.classList.contains("hide")) return;
@@ -212,10 +222,10 @@ function updateDynamicGreeting() {
     if (!el) return;
     const h = new Date().getHours();
     const name = me?.name ? `، ${me.name}` : "";
-    if (h >= 5 && h < 12) el.innerText = `☀️ صباح الخير${name}`;
-    else if (h >= 12 && h < 17) el.innerText = `🌤️ يومك سعيد${name}`;
-    else if (h >= 17 && h < 22) el.innerText = `🌆 مساؤك رايق${name}`;
-    else el.innerText = `🌙 سهرة سعيدة${name}`;
+    if (h >= 5 && h < 12) el.innerText = `صباح الخير${name}`;
+    else if (h >= 12 && h < 17) el.innerText = `يومك سعيد${name}`;
+    else if (h >= 17 && h < 22) el.innerText = `مساؤك رايق${name}`;
+    else el.innerText = `سهرة سعيدة${name}`;
 }
 
 function triggerHaptic(pattern = 12) {
@@ -235,7 +245,7 @@ function spawnSparks(x, y) {
         dot.style.setProperty("--sx", Math.round(Math.cos(angle) * dist) + "px");
         dot.style.setProperty("--sy", Math.round(Math.sin(angle) * dist) + "px");
         document.body.appendChild(dot);
-        setTimeout(() => dot.remove(), 520);
+        setTimeout(() => dot.remove(), 500);
     }
 }
 
@@ -276,12 +286,8 @@ window.addEventListener("offline", () => updateNetBanner(false));
 window.addEventListener("online", () => flushOfflineQueue());
 
 document.addEventListener("click", ev => {
-    const dd = document.getElementById("chatToolsDropdown");
-    if (dd && dd.classList.contains("open") && !ev.target.closest("#chatToolsDropdown") && !ev.target.closest("#btnChatToolsMenu")) dd.classList.remove("open");
     const opd = document.getElementById("opMoreDropdown");
     if (opd && opd.classList.contains("open") && !ev.target.closest("#opMoreDropdown") && !ev.target.closest("#opMoreBlockBtn")) opd.classList.remove("open");
-    const mm = document.getElementById("mediaMenu");
-    if (mm && mm.style.display === "block" && !ev.target.closest("#mediaMenu") && !ev.target.closest("[onclick*='toggleMediaMenu']")) mm.style.display = "none";
 });
 
 (function initSheetPullToClose() {
@@ -305,6 +311,8 @@ document.addEventListener("click", ev => {
         if (dy > 85 && bgEl) {
             triggerHaptic(10); sheetEl.style.transform = "";
             if (bgEl.id === "msgActionModal") closeMsgActions();
+            else if (bgEl.id === "chatToolsDropdown") toggleChatToolsMenu(false);
+            else if (bgEl.id === "mediaMenu") toggleMediaMenu(false);
             else if (bgEl.id === "storyViewersModal") closeStoryViewersModal();
             else if (bgEl.id === "noteViewModal" && window.closeFriendNoteView) window.closeFriendNoteView();
             else if (bgEl.id === "musicPickerModal" && window.closeMusicPicker) window.closeMusicPicker();
@@ -321,7 +329,7 @@ document.addEventListener("click", ev => {
 // ==================== الكاش المحلي الفوري وتجميع الرسم ====================
 function loadInstantBootCache(username) {
     try {
-        const raw = localStorage.getItem("boot_cache_v11_" + username);
+        const raw = localStorage.getItem("boot_cache_v12_" + username) || localStorage.getItem("boot_cache_v11_" + username);
         if (!raw) return;
         const c = JSON.parse(raw);
         if (c.contacts && typeof c.contacts === "object") myContacts = c.contacts;
@@ -357,7 +365,7 @@ function scheduleSaveBootCache() {
                     lastMsg: s.lastMsg || "", lastTs: s.lastTs || s.createdAt || 0, members: s.members
                 };
             });
-            localStorage.setItem("boot_cache_v11_" + me.username, JSON.stringify({
+            localStorage.setItem("boot_cache_v12_" + me.username, JSON.stringify({
                 contacts: myContacts, profiles: slimProfiles, spaces: slimSpaces, meta: allMeta, previews: decryptedMetaPreviews
             }));
         } catch {}
@@ -366,23 +374,23 @@ function scheduleSaveBootCache() {
 
 function scheduleSidebarRender() {
     clearTimeout(sidebarDebounceTimer);
-    sidebarDebounceTimer = setTimeout(() => { renderChatsSidebarNow(); }, 80);
+    sidebarDebounceTimer = setTimeout(() => { renderChatsSidebarNow(); }, 75);
 }
 
 function scheduleStoriesRender() {
     clearTimeout(storiesDebounceTimer);
     storiesDebounceTimer = setTimeout(() => {
         if (typeof renderStoriesStrip === "function") renderStoriesStrip();
-    }, 95);
+    }, 90);
 }
 
 function trimRoomCache(dbPath) {
     const cache = roomMsgsCache[dbPath];
     if (!cache) return;
     const keys = Object.keys(cache);
-    if (keys.length <= 28) return;
+    if (keys.length <= 36) return;
     keys.sort((a, b) => (cache[a]?.ts || 0) - (cache[b]?.ts || 0));
-    keys.slice(0, keys.length - 25).forEach(k => { delete cache[k]; });
+    keys.slice(0, keys.length - 30).forEach(k => { delete cache[k]; });
 }
 
 function saveOfflineQueue() {
@@ -457,7 +465,7 @@ function applyBubbleStyle(b, silent = false) {
     document.documentElement.setAttribute("data-bubble", style);
     localStorage.setItem("app_bubble", style);
     document.querySelectorAll("#bubbleStyleGrid .chip-btn").forEach(el => el.classList.toggle("active", el.getAttribute("data-b") === style));
-    if (!silent) showToast("تم تحديث ستايل الفقاعات 💬");
+    if (!silent) showToast("تم تحديث ستايل الفقاعات");
 }
 
 function applyFont(f, silent = false) {
@@ -466,7 +474,7 @@ function applyFont(f, silent = false) {
     document.documentElement.setAttribute("data-font", font);
     localStorage.setItem("app_font", font);
     document.querySelectorAll("#fontGrid .chip-btn").forEach(el => el.classList.toggle("active", el.getAttribute("data-f") === font));
-    if (!silent) showToast("تم تغيير الخط ✍️");
+    if (!silent) showToast("تم تغيير الخط");
 }
 
 function applyFontSize(fs, silent = false) {
@@ -475,7 +483,7 @@ function applyFontSize(fs, silent = false) {
     document.documentElement.setAttribute("data-fsize", size);
     localStorage.setItem("app_fsize", size);
     document.querySelectorAll("#fontSizeGrid .chip-btn").forEach(el => el.classList.toggle("active", el.getAttribute("data-fs") === size));
-    if (!silent) showToast("تم تعديل حجم الخط 🔠");
+    if (!silent) showToast("تم تعديل حجم الخط");
 }
 
 function applyWallpaper(w, silent = false) {
@@ -495,7 +503,7 @@ function applyWallpaper(w, silent = false) {
             } else { document.documentElement.setAttribute("data-wp", "pattern"); area.style.backgroundImage = ""; }
         } else { area.style.backgroundImage = ""; area.style.backgroundSize = ""; area.style.backgroundPosition = ""; }
     }
-    if (!silent) showToast("تم تحديث خلفية المحادثة 🎨");
+    if (!silent) showToast("تم تحديث خلفية المحادثة");
 }
 
 async function handleChatWallpaperUpload(e) {
@@ -524,7 +532,7 @@ function getVerifiedBadgeHTML(level) {
 
 function getDevBadgeHTML(userObj) {
     if (!userObj) return "";
-    return (userObj.isDev || userObj.username === "h") ? `<span class="dev-pill">⚡ المطور</span>` : "";
+    return (userObj.isDev || userObj.username === "h") ? `<span class="dev-pill">المطور</span>` : "";
 }
 
 function renderStyledUserName(userObj) {
@@ -602,7 +610,7 @@ function sendNotification(targetUsername, text, icon = "🔔") {
 function renderDeviceLockoutScreen(untilTs) {
     const mins = Math.max(1, Math.ceil((untilTs - Date.now()) / 60000));
     document.body.innerHTML = `<div style="text-align:center; padding:35px; color:#94a3b8; max-width:400px; margin:auto;">
-        <h1 style="color:#f43f5e; font-size:50px; font-weight:800;">🔒</h1>
+        <h1 style="color:#f43f5e; font-size:46px; font-weight:800;">🔒</h1>
         <h3 style="color:#fff; margin-top:8px;">تم قفل هذا الجهاز مؤقتاً</h3>
         <p style="font-size:13px; margin-top:8px; line-height:1.6;">تم تسجيل 3 محاولات دخول فاشلة متتالية وإرسال تنبيه للإدارة.<br>حاول مرة أخرى بعد <b>${mins} دقيقة</b>.</p>
     </div>`;
@@ -660,18 +668,18 @@ function openFutureModule(modId) {
     triggerHaptic(10);
     if (window.AppModules && typeof window.AppModules[modId] === "function") { window.AppModules[modId](); return; }
     if (modId === "music_hub" && typeof window.openMusicPicker === "function") {
-        window.openMusicPicker("🎵 مكتبة ومقترحات الأغاني", song => {
+        window.openMusicPicker("مكتبة ومقترحات الأغاني", song => {
             if (me && confirm(`تثبيت «${song.title}» كأغنية لبروفايلك؟`)) {
                 db.ref(`users/${me.username}/profileSong`).set(song).then(() => {
                     me.profileSong = song;
-                    showToast(`تم تثبيت «${song.title}» ببروفايلك 🎵✨`);
+                    showToast(`تم تثبيت «${song.title}» ببروفايلك 🎵`);
                 });
             }
         });
         return;
     }
-    const labels = { reels: "🎬 قسم الريلز قيد التجهيز للتحديث القادم!", study: "⏱️ جاري تحميل غرفة المراجعة...", ai: "🤖 جاري تحميل المساعد الذكي..." };
-    showToast(labels[modId] || "هذا القسم جاهز للتوسعة المستقبلية ✨");
+    const labels = { reels: "قسم الريلز قيد التجهيز للتحديث القادم", study: "جاري تحميل غرفة المراجعة...", ai: "جاري تحميل المساعد الذكي..." };
+    showToast(labels[modId] || "هذا القسم جاهز للتوسعة المستقبلية");
 }
 
 function insertAiMention() {
@@ -700,7 +708,7 @@ function toggleChatExtras(force) {
     if (!tray) return;
     const show = typeof force === "boolean" ? force : !tray.classList.contains("open");
     tray.classList.toggle("open", show);
-    if (btn) btn.classList.toggle("accent", show || (btn.innerText !== "✨") || selectedSelfDestructSec > 0);
+    if (btn) btn.classList.toggle("accent", show || selectedSelfDestructSec > 0 || !!btn.getAttribute("data-fx-on"));
     if (show) { toggleStickerDrawer(false); toggleMediaMenu(false); }
 }
 function toggleFormatBar(force) { toggleChatExtras(force); }
@@ -709,6 +717,7 @@ function toggleChatToolsMenu(force) {
     const dd = document.getElementById("chatToolsDropdown"); if (!dd) return;
     const show = typeof force === "boolean" ? force : !dd.classList.contains("open");
     dd.classList.toggle("open", show);
+    if (show) { toggleStickerDrawer(false); toggleMediaMenu(false); toggleChatExtras(false); }
 }
 
 function applyTextFormat(type) {
@@ -741,23 +750,23 @@ async function configureVaultPin() {
     const hash = await sha256Hex("vault::" + newPin.trim());
     vaultConfig.pinHash = hash;
     await db.ref(`user_vault/${me.username}/pinHash`).set(hash);
-    showToast("تم حفظ رمز الخزنة السري بنجاح 🔐✨");
+    showToast("تم حفظ رمز الخزنة السري بنجاح");
 }
 
 async function toggleHideActiveChatInVault() {
     if (activeChatType !== "dm" || !activePartner || !me) return;
     if (!vaultConfig.pinHash) {
-        showToast("عيّن رمز الخزنة السري أولاً 🔐");
+        showToast("عيّن رمز الخزنة السري أولاً");
         await configureVaultPin();
         if (!vaultConfig.pinHash) return;
     }
     const isHidden = !!(vaultConfig.hidden && vaultConfig.hidden[activePartner]);
     if (isHidden) {
         await db.ref(`user_vault/${me.username}/hidden/${activePartner}`).remove();
-        showToast("تم إخراج المحادثة من الخزنة وإرجاعها للقائمة 🔓");
+        showToast("تم إخراج المحادثة من الخزنة وإرجاعها للقائمة");
     } else {
         await db.ref(`user_vault/${me.username}/hidden/${activePartner}`).set(true);
-        showToast("تم إخفاء المحادثة بالخزنة السرية 🔐");
+        showToast("تم إخفاء المحادثة بالخزنة السرية");
         closeActiveChat();
     }
     updateVaultMenuButton();
@@ -767,7 +776,8 @@ async function toggleHideActiveChatInVault() {
 function updateVaultMenuButton() {
     const btn = document.getElementById("menuVaultBtn"); if (!btn || !activePartner) return;
     const isHidden = !!(vaultConfig.hidden && vaultConfig.hidden[activePartner]);
-    btn.innerHTML = isHidden ? "🔓 &nbsp; إخراج المحادثة من الخزنة" : "🔐 &nbsp; إخفاء المحادثة بالخزنة";
+    const lbl = btn.querySelector("span:last-child");
+    if (lbl) lbl.innerText = isHidden ? "إخراج من الخزنة" : "خزنة سرية";
 }
 
 async function handleSidebarSearchInput(val) {
@@ -779,7 +789,7 @@ async function handleSidebarSearchInput(val) {
             document.getElementById("localFilterInput").value = "";
             document.getElementById("vaultCloseBtn").style.display = "inline-flex";
             triggerHaptic([15, 30, 15]);
-            showToast("🔓 تم فتح خزنة المحادثات السرية");
+            showToast("تم فتح خزنة المحادثات السرية");
             renderChatsSidebarNow();
             return;
         }
@@ -790,7 +800,7 @@ async function handleSidebarSearchInput(val) {
 function closeHiddenVault() {
     vaultUnlocked = false;
     const btn = document.getElementById("vaultCloseBtn"); if (btn) btn.style.display = "none";
-    showToast("🔒 تم قفل الخزنة السرية");
+    showToast("تم قفل الخزنة السرية");
     renderChatsSidebarNow();
 }
 
@@ -832,7 +842,8 @@ async function verifyGate() {
         failedAttempts++;
         localStorage.setItem("sec_fails", failedAttempts.toString());
         document.getElementById("gatePin").value = "";
-        logSecurityEvent(`⚠️ محاولة دخول فاشلة (${failedAttempts}/3) على البوابة`);
+        window.updateGatePinDots("");
+        logSecurityEvent(`محاولة دخول فاشلة (${failedAttempts}/3) على البوابة`);
         if (failedAttempts >= 3) {
             lockUntilTs = Date.now() + 15 * 60 * 1000;
             localStorage.setItem("sec_lock_until", String(lockUntilTs));
@@ -876,7 +887,7 @@ async function doRegister() {
 
     let isDev = false;
     if (username === "h") {
-        const devCode = prompt("⚡ اليوزر المميز (@H) محجوز حصرياً لمطور المنصة.\nأدخل رمز المطور لتأكيد الملكية:");
+        const devCode = prompt("اليوزر المميز (@H) محجوز حصرياً لمطور المنصة.\nأدخل رمز المطور لتأكيد الملكية:");
         if (!(await verifyAdminPinInput(devCode))) { err.innerText = "اليوزر (@H) محجوز حصرياً لمطور المنصة فقط!"; return; }
         isDev = true;
     } else if (username.length < 3) { err.innerText = "اليوزرات العادية يجب أن تكون 3 أحرف على الأقل."; return; }
@@ -987,7 +998,6 @@ function enterMainApp(userData) {
     if (typeof initGamesListeners === "function") initGamesListeners();
     if (!selfDestructInterval) selfDestructInterval = setInterval(tickSelfDestructMessages, 1000);
 
-    // تحميل المنشورات بهدوء بعد استقرار الشاشة بـ 4 ثواني (أو فوراً عند الضغط على المنشورات)
     setTimeout(() => ensurePostsLoaded(), 4000);
 
     db.ref("users/" + me.username).on("value", snap => {
@@ -1000,7 +1010,6 @@ function enterMainApp(userData) {
         scheduleSaveBootCache();
     });
 
-    // مراقبة ستورياتي فقط (وستوريات الأصدقاء تُربط في syncContactListeners)
     db.ref("stories/" + me.username).on("value", snap => {
         if (snap.exists()) allStories[me.username] = snap.val();
         else delete allStories[me.username];
@@ -1055,7 +1064,6 @@ function enterMainApp(userData) {
     });
 }
 
-// مراقبة مستهدفة لأصدقائك فقط (الحساب + آخر رسالة + الستوري) بدون سحب بيانات الغرباء!
 function syncContactListeners() {
     const keys = Object.keys(myContacts);
     Object.keys(contactListeners).forEach(u => {
@@ -1144,7 +1152,7 @@ async function runUnifiedSearch() {
     const uSnap = await db.ref("users/" + target).once("value");
     if (uSnap.exists() && !uSnap.val().banned && target !== me.username) {
         const u = uSnap.val();
-        html += `<div class="search-cat-title">👤 حساب شخصي</div>
+        html += `<div class="search-cat-title">حساب شخصي</div>
             <div style="display:flex; align-items:center; justify-content:space-between; background:var(--glass-inner); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px; margin-bottom:10px;">
                 <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="ensurePostsLoaded(); document.getElementById('unifiedSearchModal').style.display='none'; openOtherProfile('${u.username}')">
                     <div class="avatar sm" id="uniFoundUserAv"></div>
@@ -1160,7 +1168,7 @@ async function runUnifiedSearch() {
     const spFound = Object.values(allSpaces).find(s => s && s.handle === target);
     if (spFound) {
         const isMem = !!(spFound.members && spFound.members[me.username]);
-        html += `<div class="search-cat-title">${spFound.type === "channel" ? "📢 قناة" : "👥 مجموعة"}</div>
+        html += `<div class="search-cat-title">${spFound.type === "channel" ? "قناة" : "مجموعة"}</div>
             <div style="display:flex; align-items:center; justify-content:space-between; background:var(--glass-inner); padding:10px 12px; border-radius:14px; border:1px solid var(--border); gap:10px;">
                 <div>
                     <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:3px;">${escapeHTML(spFound.name)} ${getVerifiedBadgeHTML(spFound.verified)}</div>
@@ -1170,7 +1178,7 @@ async function runUnifiedSearch() {
             </div>`;
     }
 
-    if (!html) box.innerHTML = `<span style="color:#fb7185; font-size:13px;">❌ لا يوجد حساب أو قناة بهذا اليوزر (<span class="handle-ltr" dir="ltr">@${escapeHTML(target)}</span>)</span>`;
+    if (!html) box.innerHTML = `<span style="color:#fb7185; font-size:13px;">لا يوجد حساب أو قناة بهذا اليوزر (<span class="handle-ltr" dir="ltr">@${escapeHTML(target)}</span>)</span>`;
     else {
         box.innerHTML = html;
         if (uSnap.exists() && document.getElementById("uniFoundUserAv")) setAvatarStyle(document.getElementById("uniFoundUserAv"), uSnap.val());
@@ -1200,7 +1208,7 @@ function renderChatsSidebarNow() {
         const savedRow = document.createElement("div");
         savedRow.className = "chat-row" + (activeChatType === "saved" ? " active" : "");
         savedRow.onclick = () => openSavedMessages();
-        savedRow.innerHTML = `<div class="avatar" style="background:linear-gradient(135deg,#0ea5e9,#6366f1);">🔖</div><div class="chat-row-info"><div class="chat-row-top"><span class="chat-row-name">الرسائل المحفوظة</span></div><div class="chat-row-bottom"><span class="chat-row-preview">ملاحظاتك وصورك وملازمك الخاصة بك وحدك</span></div></div>`;
+        savedRow.innerHTML = `<div class="avatar" style="background:linear-gradient(135deg,#0ea5e9,#6366f1);"><svg class="ic" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div><div class="chat-row-info"><div class="chat-row-top"><span class="chat-row-name">الرسائل المحفوظة</span></div><div class="chat-row-bottom"><span class="chat-row-preview">ملاحظاتك وصورك وملازمك الخاصة بك وحدك</span></div></div>`;
         frag.appendChild(savedRow);
     }
 
@@ -1226,10 +1234,10 @@ function renderChatsSidebarNow() {
     if (combined.length === 0) {
         const empty = document.createElement("div");
         empty.style.cssText = "text-align:center; padding:26px 14px; color:var(--text-dim); font-size:13px;";
-        if (vaultUnlocked) empty.innerHTML = `🔐 الخزنة السرية فارغة حالياً.<br><span style="font-size:11.5px;">افتح أي محادثة واضغط ⋮ ← «إخفاء المحادثة بالخزنة»</span>`;
+        if (vaultUnlocked) empty.innerHTML = `الخزنة السرية فارغة حالياً.<br><span style="font-size:11.5px;">افتح أي محادثة واضغط ⋮ ← «خزنة سرية»</span>`;
         else empty.innerHTML = sidebarFilter === "spaces"
-            ? `ما عندك قنوات أو مجموعات بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">➕ إنشاء قناة أو مجموعة</button>`
-            : `لا توجد محادثات أخرى.<br><br><button class="btn btn-sm" onclick="openUnifiedSearchModal()">🔍 بحث باليوزر (@)</button>`;
+            ? `ما عندك قنوات أو مجموعات بعد.<br><br><button class="btn btn-sm" onclick="openCreateSpaceModal()">+ إنشاء قناة أو مجموعة</button>`
+            : `لا توجد محادثات أخرى.<br><br><button class="btn btn-sm" onclick="openUnifiedSearchModal()">بحث باليوزر (@)</button>`;
         frag.appendChild(empty);
         list.innerHTML = "";
         list.appendChild(frag);
@@ -1247,7 +1255,7 @@ function renderChatsSidebarNow() {
             const av = document.createElement("div"); av.className = "avatar"; setAvatarStyle(av, u);
             const info = document.createElement("div"); info.className = "chat-row-info";
             const decryptedPrev = decryptedMetaPreviews[item.rId] || meta?.lastMsg || "";
-            const prev = myBlocked[u.username] ? "🚫 محظور" : (decryptedPrev || u.moodText || u.bio || getDisplayTag(u));
+            const prev = myBlocked[u.username] ? "محظور" : (decryptedPrev || u.moodText || u.bio || getDisplayTag(u));
             info.innerHTML = `<div class="chat-row-top"><span class="chat-row-name">${vaultUnlocked ? '🔐 ' : ''}${renderStyledUserName(u)} ${getVerifiedBadgeHTML(u.verified)} ${getDevBadgeHTML(u)}</span><span class="chat-row-time">${meta?.lastTs ? formatTime(meta.lastTs) : ""}</span></div><div class="chat-row-bottom"><span class="chat-row-preview" style="${isUnread ? 'color:var(--text);font-weight:700;' : ''}">${escapeHTML(prev)}</span>${isUnread ? '<span class="unread-dot"></span>' : ''}</div>`;
             row.appendChild(av); row.appendChild(info); frag.appendChild(row);
         } else {
@@ -1268,7 +1276,39 @@ function renderChatsSidebarNow() {
     list.appendChild(frag);
 }
 
-// ==================== 8. البحث داخل المحادثة + معرض الوسائط + التدمير الذاتي ====================
+// ==================== 8. التمرير اللانهائي للأعلى + تجميع الرسائل الذكي + البحث ====================
+function scheduleMessageGrouping() {
+    if (groupingRaf) return;
+    groupingRaf = requestAnimationFrame(() => {
+        groupingRaf = null;
+        applyMessageGroupingNow();
+    });
+}
+
+function applyMessageGroupingNow() {
+    const area = document.getElementById("messagesList");
+    if (!area || activeChatType === "channel") return;
+    const nodes = Array.from(area.children);
+    const isGroupable = el => el && el.classList.contains("msg-wrap") && !el.classList.contains("channel-post") && el.getAttribute("data-mtype") === "text";
+
+    for (let i = 0; i < nodes.length; i++) {
+        const el = nodes[i];
+        if (!el.classList.contains("msg-wrap")) continue;
+        el.classList.remove("grp-cont", "grp-first", "grp-mid", "grp-last");
+        if (!isGroupable(el)) continue;
+
+        const prev = nodes[i - 1], next = nodes[i + 1];
+        const sCur = el.getAttribute("data-sender"), tsCur = parseInt(el.getAttribute("data-ts") || "0", 10);
+        const samePrev = isGroupable(prev) && prev.getAttribute("data-sender") === sCur && Math.abs(tsCur - parseInt(prev.getAttribute("data-ts") || "0", 10)) < 180000;
+        const sameNext = isGroupable(next) && next.getAttribute("data-sender") === sCur && Math.abs(parseInt(next.getAttribute("data-ts") || "0", 10) - tsCur) < 180000;
+
+        if (samePrev) el.classList.add("grp-cont");
+        if (!samePrev && sameNext) el.classList.add("grp-first");
+        else if (samePrev && sameNext) el.classList.add("grp-mid");
+        else if (samePrev && !sameNext) el.classList.add("grp-last");
+    }
+}
+
 function setupMessagesScrollWatcher() {
     const area = document.getElementById("messagesList"), btn = document.getElementById("scrollBottomBtn"), cnt = document.getElementById("scrollBottomCount");
     if (!area || !btn) return;
@@ -1276,6 +1316,11 @@ function setupMessagesScrollWatcher() {
         const farUp = (area.scrollHeight - area.scrollTop - area.clientHeight) > 220;
         btn.classList.toggle("show", farUp);
         if (!farUp) { unreadWhileScrolled = 0; if (cnt) { cnt.style.display = "none"; cnt.innerText = "0"; } }
+
+        // تمرير لانهائي تلقائي لتحميل الرسائل الأقدم عند الصعود للأعلى
+        if (area.scrollTop < 110 && hasMoreHistory && !isLoadingHistory && activeRoomId) {
+            loadOlderMessagesBatch();
+        }
     }, { passive: true });
 }
 
@@ -1348,10 +1393,10 @@ function switchMediaGalleryTab(tab) {
 function handleSelfDestructSelect(val) {
     selectedSelfDestructSec = parseInt(val || "0", 10) || 0;
     const fxBtn = document.getElementById("fxToggleBtn");
-    if (fxBtn) fxBtn.classList.toggle("accent", selectedSelfDestructSec > 0 || fxBtn.innerText !== "✨");
+    if (fxBtn) fxBtn.classList.toggle("accent", selectedSelfDestructSec > 0 || !!fxBtn.getAttribute("data-fx-on"));
     if (selectedSelfDestructSec > 0) {
         const lbl = selectedSelfDestructSec === 10 ? "10 ثواني" : (selectedSelfDestructSec === 60 ? "دقيقة" : "ساعة");
-        showToast(`⏱️ رسالتك الجاية تنمسح تلقائياً بعد القراءة بـ ${lbl}`);
+        showToast(`رسالتك الجاية تنمسح تلقائياً بعد القراءة بـ ${lbl}`);
     }
 }
 
@@ -1368,6 +1413,7 @@ function tickSelfDestructMessages() {
             const wrap = document.querySelector(`.msg-wrap[data-mid="${mid}"]`); if (wrap) wrap.remove();
             delete activeMsgsMap[mid];
             db.ref(`${getActiveRoomBasePath()}/${mid}`).remove().catch(() => {});
+            scheduleMessageGrouping();
         } else {
             const m = Math.floor(leftSec / 60), s = leftSec % 60;
             pill.innerText = m > 0 ? `🔥 ${m}:${String(s).padStart(2, "0")}` : `🔥 ${leftSec}ث`;
@@ -1375,7 +1421,7 @@ function tickSelfDestructMessages() {
     });
 }
 
-// ==================== 9. محرّك المحادثة السريع ====================
+// ==================== 9. محرّك المحادثة الدائمة (True Infinite Scroll) ====================
 function stopAnyVoicePlayback() {
     if (currentPlayingAudio) { try { currentPlayingAudio.pause(); } catch {} currentPlayingAudio = null; }
     if (currentPlayingBtn) { currentPlayingBtn.innerText = "▶"; currentPlayingBtn = null; }
@@ -1384,6 +1430,9 @@ function stopAnyVoicePlayback() {
 function detachRoomListeners() {
     activeRoomToken++;
     activePartnerTyping = false;
+    oldestLoadedKey = null;
+    hasMoreHistory = false;
+    isLoadingHistory = false;
     stopAnyVoicePlayback();
     clearTimeout(seenFlushTimer);
     pendingSeenBatch = {};
@@ -1415,11 +1464,12 @@ function resetMessagesStage(dbPath) {
     if (cached && Object.keys(cached).length > 0) {
         area.innerHTML = "";
         const frag = document.createDocumentFragment();
-        Object.entries(cached)
+        const sorted = Object.entries(cached)
             .filter(([, m]) => m && !(m.deletedFor && m.deletedFor[me.username]))
-            .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0))
-            .forEach(([id, m]) => { activeMsgsMap[id] = m; appendMessageWithDateSep(frag, id, m); });
+            .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
+        sorted.forEach(([id, m]) => { activeMsgsMap[id] = m; appendMessageWithDateSep(frag, id, m); });
         area.appendChild(frag);
+        applyMessageGroupingNow();
         area.scrollTop = area.scrollHeight;
     } else {
         area.innerHTML = `<div class="empty-room-hint skel-list"><div class="skel-bubble other"></div><div class="skel-bubble me tall"></div><div class="skel-bubble other"></div><div class="skel-bubble me"></div></div>`;
@@ -1428,7 +1478,7 @@ function resetMessagesStage(dbPath) {
 
 function openSavedMessages() {
     detachRoomListeners();
-    const myToken = activeRoomToken; activeRoomLimit = 14;
+    const myToken = activeRoomToken; activeRoomLimit = 30;
     const dbPath = `saved_msgs/${me.username}`;
     activeChatType = "saved"; activePartner = null; activeRoomId = me.username; activeSpaceObj = null;
     seenMarkedSet.clear(); cancelReplyOrEdit(); toggleStickerDrawer(false); toggleChatExtras(false);
@@ -1451,7 +1501,7 @@ function openSavedMessages() {
 
 function openDM(partnerUsername) {
     detachRoomListeners();
-    const myToken = activeRoomToken; activeRoomLimit = 14;
+    const myToken = activeRoomToken; activeRoomLimit = 30;
     activeChatType = "dm"; activePartner = partnerUsername; activeRoomId = getRoomId(me.username, partnerUsername);
     activeSpaceObj = null; blockedByPartner = false; activePartnerTyping = false;
     seenMarkedSet.clear(); cancelReplyOrEdit(); toggleStickerDrawer(false); toggleChatExtras(false);
@@ -1500,7 +1550,7 @@ function openDM(partnerUsername) {
 function openSpaceRoom(spaceId) {
     const sp = allSpaces[spaceId]; if (!sp) return;
     detachRoomListeners();
-    const myToken = activeRoomToken; activeRoomLimit = 12;
+    const myToken = activeRoomToken; activeRoomLimit = 20;
     activeChatType = sp.type; activePartner = null; activeRoomId = spaceId; activeSpaceObj = sp;
     seenMarkedSet.clear(); cancelReplyOrEdit(); toggleStickerDrawer(false); toggleChatExtras(false);
 
@@ -1527,18 +1577,101 @@ function openSpaceRoom(spaceId) {
     attachIncrementalMessages(dbPath, myToken);
 }
 
-function loadOlderMessages() {
-    if (!activeRoomId) return;
-    activeRoomLimit += 14;
-    const basePath = getActiveRoomBasePath();
-    if (roomQueryRef) { roomQueryRef.off(); roomQueryRef = null; }
+// تحميل الدفعات الأقدم تلقائياً عند الصعود للأعلى بدون أي قفز بالشاشة (True Infinite History)
+async function loadOlderMessagesBatch() {
+    if (!activeRoomId || !oldestLoadedKey || isLoadingHistory || !hasMoreHistory) return;
+    isLoadingHistory = true;
     const token = activeRoomToken;
-    activeMsgsMap = {};
-    document.getElementById("messagesList").innerHTML = "";
-    attachIncrementalMessages(basePath, token, true);
+    const dbPath = getActiveRoomBasePath();
+    const roomIdSnap = activeRoomId;
+    const area = document.getElementById("messagesList");
+    if (!area) { isLoadingHistory = false; return; }
+
+    let loader = area.querySelector(".history-loader");
+    if (!loader) {
+        loader = document.createElement("div");
+        loader.className = "history-loader";
+        loader.innerText = "جاري تحميل الرسائل الأقدم...";
+        area.insertBefore(loader, area.firstChild);
+    }
+
+    try {
+        const batchSize = 30;
+        const snap = await db.ref(dbPath).orderByKey().endAt(oldestLoadedKey).limitToLast(batchSize + 1).once("value");
+        if (token !== activeRoomToken) return;
+
+        const rawItems = [];
+        snap.forEach(ch => {
+            if (ch.key !== oldestLoadedKey && !activeMsgsMap[ch.key]) {
+                rawItems.push({ id: ch.key, raw: ch.val() });
+            }
+        });
+
+        if (loader && loader.parentNode) loader.remove();
+
+        if (rawItems.length === 0) {
+            hasMoreHistory = false;
+            return;
+        }
+
+        oldestLoadedKey = rawItems[0].id;
+        hasMoreHistory = rawItems.length >= batchSize;
+
+        const decrypted = await Promise.all(rawItems.map(async item => {
+            const rawM = item.raw;
+            if (!rawM || (rawM.deletedFor && rawM.deletedFor[me.username])) return null;
+            if (rawM.sdExpireAt && Date.now() >= rawM.sdExpireAt) return null;
+            const m = await hydrateMessageDecryption(rawM, roomIdSnap);
+            return { id: item.id, m };
+        }));
+
+        if (token !== activeRoomToken) return;
+
+        const validItems = decrypted.filter(Boolean);
+        if (!validItems.length) {
+            if (hasMoreHistory) { isLoadingHistory = false; loadOlderMessagesBatch(); }
+            return;
+        }
+
+        const prevHeight = area.scrollHeight;
+        const prevTop = area.scrollTop;
+
+        const frag = document.createDocumentFragment();
+        let lastFragDateKey = null;
+        validItems.forEach(({ id, m }) => {
+            if (area.querySelector(`.msg-wrap[data-mid="${id}"]`)) return;
+            activeMsgsMap[id] = m;
+            const dKey = formatDateKey(m.ts);
+            if (dKey !== lastFragDateKey) {
+                const sep = document.createElement("div");
+                sep.className = "date-sep";
+                sep.setAttribute("data-dkey", dKey);
+                sep.innerText = formatDateLabel(m.ts);
+                frag.appendChild(sep);
+                lastFragDateKey = dKey;
+            }
+            frag.appendChild(buildMessageNode(id, m));
+        });
+
+        // منع تكرار فاصل التاريخ عند الالتقاء بالرسائل الموجودة مسبقاً
+        const firstExistingSep = area.querySelector(".date-sep");
+        if (firstExistingSep && lastFragDateKey && firstExistingSep.getAttribute("data-dkey") === lastFragDateKey) {
+            firstExistingSep.remove();
+        }
+
+        area.insertBefore(frag, area.firstChild);
+        applyMessageGroupingNow();
+
+        // تثبيت موقع القراءة بدقة بدون أي اهتزاز أو قفز
+        area.scrollTop = prevTop + (area.scrollHeight - prevHeight);
+    } catch {
+        if (loader && loader.parentNode) loader.remove();
+    } finally {
+        if (token === activeRoomToken) isLoadingHistory = false;
+    }
 }
 
-function attachIncrementalMessages(dbPath, token, keepScroll = false) {
+function attachIncrementalMessages(dbPath, token) {
     const area = document.getElementById("messagesList");
     let initialDone = false;
     const roomIdSnap = activeRoomId;
@@ -1552,7 +1685,7 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         if (hint && hint.classList.contains("skel-list")) {
             hint.className = "empty-room-hint";
             hint.style.cssText = "margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); padding:14px 20px; border-radius:16px; border:1px solid var(--border);";
-            hint.innerHTML = isDbConnected ? "لا توجد رسائل بعد 🔒" : "📡 النت ضعيف — جاري انتظار الاتصال...";
+            hint.innerHTML = isDbConnected ? "لا توجد رسائل بعد 🔒" : "النت ضعيف — جاري انتظار الاتصال...";
         }
     }, 3600);
 
@@ -1561,14 +1694,18 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         if (token !== activeRoomToken) return;
         initialDone = true;
         const hint = area.querySelector(".empty-room-hint"); if (hint) hint.remove();
+
         const count = snap.numChildren();
+        let firstKey = null;
+        snap.forEach(ch => { if (!firstKey) firstKey = ch.key; });
+        if (firstKey && (!oldestLoadedKey || firstKey < oldestLoadedKey)) oldestLoadedKey = firstKey;
+        hasMoreHistory = count >= activeRoomLimit;
+
         if (count === 0 && !area.querySelector(".msg-wrap")) {
             area.innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); padding:14px 20px; border-radius:16px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
-        } else if (count >= activeRoomLimit && !area.querySelector(".load-more-btn")) {
-            const btn = document.createElement("button"); btn.className = "load-more-btn"; btn.innerText = "⬆️ تحميل رسائل أقدم"; btn.onclick = loadOlderMessages;
-            area.insertBefore(btn, area.firstChild);
         }
-        if (!keepScroll) area.scrollTop = area.scrollHeight;
+        scheduleMessageGrouping();
+        area.scrollTop = area.scrollHeight;
     });
 
     roomQueryRef.on("child_added", async snap => {
@@ -1576,6 +1713,8 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         const id = snap.key, rawM = snap.val();
         if (!rawM || (rawM.deletedFor && rawM.deletedFor[me.username])) return;
         if (rawM.sdExpireAt && Date.now() >= rawM.sdExpireAt) { db.ref(`${dbPath}/${id}`).remove().catch(() => {}); return; }
+
+        if (!oldestLoadedKey || id < oldestLoadedKey) oldestLoadedKey = id;
 
         const m = await hydrateMessageDecryption(rawM, roomIdSnap);
         if (token !== activeRoomToken) return;
@@ -1590,6 +1729,7 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
 
         const nearBottom = (area.scrollHeight - area.scrollTop - area.clientHeight) < 180;
         appendMessageWithDateSep(area, id, m);
+        scheduleMessageGrouping();
         scheduleSeenMark(id, m, token);
 
         if (initialDone && m.sender !== me.username) {
@@ -1601,7 +1741,7 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
                 if (sb) sb.classList.add("show");
             }
         }
-        if (!keepScroll && (nearBottom || !initialDone || m.sender === me.username)) area.scrollTop = area.scrollHeight;
+        if (nearBottom || !initialDone || m.sender === me.username) area.scrollTop = area.scrollHeight;
     });
 
     roomQueryRef.on("child_changed", async snap => {
@@ -1609,7 +1749,7 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         const id = snap.key, rawM = snap.val(); if (!rawM) return;
         if (rawM.deletedFor && rawM.deletedFor[me.username]) {
             const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`); if (el) el.remove();
-            delete activeMsgsMap[id]; delete roomMsgsCache[dbPath][id]; return;
+            delete activeMsgsMap[id]; delete roomMsgsCache[dbPath][id]; scheduleMessageGrouping(); return;
         }
         const m = await hydrateMessageDecryption(rawM, roomIdSnap);
         if (token !== activeRoomToken) return;
@@ -1623,6 +1763,7 @@ function attachIncrementalMessages(dbPath, token, keepScroll = false) {
         const id = snap.key;
         delete activeMsgsMap[id]; delete roomMsgsCache[dbPath][id];
         const el = area.querySelector(`.msg-wrap[data-mid="${id}"]`); if (el) el.remove();
+        scheduleMessageGrouping();
     });
 
     offlineQueue.filter(q => q.dbPath === dbPath && q.owner === me.username).forEach(q => {
@@ -1702,7 +1843,7 @@ function buildVoicePlayer(src, msgId, voiceFilter = "normal") {
         wave.appendChild(b); bars.push(b);
     }
     const meta = document.createElement("div"); meta.className = "vp-meta";
-    const fLabels = { deep: "🗣️ عميق", fast: "⚡ مسرّع", echo: "🏛️ صدى" };
+    const fLabels = { deep: "عميق", fast: "مسرّع", echo: "صدى" };
     const timeEl = document.createElement("span"); timeEl.innerText = fLabels[voiceFilter] ? `${fLabels[voiceFilter]} • 00:00` : "00:00";
     const speedBtn = document.createElement("button"); speedBtn.className = "vp-speed"; speedBtn.innerText = "1x";
     meta.appendChild(timeEl); meta.appendChild(speedBtn);
@@ -1745,7 +1886,7 @@ function buildVoicePlayer(src, msgId, voiceFilter = "normal") {
 
 function buildCustomVideoCard(src) {
     const box = document.createElement("div"); box.className = "custom-vid-box";
-    box.innerHTML = `<video src="${src}" preload="metadata" muted playsinline></video><div class="cvp-overlay-play"><div class="cvp-play-circle">▶</div></div><span class="cvp-badge">🎬 فيديو</span>`;
+    box.innerHTML = `<video src="${src}" preload="metadata" muted playsinline></video><div class="cvp-overlay-play"><div class="cvp-play-circle">▶</div></div><span class="cvp-badge">فيديو</span>`;
     box.onclick = e => { e.stopPropagation(); openFullVideoModal(src); };
     return box;
 }
@@ -1810,7 +1951,7 @@ function buildFooterHTML(id, m, isMe, isChannel) {
 
 function buildPollInnerHTML(id, poll) {
     const votes = poll.votes || {}, totalVotes = Object.keys(votes).length, myVote = votes[me.username];
-    let html = `<div class="poll-q">📊 ${escapeHTML(poll.question)}</div>`;
+    let html = `<div class="poll-q">${escapeHTML(poll.question)}</div>`;
     (poll.options || []).forEach((optText, idx) => {
         const optCount = Object.values(votes).filter(v => v === idx).length;
         const pct = totalVotes > 0 ? Math.round((optCount / totalVotes) * 100) : 0;
@@ -1826,6 +1967,9 @@ function buildMessageNode(id, m) {
     const wrap = document.createElement("div");
     wrap.className = "msg-wrap " + (isChannel ? "channel-post" : (isMe ? "me" : "other"));
     wrap.setAttribute("data-mid", id);
+    wrap.setAttribute("data-sender", m.sender || "");
+    wrap.setAttribute("data-ts", String(m.ts || 0));
+    wrap.setAttribute("data-mtype", m.scratch ? "scratch" : (m.type || "text"));
 
     if (!isChannel) attachSwipeToReply(wrap, id);
 
@@ -1847,10 +1991,10 @@ function buildMessageNode(id, m) {
 
     const topBar = document.createElement("div"); topBar.className = "msg-top-bar";
     const lbl = document.createElement("span"); lbl.className = "msg-sender-lbl";
-    if (m.isAi) lbl.innerText = "🤖 مساعد المنصة AI";
+    if (m.isAi) lbl.innerText = "مساعد المنصة AI";
     else if (activeChatType === "group" && !isMe) lbl.innerText = m.senderName || m.sender;
     else if (isChannel) lbl.innerHTML = `${escapeHTML(activeSpaceObj?.name || "")} ${getVerifiedBadgeHTML(activeSpaceObj?.verified)}`;
-    else if (m.type === "audio") lbl.innerText = "🎤 رسالة صوتية";
+    else if (m.type === "audio") lbl.innerText = "رسالة صوتية";
 
     const menuBtn = document.createElement("button"); menuBtn.className = "msg-menu-trigger"; menuBtn.innerText = "⋮";
     menuBtn.onclick = e => { e.stopPropagation(); openMsgActions(id, activeMsgsMap[id] || m); };
@@ -1881,9 +2025,9 @@ function buildMessageNode(id, m) {
     } else if (m.type === "view_once") {
         const vo = document.createElement("div"), opened = !!m.voOpened;
         vo.className = "vo-card" + (opened ? " opened" : "");
-        if (opened) vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
-        else if (isMe) vo.innerHTML = `<span>💣</span><span>صورة عرض لمرة واحدة (بانتظار الفتح)</span>`;
-        else { vo.innerHTML = `<span>💣</span><span>اضغط لفتح الصورة لمرة واحدة</span>`; vo.onclick = () => openViewOnce(id, m.content); }
+        if (opened) vo.innerHTML = `<span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`;
+        else if (isMe) vo.innerHTML = `<span>صورة عرض لمرة واحدة (بانتظار الفتح)</span>`;
+        else { vo.innerHTML = `<span>اضغط لفتح الصورة لمرة واحدة</span>`; vo.onclick = () => openViewOnce(id, m.content); }
         contentBox.appendChild(vo);
     } else if (m.type === "audio") {
         contentBox.appendChild(buildVoicePlayer(m.content, id, m.voiceFilter || "normal"));
@@ -1921,7 +2065,7 @@ function updateMessageNodeInPlace(el, id, m) {
         const pb = el.querySelector(".poll-box"); if (pb) pb.innerHTML = buildPollInnerHTML(id, m.poll);
     } else if (m.type === "view_once" && m.voOpened) {
         const vo = el.querySelector(".vo-card");
-        if (vo && !vo.classList.contains("opened")) { vo.classList.add("opened"); vo.onclick = null; vo.innerHTML = `<span>💨</span><span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`; }
+        if (vo && !vo.classList.contains("opened")) { vo.classList.add("opened"); vo.onclick = null; vo.innerHTML = `<span>تم فتح صورة العرض لمرة واحدة وحذفها</span>`; }
     }
     if (isChannel) { const c = el.querySelector(".ch-reactions"); if (c) c.innerHTML = buildReactionsHTML(id, m, true); }
     else { const r = el.querySelector(".in-bubble-reacts"); if (r) r.innerHTML = buildReactionsHTML(id, m, false); }
@@ -1949,7 +2093,7 @@ function updateChatInputLockState() {
         if (blockedByPartner) { normal.style.display = "none"; notice.style.display = "block"; notice.innerText = "لا يمكنك إرسال رسائل لهذا الحساب حالياً."; return; }
     }
     if (activeChatType === "channel" && activeSpaceObj && activeSpaceObj.owner !== me.username) {
-        normal.style.display = "none"; notice.style.display = "block"; notice.innerText = "📢 قناة للعرض فقط — اضغط + أو التفاعلات أسفل المنشور"; return;
+        normal.style.display = "none"; notice.style.display = "block"; notice.innerText = "قناة للعرض فقط — يمكنك التفاعل أسفل المنشورات"; return;
     }
     notice.style.display = "none"; normal.style.display = "flex";
 }
@@ -1957,7 +2101,8 @@ function updateChatInputLockState() {
 function updateActiveHeader() {
     const av = document.getElementById("chatPartnerAvatar"), nm = document.getElementById("chatPartnerName"), st = document.getElementById("chatPartnerStatus");
     if (activeChatType === "saved") {
-        av.style.backgroundImage = "linear-gradient(135deg,#0ea5e9,#6366f1)"; av.innerHTML = "🔖";
+        av.style.backgroundImage = "linear-gradient(135deg,#0ea5e9,#6366f1)";
+        av.innerHTML = `<svg class="ic-sm" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
         nm.innerText = "الرسائل المحفوظة"; st.innerText = "مفكرتك الخاصة المشفرة"; st.className = "";
     } else if (activeChatType === "dm") {
         const p = contactProfiles[activePartner]; if (!p) return;
@@ -1996,14 +2141,14 @@ function updateSendMicToggle() {
     const inp = document.getElementById("msgInput"), mic = document.getElementById("micBtn"), snd = document.getElementById("sendBtn");
     if (!inp || !mic || !snd) return;
     const hasText = inp.value.trim().length > 0 || !!editingMsgId;
-    mic.style.display = hasText ? "none" : "inline-flex";
+    mic.style.display = hasText ? "none" : "flex";
     snd.style.display = hasText ? "flex" : "none";
 }
 
 function handleMsgInputResize(el) {
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    el.style.height = Math.min(el.scrollHeight, 116) + "px";
     updateSendMicToggle();
 }
 
@@ -2040,7 +2185,7 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     const baseLocal = {
         id: msgId,
         sender: extra.isAi ? "ai_bot" : me.username,
-        senderName: extra.isAi ? "🤖 مساعد AI" : me.name,
+        senderName: extra.isAi ? "مساعد AI" : me.name,
         type, content, seen: false, ts: now, ...(sdSec ? { sdSec } : {}), ...extra
     };
     const replySnap = (!extra.isAi && replyTarget) ? { ...replyTarget } : null;
@@ -2065,13 +2210,14 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     roomMsgsCache[dbPath][msgId] = pendingObj;
     trimRoomCache(dbPath);
     appendMessageWithDateSep(area, msgId, pendingObj);
+    scheduleMessageGrouping();
     area.scrollTop = area.scrollHeight;
     playSendSound();
 
     const isLight = type === "text" || type === "sticker" || type === "gif_card" || type === "poll" || type === "capsule";
     if (isLight && (!navigator.onLine || !isDbConnected)) {
         offlineQueue.push({ owner: me.username, dbPath, chatType: chatTypeCopy, partner: partnerCopy, roomId: roomIdCopy, previewLabel, payload: dbPayload, localDisplay: pendingObj });
-        saveOfflineQueue(); showToast("تم حفظ الرسالة وستُرسل تلقائياً عند توفر الشبكة 🕒");
+        saveOfflineQueue(); showToast("تم حفظ الرسالة وستُرسل تلقائياً عند توفر الشبكة");
         setTimeout(() => { sendLock = false; }, 220);
         return;
     }
@@ -2097,7 +2243,7 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
     } catch {
         if (isLight) {
             offlineQueue.push({ owner: me.username, dbPath, chatType: chatTypeCopy, partner: partnerCopy, roomId: roomIdCopy, previewLabel, payload: dbPayload, localDisplay: pendingObj });
-            saveOfflineQueue(); showToast("النت ضعيف — ستُرسل الرسالة تلقائياً 🕒");
+            saveOfflineQueue(); showToast("النت ضعيف — ستُرسل الرسالة تلقائياً");
         } else showToast("النت ضعيف جداً لرفع الوسائط حالياً");
     } finally {
         if (!extra.isAi) setTimeout(() => { sendLock = false; }, 220);
@@ -2107,7 +2253,7 @@ async function pushMessageSafe(type, content, previewLabel, extra = {}) {
 async function sendTextMessage() {
     const inp = document.getElementById("msgInput"), txt = inp.value.trim();
     if (!txt) return;
-    inp.value = ""; inp.style.height = "39px"; updateSendMicToggle();
+    inp.value = ""; inp.style.height = "36px"; updateSendMicToggle();
 
     if (editingMsgId && activeRoomId) {
         const targetId = editingMsgId; cancelReplyOrEdit();
@@ -2118,7 +2264,13 @@ async function sendTextMessage() {
         } else {
             await db.ref(`${getActiveRoomBasePath()}/${targetId}`).update({ content: txt, edited: true });
         }
-        showToast("تم تعديل الرسالة ✏️");
+        // تحديث فوري حتى للرسائل القديمة المحمّلة بالتمرير اللانهائي
+        if (activeMsgsMap[targetId]) {
+            activeMsgsMap[targetId] = { ...activeMsgsMap[targetId], content: txt, edited: true };
+            const el = document.querySelector(`.msg-wrap[data-mid="${targetId}"]`);
+            if (el) updateMessageNodeInPlace(el, targetId, activeMsgsMap[targetId]);
+        }
+        showToast("تم تعديل الرسالة");
         return;
     }
     await pushMessageSafe("text", txt, txt);
@@ -2128,7 +2280,7 @@ async function sendTextMessage() {
     }
 }
 
-// ==================== 10. خيارات الرسالة والحذف ====================
+// ==================== 10. خيارات الرسالة والحذف (تحديث فوري حتى للسجل القديم) ====================
 function openMsgActions(id, data) {
     if (!data) return;
     triggerHaptic(10);
@@ -2146,15 +2298,23 @@ function closeMsgActions() { document.getElementById("msgActionModal").style.dis
 
 async function reactToSelected(emoji, forceSet = false) {
     if (!selectedMsg || !activeRoomId) return;
+    const mid = selectedMsg.id;
     if (activeChatType === "channel") {
         const found = CH_REACTIONS.find(r => r.em === emoji) || CH_REACTIONS[0];
-        const live = activeMsgsMap[selectedMsg.id] || selectedMsg.data;
-        toggleChannelReaction(selectedMsg.id, found.k, !!(live.chReactions?.[found.k]?.[me.username]));
+        const live = activeMsgsMap[mid] || selectedMsg.data;
+        toggleChannelReaction(mid, found.k, !!(live.chReactions?.[found.k]?.[me.username]));
         closeMsgActions(); return;
     }
-    const live = activeMsgsMap[selectedMsg.id] || selectedMsg.data;
+    const live = activeMsgsMap[mid] || selectedMsg.data;
     const cur = live.reactions?.[me.username];
-    await db.ref(`${getActiveRoomBasePath()}/${selectedMsg.id}/reactions/${me.username}`).set((!forceSet && cur === emoji) ? null : emoji);
+    const nextVal = (!forceSet && cur === emoji) ? null : emoji;
+    await db.ref(`${getActiveRoomBasePath()}/${mid}/reactions/${me.username}`).set(nextVal);
+    // تحديث فوري للـ DOM (يعمل حتى للرسائل القديمة المحمّلة بالتمرير للأعلى)
+    const nextReacts = { ...(live.reactions || {}) };
+    if (nextVal) nextReacts[me.username] = nextVal; else delete nextReacts[me.username];
+    activeMsgsMap[mid] = { ...live, reactions: nextReacts };
+    const el = document.querySelector(`.msg-wrap[data-mid="${mid}"]`);
+    if (el) updateMessageNodeInPlace(el, mid, activeMsgsMap[mid]);
     closeMsgActions();
 }
 
@@ -2162,7 +2322,7 @@ function replyToSelected() {
     if (!selectedMsg) return;
     editingMsgId = null;
     const d = selectedMsg.data, sName = d.sender === me.username ? me.name : (d.senderName || d.sender);
-    const prev = d.scratch ? "🪄 رسالة كشط مخفية" : (d.type === "text" ? d.content : (d.type === "image" ? "📷 صورة" : d.type === "audio" ? "🎤 بصمة" : "🎭 ملصق"));
+    const prev = d.scratch ? "رسالة كشط مخفية" : (d.type === "text" ? d.content : (d.type === "image" ? "صورة" : d.type === "audio" ? "بصمة صوتية" : "ملصق"));
     replyTarget = { id: selectedMsg.id, sender: d.sender || "", senderName: sName, preview: prev };
     document.getElementById("replyPreviewSender").innerText = "رد على " + sName;
     document.getElementById("replyPreviewText").innerText = prev;
@@ -2173,7 +2333,7 @@ function replyToSelected() {
 function startEditSelected() {
     if (!selectedMsg || selectedMsg.data.type !== "text" || selectedMsg.data.sender !== me.username) return;
     replyTarget = null; editingMsgId = selectedMsg.id;
-    document.getElementById("replyPreviewSender").innerText = "✏️ تعديل الرسالة";
+    document.getElementById("replyPreviewSender").innerText = "تعديل الرسالة";
     document.getElementById("replyPreviewText").innerText = selectedMsg.data.content;
     document.getElementById("replyPreviewBar").style.display = "flex";
     const inp = document.getElementById("msgInput"); inp.value = selectedMsg.data.content; handleMsgInputResize(inp);
@@ -2184,20 +2344,33 @@ function cancelReplyOrEdit() { replyTarget = null; editingMsgId = null; document
 
 async function pinSelectedMessage() {
     if (!selectedMsg || !activeRoomId) return;
-    const d = selectedMsg.data, txt = d.type === "text" ? d.content : (d.type === "image" ? "📷 صورة" : "🎤 بصمة صوتية");
+    const d = selectedMsg.data, txt = d.type === "text" ? d.content : (d.type === "image" ? "صورة" : "بصمة صوتية");
     await db.ref(activeChatType === "dm" ? `chats/${activeRoomId}/pinned` : `spaces/${activeRoomId}/pinned`).set({ id: selectedMsg.id, text: txt });
-    closeMsgActions(); showToast("تم التثبيت بالأعلى 📌");
+    closeMsgActions(); showToast("تم التثبيت بالأعلى");
 }
 async function unpinMessage() { if (!activeRoomId) return; await db.ref(activeChatType === "dm" ? `chats/${activeRoomId}/pinned` : `spaces/${activeRoomId}/pinned`).remove(); }
 function copySelectedText() { if (selectedMsg?.data?.type === "text") { navigator.clipboard.writeText(selectedMsg.data.content); showToast("تم النسخ"); } closeMsgActions(); }
-async function deleteSelectedForMe() { if (!selectedMsg || !activeRoomId) return; await db.ref(`${getActiveRoomBasePath()}/${selectedMsg.id}/deletedFor/${me.username}`).set(true); closeMsgActions(); showToast("تم الحذف من عندك فقط 🙈"); }
+
+async function deleteSelectedForMe() {
+    if (!selectedMsg || !activeRoomId) return;
+    const mid = selectedMsg.id;
+    await db.ref(`${getActiveRoomBasePath()}/${mid}/deletedFor/${me.username}`).set(true);
+    const el = document.querySelector(`.msg-wrap[data-mid="${mid}"]`); if (el) el.remove();
+    delete activeMsgsMap[mid]; scheduleMessageGrouping();
+    closeMsgActions(); showToast("تم الحذف من عندك فقط");
+}
+
 async function deleteSelectedForEveryone() {
     if (!selectedMsg || !activeRoomId) return;
+    const mid = selectedMsg.id;
     const isMine = selectedMsg.data.sender === me.username, isOwner = activeSpaceObj && activeSpaceObj.owner === me.username;
     if (!isMine && !isOwner && activeChatType !== "saved" && !selectedMsg.data.isAi) { showToast("يمكنك حذف رسائلك فقط للجميع"); return; }
-    await db.ref(`${getActiveRoomBasePath()}/${selectedMsg.id}`).remove();
-    closeMsgActions(); showToast("تم الحذف نهائياً للجميع 🗑️");
+    await db.ref(`${getActiveRoomBasePath()}/${mid}`).remove();
+    const el = document.querySelector(`.msg-wrap[data-mid="${mid}"]`); if (el) el.remove();
+    delete activeMsgsMap[mid]; scheduleMessageGrouping();
+    closeMsgActions(); showToast("تم الحذف نهائياً للجميع");
 }
+
 async function clearChatForMe() {
     if (activeChatType !== "dm" || !activeRoomId) return;
     if (!confirm("تنظيف سجل المحادثة من عندك فقط؟")) return;
@@ -2205,6 +2378,8 @@ async function clearChatForMe() {
     const updates = {}; snap.forEach(ch => { updates[`${ch.key}/deletedFor/${me.username}`] = true; });
     if (Object.keys(updates).length > 0) await db.ref(`chats/${activeRoomId}/messages`).update(updates);
     roomMsgsCache[`chats/${activeRoomId}/messages`] = {};
+    document.getElementById("messagesList").innerHTML = `<div class="empty-room-hint" style="margin:auto; text-align:center; color:var(--text-dim); font-size:13px; background:var(--bg-card); padding:14px 20px; border-radius:16px; border:1px solid var(--border);">لا توجد رسائل بعد 🔒</div>`;
+    activeMsgsMap = {}; hasMoreHistory = false;
     showToast("تم التنظيف من عندك فقط");
 }
 
@@ -2230,7 +2405,7 @@ function startCallTimer() {
     if (callTimer) return;
     stopRingtone(); clearTimeout(callConnectWatchdog);
     document.getElementById("reconnectCallBtn").style.display = "none";
-    setCallNetState("اتصال مشفّر ومستقر 🟢"); callSec = 0;
+    setCallNetState("اتصال مشفّر ومستقر"); callSec = 0;
     callTimer = setInterval(() => {
         callSec++;
         document.getElementById("callStatus").innerText = `متصل الآن ${String(Math.floor(callSec / 60)).padStart(2, "0")}:${String(callSec % 60).padStart(2, "0")}`;
@@ -2280,7 +2455,7 @@ function attachCallStateWatchers(peerConn) {
         if (st === "connected" || ice === "connected" || ice === "completed") startCallTimer();
         else if (ice === "checking" || st === "connecting") setCallNetState("جاري فتح المسار الشبكي...");
         else if (ice === "disconnected" || st === "disconnected") { setCallNetState("ضعف مؤقت — جاري إعادة الربط..."); document.getElementById("reconnectCallBtn").style.display = "flex"; }
-        else if (ice === "failed" || st === "failed") { setCallNetState("تعثر المسار — اضغط 📡 لإعادة الربط"); document.getElementById("reconnectCallBtn").style.display = "flex"; if (isCaller) restartCallIce(); }
+        else if (ice === "failed" || st === "failed") { setCallNetState("تعثر المسار — اضغط لإعادة الربط"); document.getElementById("reconnectCallBtn").style.display = "flex"; if (isCaller) restartCallIce(); }
     };
     peerConn.onconnectionstatechange = onStateChange; peerConn.oniceconnectionstatechange = onStateChange;
 }
@@ -2298,7 +2473,7 @@ function listenForIncomingCalls() {
             pendingIncoming = data; activeCallPath = "calls/" + me.username; activeCallId = data.callId || ""; isCaller = false;
             const caller = contactProfiles[data.from] || { name: data.fromName || data.from };
             document.getElementById("callName").innerHTML = `${escapeHTML(caller.name)} ${getVerifiedBadgeHTML(caller.verified)}`;
-            document.getElementById("callStatus").innerText = data.video ? "📹 مكالمة فيديو واردة..." : "📞 مكالمة صوتية واردة...";
+            document.getElementById("callStatus").innerText = data.video ? "مكالمة فيديو واردة..." : "مكالمة صوتية واردة...";
             setCallNetState("اضغط للرد"); setupCallBackdrop(caller, data.video ? "مكالمة فيديو واردة" : "مكالمة صوتية واردة");
             document.getElementById("acceptCallBtn").style.display = "flex"; document.getElementById("flipCamBtn").style.display = "none";
             document.getElementById("camBtn").style.display = "none"; document.getElementById("reconnectCallBtn").style.display = "none";
@@ -2426,11 +2601,11 @@ function downloadOfficialPngIcon(size) {
     ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
     ctx.lineTo(x + w, y + h); ctx.lineTo(x + w / 2, y + h - size * 0.12); ctx.lineTo(x, y + h);
     ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); ctx.fill();
-    c.toBlob(blob => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `icon-${size}.png`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); showToast(`تم تنزيل icon-${size}.png ✅`); }, "image/png");
+    c.toBlob(blob => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `icon-${size}.png`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); showToast(`تم تنزيل icon-${size}.png`); }, "image/png");
 }
 
 function openAdminDashboard() {
-    if (!AdminGuard.check()) { showToast("⛔ وصول مرفوض"); return; }
+    if (!AdminGuard.check()) { showToast("وصول مرفوض"); return; }
     document.getElementById("adminScreen").style.display = "block";
     updateAdminButtons();
 
@@ -2447,7 +2622,7 @@ function openAdminDashboard() {
         box.innerHTML = arr.length ? "" : `<span style="color:var(--text-dim); font-size:13px;">لا توجد حسابات</span>`;
         arr.forEach(u => {
             const v = u.verified || "", r = document.createElement("div"); r.className = "adm-row";
-            r.innerHTML = `<div><div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(v)} ${getDevBadgeHTML(u)} <span class="handle-ltr" dir="ltr" style="font-size:12px;">(${escapeHTML(getDisplayTag(u))})</span></div><div style="font-size:11.5px; color:${u.banned ? '#fb7185' : (u.online ? '#10b981' : '#94a3b8')};">${u.banned ? '🚫 محظور' : (u.online ? '● متصل' : 'غير متصل')}</div></div><div style="display:flex; gap:5px; flex-wrap:wrap;"><button class="btn btn-sm ${v==='blue'?'':'btn-outline'}" onclick="adminSetVerified('${u.username}','${v==='blue'?'':'blue'}')">✓ أزرق</button><button class="btn btn-sm ${v==='gold'?'btn-gold':'btn-outline'}" onclick="adminSetVerified('${u.username}','${v==='gold'?'':'gold'}')">★ ذهبي</button><button class="btn btn-outline btn-sm" onclick="adminResetUserPass('${u.username}')">🔑</button><button class="btn ${u.banned?'btn-success':'btn-danger'} btn-sm" onclick="adminToggleBan('${u.username}',${!u.banned})">${u.banned?'فك':'حظر'}</button><button class="btn btn-danger btn-sm" onclick="adminDeleteUser('${u.username}')">حذف</button></div>`;
+            r.innerHTML = `<div><div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">${escapeHTML(u.name)} ${getVerifiedBadgeHTML(v)} ${getDevBadgeHTML(u)} <span class="handle-ltr" dir="ltr" style="font-size:12px;">(${escapeHTML(getDisplayTag(u))})</span></div><div style="font-size:11.5px; color:${u.banned ? '#fb7185' : (u.online ? '#10b981' : '#94a3b8')};">${u.banned ? 'محظور' : (u.online ? 'متصل' : 'غير متصل')}</div></div><div style="display:flex; gap:5px; flex-wrap:wrap;"><button class="btn btn-sm ${v==='blue'?'':'btn-outline'}" onclick="adminSetVerified('${u.username}','${v==='blue'?'':'blue'}')">أزرق</button><button class="btn btn-sm ${v==='gold'?'btn-gold':'btn-outline'}" onclick="adminSetVerified('${u.username}','${v==='gold'?'':'gold'}')">ذهبي</button><button class="btn btn-outline btn-sm" onclick="adminResetUserPass('${u.username}')">كلمة سر</button><button class="btn ${u.banned?'btn-success':'btn-danger'} btn-sm" onclick="adminToggleBan('${u.username}',${!u.banned})">${u.banned?'فك':'حظر'}</button><button class="btn btn-danger btn-sm" onclick="adminDeleteUser('${u.username}')">حذف</button></div>`;
             box.appendChild(r);
         });
     });
@@ -2461,7 +2636,7 @@ function openAdminDashboard() {
         box.innerHTML = "";
         arr.forEach(s => {
             const v = s.verified || "", r = document.createElement("div"); r.className = "adm-row";
-            r.innerHTML = `<div><div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px;">${escapeHTML(s.name)} ${getVerifiedBadgeHTML(v)} <span class="handle-ltr" dir="ltr" style="font-size:12px;">(@${escapeHTML(s.handle)})</span></div><div style="font-size:11.5px; color:var(--text-dim);">${s.type === 'channel' ? '📢 قناة' : '👥 مجموعة'} • المالك: <span class="handle-ltr" dir="ltr" style="font-size:11.5px;">@${escapeHTML(s.owner)}</span></div></div><div style="display:flex; gap:5px; flex-wrap:wrap;"><button class="btn btn-sm ${v==='blue'?'':'btn-outline'}" onclick="adminSetSpaceVerified('${s.id}','${v==='blue'?'':'blue'}')">✓ أزرق</button><button class="btn btn-sm ${v==='gold'?'btn-gold':'btn-outline'}" onclick="adminSetSpaceVerified('${s.id}','${v==='gold'?'':'gold'}')">★ ذهبي</button><button class="btn btn-danger btn-sm" onclick="adminDeleteSpace('${s.id}')">حذف</button></div>`;
+            r.innerHTML = `<div><div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:4px;">${escapeHTML(s.name)} ${getVerifiedBadgeHTML(v)} <span class="handle-ltr" dir="ltr" style="font-size:12px;">(@${escapeHTML(s.handle)})</span></div><div style="font-size:11.5px; color:var(--text-dim);">${s.type === 'channel' ? 'قناة' : 'مجموعة'} • المالك: <span class="handle-ltr" dir="ltr" style="font-size:11.5px;">@${escapeHTML(s.owner)}</span></div></div><div style="display:flex; gap:5px; flex-wrap:wrap;"><button class="btn btn-sm ${v==='blue'?'':'btn-outline'}" onclick="adminSetSpaceVerified('${s.id}','${v==='blue'?'':'blue'}')">أزرق</button><button class="btn btn-sm ${v==='gold'?'btn-gold':'btn-outline'}" onclick="adminSetSpaceVerified('${s.id}','${v==='gold'?'':'gold'}')">ذهبي</button><button class="btn btn-danger btn-sm" onclick="adminDeleteSpace('${s.id}')">حذف</button></div>`;
             box.appendChild(r);
         });
     });
@@ -2470,7 +2645,7 @@ function openAdminDashboard() {
         if (!AdminGuard.check()) return;
         const entries = Object.entries(s.val() || {}), box = document.getElementById("admVerifyReqs");
         if (!entries.length) { box.innerHTML = `<span style="color:var(--text-dim); font-size:12.5px;">لا توجد طلبات توثيق</span>`; return; }
-        box.innerHTML = entries.map(([reqKey, q]) => `<div class="adm-row"><div><strong>${q.targetType === 'space' ? '📢 ' : '👤 '}${escapeHTML(q.name)}</strong> <span class="handle-ltr" dir="ltr" style="font-size:12px;">(@${escapeHTML(q.displayTag || q.username)})</span><div style="font-size:12px; color:var(--text-dim);">الطلب: ${q.requestedType==='gold'?'ذهبي VIP ★':'أزرق ✓'} — ${escapeHTML(q.reason)}</div></div><div style="display:flex; gap:6px;"><button class="btn btn-success btn-sm" onclick="adminApproveVerify('${reqKey}','${q.targetType||'user'}','${q.targetId||q.username}','${q.requestedType}')">قبول</button><button class="btn btn-danger btn-sm" onclick="adminRejectVerify('${reqKey}')">رفض</button></div></div>`).join("");
+        box.innerHTML = entries.map(([reqKey, q]) => `<div class="adm-row"><div><strong>${escapeHTML(q.name)}</strong> <span class="handle-ltr" dir="ltr" style="font-size:12px;">(@${escapeHTML(q.displayTag || q.username)})</span><div style="font-size:12px; color:var(--text-dim);">الطلب: ${q.requestedType==='gold'?'ذهبي VIP':'أزرق'} — ${escapeHTML(q.reason)}</div></div><div style="display:flex; gap:6px;"><button class="btn btn-success btn-sm" onclick="adminApproveVerify('${reqKey}','${q.targetType||'user'}','${q.targetId||q.username}','${q.requestedType}')">قبول</button><button class="btn btn-danger btn-sm" onclick="adminRejectVerify('${reqKey}')">رفض</button></div></div>`).join("");
     });
 
     db.ref("reports").on("value", s => {
@@ -2489,58 +2664,58 @@ function openAdminDashboard() {
 
 function updateAdminButtons() {
     const lb = document.getElementById("admLockBtn");
-    lb.innerText = sysConfig.locked ? "🟢 تشغيل المنصة" : "🔴 إيقاف المنصة فوراً";
+    lb.innerText = sysConfig.locked ? "تشغيل المنصة" : "إيقاف المنصة فوراً";
     lb.className = "btn " + (sysConfig.locked ? "btn-success" : "btn-danger");
     const rb = document.getElementById("admRegBtn");
-    rb.innerText = sysConfig.allowRegister ? "🔒 إغلاق التسجيل الجديد" : "🔓 فتح التسجيل الجديد";
+    rb.innerText = sysConfig.allowRegister ? "إغلاق التسجيل الجديد" : "فتح التسجيل الجديد";
     rb.className = "btn " + (sysConfig.allowRegister ? "btn-outline" : "btn-success");
 }
 
 async function adminSaveAiConfig() {
-    if (!AdminGuard.check()) { showToast("⛔ صلاحية مرفوضة"); return; }
+    if (!AdminGuard.check()) { showToast("صلاحية مرفوضة"); return; }
     const provider = document.getElementById("admAiProvider")?.value || "free";
     const apiKey = (document.getElementById("admAiKey")?.value || "").trim();
     await db.ref("sys_config/ai").set({ provider, apiKey });
-    showToast("تم حفظ إعدادات الذكاء الاصطناعي بأمان 🤖✅");
+    showToast("تم حفظ إعدادات الذكاء الاصطناعي بأمان");
 }
 
 async function adminUpdateAdminPin() {
-    if (!AdminGuard.check()) { showToast("⛔ صلاحية مرفوضة"); return; }
+    if (!AdminGuard.check()) { showToast("صلاحية مرفوضة"); return; }
     const p = (document.getElementById("admNewAdminPin")?.value || "").trim();
     if (p.length < 4) { showToast("رمز لوحة المطور يجب أن يكون 4 رموز فأكثر"); return; }
     const h = await sha256Hex(p);
     await db.ref("sys_config").update({ adminPinHash: h });
     document.getElementById("admNewAdminPin").value = "";
-    logSecurityEvent("🔐 تم تغيير رمز دخول لوحة المطور وتشفيره بـ SHA-256");
-    showToast("تم تغيير رمز لوحة المطور وتشفيره بنجاح 🛡️✅");
+    logSecurityEvent("تم تغيير رمز دخول لوحة المطور وتشفيره بـ SHA-256");
+    showToast("تم تغيير رمز لوحة المطور وتشفيره بنجاح");
 }
 
 async function adminUpdatePin() {
-    if (!AdminGuard.check()) { showToast("⛔ صلاحية مرفوضة"); return; }
+    if (!AdminGuard.check()) { showToast("صلاحية مرفوضة"); return; }
     const p = (document.getElementById("admNewPin")?.value || "").trim();
     if (p.length < 3) { showToast("اكتب رمزاً صحيحاً"); return; }
     const h = await sha256Hex(p);
     await db.ref("sys_config").update({ pinHash: h, pin: null });
     document.getElementById("admNewPin").value = "";
-    logSecurityEvent("🔐 تم تحديث رمز البوابة (SHA-256)");
-    showToast("تم تحديث وتشفير رمز البوابة ✅");
+    logSecurityEvent("تم تحديث رمز البوابة (SHA-256)");
+    showToast("تم تحديث وتشفير رمز البوابة");
 }
 
 async function adminUpdateDecoyPin() {
-    if (!AdminGuard.check()) { showToast("⛔ صلاحية مرفوضة"); return; }
+    if (!AdminGuard.check()) { showToast("صلاحية مرفوضة"); return; }
     const p = (document.getElementById("admDecoyPin")?.value || "").trim();
     if (p.length < 3) { showToast("اكتب رمزاً وهمياً صحيحاً"); return; }
     const h = await sha256Hex(p);
     await db.ref("sys_config").update({ decoyPinHash: h, decoyPin: null });
     document.getElementById("admDecoyPin").value = "";
-    showToast("تم تحديث وتشفير الرمز الوهمي 🛡️");
+    showToast("تم تحديث وتشفير الرمز الوهمي");
 }
 
 async function adminApproveVerify(reqKey, targetType, targetId, level) {
     if (!AdminGuard.check()) return;
     if (targetType === "space") await db.ref(`spaces/${targetId}/verified`).set(level);
     else await db.ref(`users/${targetId}/verified`).set(level);
-    await db.ref(`verify_requests/${reqKey}`).remove(); showToast("تمت الموافقة والتوثيق بنجاح ✨");
+    await db.ref(`verify_requests/${reqKey}`).remove(); showToast("تمت الموافقة والتوثيق بنجاح");
 }
 async function adminRejectVerify(reqKey) { if (!AdminGuard.check()) return; await db.ref(`verify_requests/${reqKey}`).remove(); }
 async function adminDismissReport(id) { if (!AdminGuard.check()) return; await db.ref(`reports/${id}`).remove(); }
@@ -2554,7 +2729,7 @@ async function adminResetUserPass(u) {
     const np = prompt(`كلمة السر الجديدة لـ @${u}:`); if (!np || np.trim().length < 4) return;
     const nh = await sha256Hex("upass::" + np.trim());
     await db.ref(`users/${u}`).update({ pass: nh, passAlgo: "sha256" });
-    showToast("تم التحديث وتشفير كلمة السر 🔑");
+    showToast("تم التحديث وتشفير كلمة السر");
 }
 async function adminToggleBan(u, st) { if (!AdminGuard.check()) return; await db.ref(`users/${u}/banned`).set(st); showToast(st ? "تم الحظر" : "تم فك الحظر"); }
 async function adminDeleteUser(u) { if (!AdminGuard.check() || !confirm(`حذف @${u} نهائياً؟`)) return; await db.ref(`users/${u}`).remove(); }
